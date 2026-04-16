@@ -328,6 +328,9 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (node.type === 'REG_FILE') {
           ms.regs = node.initialRegs ? [...node.initialRegs] : new Array(node.regCount || 8).fill(0);
         }
+        if (node.type === 'PIPE_REG') {
+          ms.channels = new Array(node.channels || 4).fill(0);
+        }
         if (node.type === 'FIFO' || node.type === 'STACK') {
           ms.buffer = [];
           ms.full = 0;
@@ -360,6 +363,14 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         value = nodeValues.get(id + '__out0');
       }
       // PC: no extra outputs beyond Q
+      // PIPE_REG: output all stored channels
+      if (node.type === 'PIPE_REG') {
+        const ch = ms.channels || [];
+        for (let i = 0; i < ch.length; i++) {
+          nodeValues.set(id + '__out' + i, ch[i] ?? 0);
+        }
+        value = ch[0] ?? 0;
+      }
       // FIFO/STACK: output top/front + flags
       if (node.type === 'FIFO' || node.type === 'STACK') {
         nodeValues.set(id + '__out1', ms.full ?? 0);
@@ -373,6 +384,30 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         value = (ms.regs[regIdx] ?? 0);
         ms.q = value;
       }
+
+    } else if (node.type === 'SIGN_EXT') {
+      // Sign extend: input IN(0) from inBits to outBits
+      const inputSlots = inputs.get(id);
+      const inVal = inputSlots[0] ? (nodeValues.get(inputSlots[0].sourceId) ?? 0) : 0;
+      const inBits = node.inBits || 4;
+      const outBits = node.outBits || 8;
+      const signBit = (inVal >> (inBits - 1)) & 1;
+      if (signBit) {
+        // Negative: fill upper bits with 1s
+        const mask = ((1 << outBits) - 1) ^ ((1 << inBits) - 1);
+        value = (inVal | mask) & ((1 << outBits) - 1);
+      } else {
+        value = inVal & ((1 << inBits) - 1);
+      }
+
+    } else if (node.type === 'BUS_MUX') {
+      // Bus MUX: inputs D0..Dn-1, SEL (last input) → Y
+      const inputSlots = inputs.get(id);
+      const n = node.inputCount || 2;
+      const selSlot = inputSlots.find(s => s.inputIndex === n);
+      const sel = selSlot ? (nodeValues.get(selSlot.sourceId) ?? 0) : 0;
+      const dataSlot = inputSlots.find(s => s.inputIndex === (sel % n));
+      value = dataSlot ? (nodeValues.get(dataSlot.sourceId) ?? 0) : 0;
 
     } else if (node.type === 'SUB_CIRCUIT') {
       // Evaluate internal sub-circuit
@@ -532,8 +567,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
                  node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS' ||
                  node.type === 'SUB_CIRCUIT') {
         wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? null);
-      } else if (node.type === 'IR') {
-        // IR always uses __out for all outputs
+      } else if (node.type === 'IR' || node.type === 'PIPE_REG') {
+        // IR/PIPE_REG always uses __out for all outputs
         wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? 0);
       } else if (MEMORY_TYPE_SET.has(node.type)) {
         // outIdx 0 = Q (packed value), outIdx 1 = TC (counter only)
@@ -677,13 +712,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms.q = ms.count;
 
       } else if (node.type === 'RAM') {
-        // Inputs: ADDR(0), DATA(1), WE(2), RE(3), CLK
+        // RAM write is deferred to Phase 4 (needs fresh RF values for STORE)
+        // Only update read output here
         const addr = _w(dataSlots[0]);
-        const data = _w(dataSlots[1]);
-        const we   = _w(dataSlots[2]);
         const re   = _w(dataSlots[3]) ?? 1;
         const dMask = (1 << (node.dataBits || 4)) - 1;
-        if (we) ms.memory[addr] = data & dMask;
         if (re) ms.q = (ms.memory[addr] ?? 0) & dMask;
 
       } else if (node.type === 'ROM') {
@@ -748,6 +781,24 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms.full  = ms.buffer.length >= depth ? 1 : 0;
         ms.empty = ms.buffer.length === 0 ? 1 : 0;
 
+      } else if (node.type === 'PIPE_REG') {
+        // Inputs: D0..Dn-1, STALL, FLUSH, CLK
+        const ch = node.channels || 4;
+        if (!ms.channels) ms.channels = new Array(ch).fill(0);
+        const stall = _w(dataSlots[ch])     ?? 0;
+        const flush = _w(dataSlots[ch + 1]) ?? 0;
+        if (flush) {
+          // Clear all channels
+          for (let i = 0; i < ch; i++) ms.channels[i] = 0;
+        } else if (!stall) {
+          // Normal latch
+          for (let i = 0; i < ch; i++) {
+            ms.channels[i] = _w(dataSlots[i]) ?? 0;
+          }
+        }
+        // If stall: keep previous values (do nothing)
+        ms.q = ms.channels[0] ?? 0;
+
       } else if (node.type === 'IR') {
         // Inputs: INSTR(0), LD(1), CLK
         const instr = _w(dataSlots[0]);
@@ -764,7 +815,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       if (ms.q !== oldQ) ffUpdated = true;
     }
 
-    // REG_FILE and PC prevClk is managed by Phase 4
+    // REG_FILE, PC prevClk is managed by Phase 4
+    // RAM: update prevClk here but skip write (Phase 4 handles write with fresh values)
     if (node.type !== 'REG_FILE' && node.type !== 'PC' && clkNow !== null) ms.prevClkValue = clkNow;
   });
 
@@ -777,6 +829,18 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const ms = ffStates.get(node.id);
         if (!ms) return;
         nodeValues.set(node.id, ms.q ?? 0);
+        if (node.type === 'PIPE_REG') {
+          const ch = ms.channels || [];
+          for (let i = 0; i < ch.length; i++) {
+            nodeValues.set(node.id + '__out' + i, ch[i] ?? 0);
+          }
+          nodeValues.set(node.id, ch[0] ?? 0);
+          successors.get(node.id)?.forEach(({ wire }) => {
+            const outIdx = wire.sourceOutputIndex || 0;
+            wireValues.set(wire.id, nodeValues.get(node.id + '__out' + outIdx) ?? 0);
+          });
+          return;
+        }
         if (node.type === 'IR') {
           const instr = ms.q ?? 0;
           const opBits = node.opBits || 4, rdBits = node.rdBits || 4, rs1Bits = node.rs1Bits || 4, rs2Bits = node.rs2Bits || 4;
@@ -966,6 +1030,43 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       nodeValues.set(id, r);
       nodeValues.set(id + '__out1', r === 0 ? 1 : 0);
       nodeValues.set(id + '__out2', carry);
+      propagate(id);
+    }
+
+    // 4c2: RAM write + read with fresh RF/CU values (for STORE/LOAD)
+    for (const node of nodes) {
+      if (node.type !== 'RAM') continue;
+      const ms = ffStates.get(node.id);
+      if (!ms) continue;
+      const inputSlots = inputs.get(node.id);
+      const clkSlot = inputSlots.find(s => s.wire.isClockWire);
+      if (!clkSlot) continue;
+      const clkNow = _wv(clkSlot.wire.id);
+      if (clkNow === 1) {
+        const dataSlots = inputSlots.filter(s => s !== clkSlot);
+        const addr = dataSlots[0] ? _wv(dataSlots[0].wire.id) : 0;
+        const data = dataSlots[1] ? _wv(dataSlots[1].wire.id) : 0;
+        const we   = dataSlots[2] ? _wv(dataSlots[2].wire.id) : 0;
+        const re   = dataSlots[3] ? _wv(dataSlots[3].wire.id) : 1;
+        const dMask = (1 << (node.dataBits || 4)) - 1;
+        if (we) ms.memory[addr] = data & dMask;
+        if (re) ms.q = (ms.memory[addr] ?? 0) & dMask;
+        nodeValues.set(node.id, ms.q);
+        propagate(node.id);
+      }
+    }
+
+    // 4c3: BUS_MUX eval with fresh wire values
+    for (const node of nodes) {
+      if (node.type !== 'BUS_MUX') continue;
+      const id = node.id;
+      const inputSlots = inputs.get(id);
+      const n = node.inputCount || 2;
+      const selSlot = inputSlots.find(s => s.inputIndex === n);
+      const sel = selSlot ? _wv(selSlot.wire.id) : 0;
+      const dataSlot = inputSlots.find(s => s.inputIndex === (sel % n));
+      const val = dataSlot ? _wv(dataSlot.wire.id) : 0;
+      nodeValues.set(id, val);
       propagate(id);
     }
 

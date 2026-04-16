@@ -194,6 +194,39 @@ export class SetFfTypeCommand extends Command {
 }
 
 /**
+ * Set one or more properties on a node with undo support.
+ * @param {object} scene - SceneGraph
+ * @param {string} nodeId - Node ID
+ * @param {object} newProps - { key: newValue, ... }
+ */
+export class SetNodePropsCommand extends Command {
+  constructor(scene, nodeId, newProps) {
+    super('Set properties');
+    this._scene = scene;
+    this._nodeId = nodeId;
+    this._newProps = newProps;
+    this._oldProps = {};
+  }
+
+  execute() {
+    const node = this._scene.getNode(this._nodeId);
+    if (!node) return;
+    for (const [key, val] of Object.entries(this._newProps)) {
+      this._oldProps[key] = node[key];
+      node[key] = val;
+    }
+  }
+
+  undo() {
+    const node = this._scene.getNode(this._nodeId);
+    if (!node) return;
+    for (const [key, val] of Object.entries(this._oldProps)) {
+      node[key] = val;
+    }
+  }
+}
+
+/**
  * Snapshot-based command for bulk or complex operations.
  * Captures the entire scene state before and after.
  */

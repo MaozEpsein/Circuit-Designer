@@ -461,6 +461,16 @@ function _muxNodeSize(node) {
 
 function _nodeOutputAnchor(node, outputIndex) {
   outputIndex = outputIndex || 0;
+  if (node.type === 'PIPE_REG') {
+    const ch = node.channels || 4;
+    const h = Math.max(60, ch * 20 + 20);
+    const spread = (h - 16) / Math.max(1, ch - 1);
+    const startY = node.y - (h - 16) / 2;
+    return { x: node.x + 50, y: ch === 1 ? node.y : startY + outputIndex * spread };
+  }
+  if (node.type === 'SIGN_EXT') {
+    return { x: node.x + 45, y: node.y };
+  }
   if (node.type === 'INPUT' || node.type === 'CLOCK' || node.type === 'IMM') {
     return { x: node.x + NODE.inputR, y: node.y };
   }
@@ -496,6 +506,9 @@ function _nodeOutputAnchor(node, outputIndex) {
     const spread = 16;
     const startY = node.y - spread; // EQ, GT, LT
     return { x: node.x + hw, y: startY + outputIndex * spread };
+  }
+  if (node.type === 'BUS_MUX') {
+    return { x: node.x + 45, y: node.y };
   }
   if (node.type === 'SUB_CIRCUIT') {
     const outs = node.subOutputs || [];
@@ -610,6 +623,30 @@ function _nodeInputAnchor(_src, node, inputIndex, isClockWire) {
     const yOff = inputIndex === 0 ? -12 : 12;
     return { x: node.x - hw, y: node.y + yOff };
   }
+  if (node.type === 'PIPE_REG') {
+    const ch = node.channels || 4;
+    const totalIn = ch + 3; // D0..Dn-1, STALL, FLUSH, CLK
+    const h = Math.max(60, ch * 20 + 20);
+    if (inputIndex === totalIn - 1) return { x: node.x, y: node.y + h / 2 }; // CLK at bottom
+    const dataCount = totalIn - 1;
+    const spread = (h - 16) / Math.max(1, dataCount - 1);
+    const startY = node.y - (h - 16) / 2;
+    return { x: node.x - 50, y: dataCount === 1 ? node.y : startY + inputIndex * spread };
+  }
+  if (node.type === 'SIGN_EXT') {
+    return { x: node.x - 45, y: node.y };
+  }
+  if (node.type === 'BUS_MUX') {
+    const n = node.inputCount || 2;
+    const h = Math.max(50, n * 22 + 10);
+    if (inputIndex === n) {
+      // SEL at bottom
+      return { x: node.x, y: node.y + h / 2 };
+    }
+    const spread = (h - 14) / Math.max(1, n - 1);
+    const startY = node.y - (h - 14) / 2;
+    return { x: node.x - 45, y: n === 1 ? node.y : startY + inputIndex * spread };
+  }
   if (node.type === 'SUB_CIRCUIT') {
     const ins = node.subInputs || [];
     const outs = node.subOutputs || [];
@@ -712,6 +749,9 @@ function _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId) 
     else if (node.type === 'CU')         _drawCuNode(node, val, hovered);
     else if (node.type === 'BUS')        _drawBusNode(node, val, hovered);
     else if (node.type === 'IMM')        _drawImmNode(node, val, hovered);
+    else if (node.type === 'PIPE_REG')  _drawPipeRegNode(node, val, hovered, ffStates);
+    else if (node.type === 'SIGN_EXT')  _drawSignExtNode(node, val, hovered);
+    else if (node.type === 'BUS_MUX')   _drawBusMuxNode(node, val, hovered);
     else if (node.type === 'SUB_CIRCUIT') _drawSubCircuitNode(node, val, hovered);
     else if (MEMORY_TYPE_SET.has(node.type)) _drawMemoryNode(node, val, hovered, ffStates);
     else if (node.type === 'LATCH_SLOT') {
@@ -1439,6 +1479,217 @@ function _drawComparatorNode(node, val, hovered) {
   ctx.fillText('EQ', x + w - 14, node.y - 16);
   ctx.fillText('GT', x + w - 14, node.y);
   ctx.fillText('LT', x + w - 14, node.y + 16);
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── PIPE_REG node ───────────────────────────────────────────
+function _drawPipeRegNode(node, val, hovered, ffStates) {
+  const ch = node.channels || 4;
+  const w = 100, h = Math.max(60, ch * 20 + 20);
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(128,90,213,0.5)'; ctx.shadowBlur = 18; }
+
+  ctx.fillStyle = 'rgba(16,12,28,0.96)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  // Double vertical lines to indicate pipeline stage boundary
+  ctx.strokeStyle = hovered ? '#a078e0' : '#5a3d8a';
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(node.x, y + 4);
+  ctx.lineTo(node.x, y + h - 4);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = '#c0a0f0';
+  ctx.font = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PIPE', node.x, y + 10);
+  ctx.fillStyle = '#6a5090';
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.fillText(ch + 'ch', node.x, y + 20);
+
+  // Channel values
+  const ms = ffStates?.get(node.id);
+  const chData = ms?.channels || [];
+  const spread = (h - 16) / Math.max(1, ch - 1);
+  const startY = node.y - (h - 16) / 2;
+  ctx.font = '7px JetBrains Mono, monospace';
+  for (let i = 0; i < ch; i++) {
+    const py = ch === 1 ? node.y : startY + i * spread;
+    // Input label
+    ctx.fillStyle = '#6a5090';
+    ctx.textAlign = 'right';
+    ctx.fillText('D' + i, x + 14, py + 1);
+    // Output label + value
+    ctx.textAlign = 'left';
+    ctx.fillText('Q' + i, x + w - 14, py + 1);
+    const v = chData[i] ?? 0;
+    if (v !== 0) {
+      ctx.fillStyle = '#39ff14';
+      ctx.fillText(v.toString(), x + w - 26, py + 1);
+    }
+  }
+
+  // CLK triangle at bottom
+  ctx.strokeStyle = '#6a5090';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(node.x - 5, y + h - 2);
+  ctx.lineTo(node.x, y + h - 8);
+  ctx.lineTo(node.x + 5, y + h - 2);
+  ctx.stroke();
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── SIGN_EXT node ───────────────────────────────────────────
+function _drawSignExtNode(node, val, hovered) {
+  const w = 90, h = 44;
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(32,212,160,0.5)'; ctx.shadowBlur = 18; }
+
+  // Trapezoid: narrow left, wide right (expanding)
+  ctx.fillStyle = 'rgba(10,26,26,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(x,     y + 8);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x,     y + h - 8);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = hovered ? C.blockBorderHover : C.blockBorder;
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x,     y + 8);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x,     y + h - 8);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Label
+  ctx.fillStyle = C.blockText;
+  ctx.font = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SEXT', node.x, node.y - 6);
+
+  // Size label
+  ctx.fillStyle = '#4a6080';
+  ctx.font = '8px JetBrains Mono, monospace';
+  ctx.fillText((node.inBits || 4) + '→' + (node.outBits || 8), node.x, node.y + 7);
+
+  // Value
+  if (val !== null && val !== undefined) {
+    ctx.fillStyle = '#39ff14';
+    ctx.font = 'bold 8px JetBrains Mono, monospace';
+    ctx.fillText('0x' + (val >>> 0).toString(16).toUpperCase(), node.x, node.y + 18);
+  }
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── BUS_MUX node ────────────────────────────────────────────
+function _drawBusMuxNode(node, val, hovered) {
+  const n = node.inputCount || 2;
+  const w = 90, h = Math.max(50, n * 22 + 10);
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(224,160,48,0.5)'; ctx.shadowBlur = 18; }
+
+  // Trapezoid shape (wide left, narrow right)
+  ctx.fillStyle = 'rgba(20,14,8,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(x,     y);           // top-left
+  ctx.lineTo(x + w, y + 12);      // top-right (narrower)
+  ctx.lineTo(x + w, y + h - 12);  // bottom-right
+  ctx.lineTo(x,     y + h);       // bottom-left (wider)
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = hovered ? '#e0a030' : '#8a6020';
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x,     y);
+  ctx.lineTo(x + w, y + 12);
+  ctx.lineTo(x + w, y + h - 12);
+  ctx.lineTo(x,     y + h);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Label
+  ctx.fillStyle = '#e0a030';
+  ctx.font = 'bold 10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('BUS', node.x - 4, node.y - 8);
+  ctx.fillText('MUX', node.x - 4, node.y + 4);
+
+  // Input labels
+  ctx.fillStyle = '#6a5030';
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  const spread = (h - 14) / Math.max(1, n - 1);
+  const startY = node.y - (h - 14) / 2;
+  for (let i = 0; i < n; i++) {
+    const py = n === 1 ? node.y : startY + i * spread;
+    ctx.fillText(String.fromCharCode(65 + i), x + 14, py + 1);
+  }
+
+  // SEL label at bottom
+  ctx.textAlign = 'center';
+  ctx.fillText('SEL', node.x, y + h + 10);
+
+  // Output label
+  ctx.textAlign = 'left';
+  ctx.fillText('Y', x + w - 14, node.y + 1);
+
+  // Show value
+  if (val !== null && val !== undefined) {
+    ctx.fillStyle = '#39ff14';
+    ctx.font = 'bold 8px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('0x' + (val >>> 0).toString(16).toUpperCase(), node.x - 4, node.y + 16);
+  }
 
   // Node label above
   ctx.fillStyle = C.textDim;
@@ -2385,6 +2636,17 @@ export function getNodeAtPoint(px, py, nodes) {
     if (n.type === 'DISPLAY_7SEG') {
       const hw = 40 + 6, hh = 60 + 6;
       if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
+    } else if (n.type === 'PIPE_REG') {
+      const ch = n.channels || 4;
+      const hw = 50 + 6, hh = Math.max(30, ch * 10 + 10) + 6;
+      if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
+    } else if (n.type === 'SIGN_EXT') {
+      const hw = 45 + 6, hh = 22 + 6;
+      if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
+    } else if (n.type === 'BUS_MUX') {
+      const nn = n.inputCount || 2;
+      const hw = 45 + 6, hh = Math.max(25, nn * 11 + 5) + 6;
+      if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
     } else if (n.type === 'SUB_CIRCUIT') {
       const maxPins = Math.max((n.subInputs||[]).length, (n.subOutputs||[]).length, 1);
       const hw = 60 + 6, hh = Math.max(30, maxPins * 10 + 10) + 6;
@@ -2545,6 +2807,9 @@ function _getNodeInputCount(node) {
   if (node.type === 'FULL_ADDER') return 3;   // A, B, Cin
   if (node.type === 'COMPARATOR') return 2;    // A, B
   if (node.type === 'SUB_CIRCUIT') return (node.subInputs || []).length;
+  if (node.type === 'PIPE_REG') return (node.channels || 4) + 3; // D0..Dn-1, STALL, FLUSH, CLK
+  if (node.type === 'SIGN_EXT') return 1;      // IN
+  if (node.type === 'BUS_MUX') return (node.inputCount || 2) + 1; // D0..Dn-1, SEL
   if (node.type === 'ALU') return 3;           // A, B, OP
   if (node.type === 'CU') return 3;            // OP, Z, C
   if (node.type === 'BUS') return (node.sourceCount || 3) * 2; // D0,EN0,D1,EN1,...
@@ -2602,6 +2867,14 @@ export function getInputAnchors(node) {
     } else if (node.type === 'BUS') {
       const srcIdx = Math.floor(i / 2);
       label = i % 2 === 0 ? 'D' + srcIdx : 'EN' + srcIdx;
+    } else if (node.type === 'PIPE_REG') {
+      const ch = node.channels || 4;
+      label = i < ch ? 'D' + i : ['STALL', 'FLUSH', 'CLK'][i - ch] || '';
+    } else if (node.type === 'SIGN_EXT') {
+      label = 'IN';
+    } else if (node.type === 'BUS_MUX') {
+      const n = node.inputCount || 2;
+      label = i < n ? String.fromCharCode(65 + i) : 'SEL'; // A, B, C... SEL
     } else if (node.type === 'SUB_CIRCUIT') {
       label = (node.subInputs && node.subInputs[i]) ? node.subInputs[i].label : 'I' + i;
     } else if (node.type === 'CU') {
@@ -2655,6 +2928,15 @@ export function getOutputAnchors(node) {
   } else if (node.type === 'BUS') {
     anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'OUT' });
     anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'ERR' });
+  } else if (node.type === 'PIPE_REG') {
+    const ch = node.channels || 4;
+    for (let i = 0; i < ch; i++) {
+      anchors.push({ ..._nodeOutputAnchor(node, i), index: i, label: 'Q' + i });
+    }
+  } else if (node.type === 'SIGN_EXT') {
+    anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'OUT' });
+  } else if (node.type === 'BUS_MUX') {
+    anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'Y' });
   } else if (node.type === 'SUB_CIRCUIT') {
     const outs = node.subOutputs || [];
     for (let i = 0; i < outs.length; i++) {

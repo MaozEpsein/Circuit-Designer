@@ -6,7 +6,7 @@
 import { bus } from '../core/EventBus.js';
 import * as Renderer from '../rendering/CanvasRenderer.js';
 import { createComponent, createWire, COMPONENT_TYPES, MEMORY_TYPE_SET } from '../components/Component.js';
-import { AddNodeCommand, RemoveNodeCommand, AddWireCommand, RemoveWireCommand, SetGateCommand, SetFfTypeCommand } from '../components/CircuitCommands.js';
+import { AddNodeCommand, RemoveNodeCommand, AddWireCommand, RemoveWireCommand, SetGateCommand, SetFfTypeCommand, SetNodePropsCommand } from '../components/CircuitCommands.js';
 
 let _canvas;
 let _scene;
@@ -63,6 +63,9 @@ const TOOL_TYPE_MAP = {
   'place-cu':            COMPONENT_TYPES.CU,
   'place-bus':           COMPONENT_TYPES.BUS,
   'place-imm':           COMPONENT_TYPES.IMM,
+  'place-busmux':        COMPONENT_TYPES.BUS_MUX,
+  'place-signext':       COMPONENT_TYPES.SIGN_EXT,
+  'place-pipereg':       COMPONENT_TYPES.PIPE_REG,
 };
 
 // Direct gate placements (type + gate preset)
@@ -594,7 +597,7 @@ function _onCanvasDblClick(e) {
     return;
   }
 
-  const RESIZABLE_BLOCKS = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM']);
+  const RESIZABLE_BLOCKS = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM', 'BUS_MUX', 'SIGN_EXT', 'PIPE_REG']);
   if (MEMORY_TYPE_SET.has(node.type) || RESIZABLE_BLOCKS.has(node.type)) {
     _showComponentPropsPopup(node, screenX, screenY);
     return;
@@ -635,8 +638,9 @@ function _showInlineRename(node, screenX, screenY) {
 
   function commit() {
     const newLabel = input.value.trim();
-    if (newLabel !== '') {
-      node.label = newLabel;
+    if (newLabel !== '' && newLabel !== node.label) {
+      const cmd = new SetNodePropsCommand(_scene, node.id, { label: newLabel });
+      _commands.execute(cmd);
     }
     input.remove();
     _renameInput = null;
@@ -678,6 +682,15 @@ function _getComponentFields(node) {
       ];
     case 'ALU':
       return [{ key: 'bitWidth', label: 'Bit Width', min: 1, max: 16, val: node.bitWidth || 8 }];
+    case 'PIPE_REG':
+      return [{ key: 'channels', label: 'Channels', min: 1, max: 8, val: node.channels || 4 }];
+    case 'SIGN_EXT':
+      return [
+        { key: 'inBits',  label: 'Input Bits',  min: 1, max: 16, val: node.inBits || 4 },
+        { key: 'outBits', label: 'Output Bits', min: 2, max: 32, val: node.outBits || 8 },
+      ];
+    case 'BUS_MUX':
+      return [{ key: 'inputCount', label: 'Inputs', min: 2, max: 8, val: node.inputCount || 2 }];
     case 'IMM':
       return [
         { key: 'value',    label: 'Value',     min: 0, max: 65535, val: node.value || 0 },
@@ -807,12 +820,17 @@ function _showComponentPropsPopup(node, screenX, screenY) {
   if (firstInput) { firstInput.focus(); firstInput.select(); }
 
   function apply() {
+    const props = {};
     for (const f of fields) {
       const raw = parseInt(inputEls[f.key].value, 10);
-      node[f.key] = Math.max(f.min, Math.min(f.max, isNaN(raw) ? f.val : raw));
+      props[f.key] = Math.max(f.min, Math.min(f.max, isNaN(raw) ? f.val : raw));
     }
     const newLabel = labelInp.value.trim();
-    if (newLabel) node.label = newLabel;
+    if (newLabel && newLabel !== node.label) props.label = newLabel;
+    if (Object.keys(props).length) {
+      const cmd = new SetNodePropsCommand(_scene, node.id, props);
+      _commands.execute(cmd);
+    }
     // Reset memory state on resize
     if (MEMORY_TYPE_SET.has(node.type) && _state.ffStates) _state.ffStates.delete(node.id);
     close();

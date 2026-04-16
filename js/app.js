@@ -10,6 +10,7 @@ import * as Renderer from './rendering/CanvasRenderer.js';
 import * as Waveform from './rendering/WaveformRenderer.js';
 import * as Input from './interaction/InputHandler.js';
 import { MEMORY_TYPE_SET, COMPONENT_TYPES } from './components/Component.js';
+import { SetNodePropsCommand } from './components/CircuitCommands.js';
 import { assemble, disassemble, getOpcodeNames, getOpcodeFormat } from './cpu/Assembler.js';
 import { SubCircuitRegistry } from './core/SubCircuitRegistry.js';
 import { SimulationController, formatValue, VALUE_FORMAT } from './engine/SimulationController.js';
@@ -321,10 +322,12 @@ propSizeSelect?.addEventListener('change', () => {
   const node = _getSelectedNode();
   if (!node) return;
   const val = parseInt(propSizeSelect.value);
-  if (node.type === 'MUX') node.inputCount = val;
-  else if (node.type === 'DEMUX') node.outputCount = val;
-  else if (node.type === 'DECODER') node.inputBits = val;
-  else if (node.type === 'ENCODER') node.inputLines = val;
+  const props = {};
+  if (node.type === 'MUX') props.inputCount = val;
+  else if (node.type === 'DEMUX') props.outputCount = val;
+  else if (node.type === 'DECODER') props.inputBits = val;
+  else if (node.type === 'ENCODER') props.inputLines = val;
+  if (Object.keys(props).length) commands.execute(new SetNodePropsCommand(scene, node.id, props));
 });
 
 // Memory bit width / data bits change
@@ -332,12 +335,13 @@ document.getElementById('prop-membit-select')?.addEventListener('change', () => 
   const node = _getSelectedNode();
   if (!node) return;
   const val = parseInt(document.getElementById('prop-membit-select').value);
+  const props = {};
   if (node.type === 'RAM' || node.type === 'ROM' || node.type === 'REG_FILE' || node.type === 'FIFO' || node.type === 'STACK') {
-    node.dataBits = val;
+    props.dataBits = val;
   } else if (MEMORY_TYPE_SET.has(node.type)) {
-    node.bitWidth = val;
+    props.bitWidth = val;
   }
-  // Reset memory state to re-initialize with new size
+  if (Object.keys(props).length) commands.execute(new SetNodePropsCommand(scene, node.id, props));
   state.ffStates.delete(node.id);
 });
 
@@ -345,7 +349,7 @@ document.getElementById('prop-membit-select')?.addEventListener('change', () => 
 document.getElementById('prop-memaddr-select')?.addEventListener('change', () => {
   const node = _getSelectedNode();
   if (!node || (node.type !== 'RAM' && node.type !== 'ROM')) return;
-  node.addrBits = parseInt(document.getElementById('prop-memaddr-select').value);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { addrBits: parseInt(document.getElementById('prop-memaddr-select').value) }));
   state.ffStates.delete(node.id);
 });
 
@@ -357,20 +361,25 @@ setInterval(() => {
   }
 }, 100);
 
-propLabel.addEventListener('input', () => {
+propLabel.addEventListener('change', () => {
   const node = _getSelectedNode();
-  if (node) node.label = propLabel.value;
+  if (node && node.label !== propLabel.value) {
+    const cmd = new SetNodePropsCommand(scene, node.id, { label: propLabel.value });
+    commands.execute(cmd);
+  }
 });
 
 propValueToggle.addEventListener('click', () => {
   const node = _getSelectedNode();
   if (!node) return;
   if (node.type === 'INPUT') {
-    node.fixedValue = (node.fixedValue ?? 0) ^ 1;
-    propValueToggle.textContent = node.fixedValue;
+    const newVal = (node.fixedValue ?? 0) ^ 1;
+    commands.execute(new SetNodePropsCommand(scene, node.id, { fixedValue: newVal }));
+    propValueToggle.textContent = newVal;
   } else if (node.type === 'MUX_SELECT') {
-    node.value = (node.value ?? 0) ^ 1;
-    propValueToggle.textContent = node.value;
+    const newVal = (node.value ?? 0) ^ 1;
+    commands.execute(new SetNodePropsCommand(scene, node.id, { value: newVal }));
+    propValueToggle.textContent = newVal;
   }
 });
 
@@ -384,8 +393,9 @@ propSteps.addEventListener('input', () => {
 propTargetToggle.addEventListener('click', () => {
   const node = _getSelectedNode();
   if (!node || node.type !== 'OUTPUT') return;
-  node.targetValue = (node.targetValue ?? 0) ^ 1;
-  propTargetToggle.textContent = node.targetValue;
+  const newVal = (node.targetValue ?? 0) ^ 1;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { targetValue: newVal }));
+  propTargetToggle.textContent = newVal;
 });
 
 propStepTargets.addEventListener('input', () => {
@@ -398,8 +408,9 @@ propStepTargets.addEventListener('input', () => {
 propInitQToggle.addEventListener('click', () => {
   const node = _getSelectedNode();
   if (!node || node.type !== 'FF_SLOT') return;
-  node.initialQ = (node.initialQ ?? 0) ^ 1;
-  propInitQToggle.textContent = node.initialQ;
+  const newVal = (node.initialQ ?? 0) ^ 1;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { initialQ: newVal }));
+  propInitQToggle.textContent = newVal;
 });
 
 // ── Wire Property Panel ─────────────────────────────────────
@@ -1528,8 +1539,7 @@ document.getElementById('btn-rom-insert')?.addEventListener('click', () => {
 // SAVE button
 document.getElementById('btn-rom-save')?.addEventListener('click', () => {
   if (!_romEditorNode) return;
-  _romEditorNode.memory = { ..._romEditorData };
-  // Reset ROM state
+  commands.execute(new SetNodePropsCommand(scene, _romEditorNode.id, { memory: { ..._romEditorData } }));
   state.ffStates.delete(_romEditorNode.id);
   romOverlay?.classList.add('hidden');
   _romEditorNode = null;

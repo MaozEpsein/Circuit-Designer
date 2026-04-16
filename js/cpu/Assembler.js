@@ -74,8 +74,12 @@ export function assemble(line) {
       // STORE RS1, RS2(addr)
       rs1 = parseReg(parts[1] || '');
       rs2 = parseReg(parts[2] || '');
+    } else if (op === 8) {
+      // LOAD RD, RS2(addr) — address in RS2 so RF_B reads it
+      rd  = parseReg(parts[1] || '');
+      rs2 = parseReg(parts[2] || '');
     } else {
-      // LOAD RD, RS1 / MOV RD, RS1
+      // MOV RD, RS1
       rd  = parseReg(parts[1] || '');
       rs1 = parseReg(parts[2] || '');
     }
@@ -107,6 +111,7 @@ export function disassemble(instr) {
   if (fmt === 3) return `${name} R${rd}, R${rs1}, R${rs2}`;
   if (fmt === 2) {
     if (op === 7) return `${name} R${rs1}, R${rs2}`;
+    if (op === 8) return `${name} R${rd}, R${rs2}`;
     if (op === 9) return `${name} R${rs1}, R${rs2}`;
     return `${name} R${rd}, R${rs1}`;
   }

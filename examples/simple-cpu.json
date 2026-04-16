@@ -3,7 +3,7 @@
     {
       "type": "CLOCK",
       "x": -500,
-      "y": 300,
+      "y": 350,
       "value": 1,
       "id": "clk"
     },
@@ -16,10 +16,26 @@
       "id": "en"
     },
     {
+      "type": "INPUT",
+      "fixedValue": 1,
+      "label": "RE",
+      "x": -350,
+      "y": 100,
+      "id": "re_rom"
+    },
+    {
+      "type": "INPUT",
+      "fixedValue": 1,
+      "label": "LD",
+      "x": -50,
+      "y": 100,
+      "id": "ld"
+    },
+    {
       "type": "PC",
       "bitWidth": 4,
       "label": "PC",
-      "x": -400,
+      "x": -450,
       "y": 0,
       "id": "pc"
     },
@@ -28,30 +44,18 @@
       "addrBits": 4,
       "dataBits": 16,
       "memory": {
-        "0": 4370,
-        "1": 4370,
-        "2": 4370,
-        "3": 4370,
-        "4": 4370,
-        "5": 4370,
-        "6": 4370,
-        "7": 4370,
-        "8": 4370,
-        "9": 4370,
-        "10": 61440
+        "0": 786,
+        "1": 36880,
+        "2": 36914,
+        "3": 34048,
+        "4": 34306,
+        "5": 1878,
+        "6": 61440
       },
       "label": "ROM",
-      "x": -200,
+      "x": -250,
       "y": 0,
       "id": "rom"
-    },
-    {
-      "type": "INPUT",
-      "fixedValue": 1,
-      "label": "RE",
-      "x": -280,
-      "y": 80,
-      "id": "re"
     },
     {
       "type": "IR",
@@ -61,32 +65,33 @@
       "rs1Bits": 4,
       "rs2Bits": 4,
       "label": "IR",
-      "x": 50,
+      "x": 0,
       "y": 0,
       "id": "ir"
     },
     {
-      "type": "INPUT",
-      "fixedValue": 1,
-      "label": "LD",
-      "x": -30,
-      "y": 80,
-      "id": "ld"
-    },
-    {
       "type": "CU",
       "label": "CU",
-      "x": 300,
-      "y": 120,
+      "x": 200,
+      "y": 150,
       "id": "cu"
     },
     {
       "type": "REG_FILE",
       "regCount": 8,
       "dataBits": 8,
-      "initialRegs": [0, 10, 1, 0, 0, 0, 0, 0],
+      "initialRegs": [
+        0,
+        42,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
       "label": "RF_A",
-      "x": 300,
+      "x": 250,
       "y": -120,
       "id": "rf_a"
     },
@@ -94,9 +99,18 @@
       "type": "REG_FILE",
       "regCount": 8,
       "dataBits": 8,
-      "initialRegs": [0, 10, 1, 0, 0, 0, 0, 0],
+      "initialRegs": [
+        0,
+        42,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
       "label": "RF_B",
-      "x": 300,
+      "x": 250,
       "y": -20,
       "id": "rf_b"
     },
@@ -104,17 +118,35 @@
       "type": "ALU",
       "bitWidth": 8,
       "label": "ALU",
-      "x": 530,
+      "x": 480,
       "y": -70,
       "id": "alu"
+    },
+    {
+      "type": "RAM",
+      "addrBits": 3,
+      "dataBits": 8,
+      "memory": {},
+      "label": "DATA RAM",
+      "x": 480,
+      "y": 80,
+      "id": "ram"
+    },
+    {
+      "type": "BUS_MUX",
+      "inputCount": 2,
+      "label": "WB_MUX",
+      "x": 650,
+      "y": -30,
+      "id": "wb_mux"
     },
     {
       "type": "OUTPUT",
       "targetValue": 0,
       "label": "PC",
       "sandbox": true,
-      "x": -400,
-      "y": -140,
+      "x": -450,
+      "y": -150,
       "id": "out_pc"
     },
     {
@@ -122,36 +154,36 @@
       "targetValue": 0,
       "label": "ALU_R",
       "sandbox": true,
-      "x": 700,
-      "y": -100,
+      "x": 650,
+      "y": -120,
       "id": "out_alur"
-    },
-    {
-      "type": "OUTPUT",
-      "targetValue": 0,
-      "label": "Z",
-      "sandbox": true,
-      "x": 700,
-      "y": -50,
-      "id": "out_z"
     },
     {
       "type": "OUTPUT",
       "targetValue": 0,
       "label": "HALT",
       "sandbox": true,
-      "x": 450,
-      "y": 200,
+      "x": 350,
+      "y": 250,
       "id": "out_halt"
     },
     {
       "type": "OUTPUT",
       "targetValue": 0,
-      "label": "R1",
+      "label": "RAM_Q",
       "sandbox": true,
-      "x": 700,
-      "y": -150,
-      "id": "out_r1"
+      "x": 650,
+      "y": 80,
+      "id": "out_ramq"
+    },
+    {
+      "type": "OUTPUT",
+      "targetValue": 0,
+      "label": "WB",
+      "sandbox": true,
+      "x": 800,
+      "y": -30,
+      "id": "out_wb"
     }
   ],
   "wires": [
@@ -190,7 +222,7 @@
     },
     {
       "id": "w04",
-      "sourceId": "re",
+      "sourceId": "re_rom",
       "targetId": "rom",
       "targetInputIndex": 1,
       "sourceOutputIndex": 0,
@@ -216,28 +248,6 @@
       "targetId": "out_pc",
       "targetInputIndex": 0,
       "sourceOutputIndex": 0,
-      "waypoints": [],
-      "netName": "",
-      "colorGroup": null,
-      "isClockWire": false
-    },
-    {
-      "id": "w_jmp",
-      "sourceId": "cu",
-      "targetId": "pc",
-      "targetInputIndex": 1,
-      "sourceOutputIndex": 4,
-      "waypoints": [],
-      "netName": "",
-      "colorGroup": null,
-      "isClockWire": false
-    },
-    {
-      "id": "w_jaddr",
-      "sourceId": "ir",
-      "targetId": "pc",
-      "targetInputIndex": 0,
-      "sourceOutputIndex": 1,
       "waypoints": [],
       "netName": "",
       "colorGroup": null,
@@ -288,7 +298,7 @@
       "isClockWire": false
     },
     {
-      "id": "w_aluz_cu",
+      "id": "w_az",
       "sourceId": "alu",
       "targetId": "cu",
       "targetInputIndex": 1,
@@ -299,7 +309,7 @@
       "isClockWire": false
     },
     {
-      "id": "w_aluc_cu",
+      "id": "w_ac",
       "sourceId": "alu",
       "targetId": "cu",
       "targetInputIndex": 2,
@@ -333,7 +343,7 @@
     },
     {
       "id": "w13",
-      "sourceId": "alu",
+      "sourceId": "wb_mux",
       "targetId": "rf_a",
       "targetInputIndex": 2,
       "sourceOutputIndex": 0,
@@ -388,7 +398,7 @@
     },
     {
       "id": "w18",
-      "sourceId": "alu",
+      "sourceId": "wb_mux",
       "targetId": "rf_b",
       "targetInputIndex": 2,
       "sourceOutputIndex": 0,
@@ -453,9 +463,9 @@
       "isClockWire": false
     },
     {
-      "id": "w24",
-      "sourceId": "alu",
-      "targetId": "out_alur",
+      "id": "w_ram_addr",
+      "sourceId": "rf_b",
+      "targetId": "ram",
       "targetInputIndex": 0,
       "sourceOutputIndex": 0,
       "waypoints": [],
@@ -464,11 +474,88 @@
       "isClockWire": false
     },
     {
-      "id": "w25",
+      "id": "w_ram_data",
+      "sourceId": "rf_a",
+      "targetId": "ram",
+      "targetInputIndex": 1,
+      "sourceOutputIndex": 0,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w_ram_we",
+      "sourceId": "cu",
+      "targetId": "ram",
+      "targetInputIndex": 2,
+      "sourceOutputIndex": 2,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w_ram_re",
+      "sourceId": "cu",
+      "targetId": "ram",
+      "targetInputIndex": 3,
+      "sourceOutputIndex": 3,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w_ram_clk",
+      "sourceId": "clk",
+      "targetId": "ram",
+      "targetInputIndex": 4,
+      "sourceOutputIndex": 0,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": true
+    },
+    {
+      "id": "w_wbm_a",
       "sourceId": "alu",
-      "targetId": "out_z",
+      "targetId": "wb_mux",
       "targetInputIndex": 0,
-      "sourceOutputIndex": 1,
+      "sourceOutputIndex": 0,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w_wbm_b",
+      "sourceId": "ram",
+      "targetId": "wb_mux",
+      "targetInputIndex": 1,
+      "sourceOutputIndex": 0,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w_wbm_sel",
+      "sourceId": "cu",
+      "targetId": "wb_mux",
+      "targetInputIndex": 2,
+      "sourceOutputIndex": 3,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w24",
+      "sourceId": "alu",
+      "targetId": "out_alur",
+      "targetInputIndex": 0,
+      "sourceOutputIndex": 0,
       "waypoints": [],
       "netName": "",
       "colorGroup": null,
@@ -486,9 +573,20 @@
       "isClockWire": false
     },
     {
-      "id": "w_r1",
-      "sourceId": "rf_a",
-      "targetId": "out_r1",
+      "id": "w27",
+      "sourceId": "ram",
+      "targetId": "out_ramq",
+      "targetInputIndex": 0,
+      "sourceOutputIndex": 0,
+      "waypoints": [],
+      "netName": "",
+      "colorGroup": null,
+      "isClockWire": false
+    },
+    {
+      "id": "w28",
+      "sourceId": "wb_mux",
+      "targetId": "out_wb",
       "targetInputIndex": 0,
       "sourceOutputIndex": 0,
       "waypoints": [],

@@ -36,6 +36,9 @@ export const COMPONENT_TYPES = {
   BUS:          'BUS',
   IMM:          'IMM',
   SUB_CIRCUIT:  'SUB_CIRCUIT',
+  BUS_MUX:      'BUS_MUX',
+  SIGN_EXT:     'SIGN_EXT',
+  PIPE_REG:     'PIPE_REG',
 };
 
 export const GATE_TYPES = ['AND', 'OR', 'XOR', 'NAND', 'NOR', 'NOT'];
@@ -49,7 +52,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -126,6 +129,12 @@ export function createComponent(type, x, y) {
       return { ...base, value: 0, bitWidth: 8, label: 'IMM' };
     case COMPONENT_TYPES.SUB_CIRCUIT:
       return { ...base, label: 'BLOCK', subName: '', subInputs: [], subOutputs: [], subCircuit: null };
+    case COMPONENT_TYPES.BUS_MUX:
+      return { ...base, inputCount: 2, label: 'BMUX' };
+    case COMPONENT_TYPES.SIGN_EXT:
+      return { ...base, inBits: 4, outBits: 8, label: 'SEXT' };
+    case COMPONENT_TYPES.PIPE_REG:
+      return { ...base, channels: 4, label: 'PIPE' };
     default:
       return base;
   }
