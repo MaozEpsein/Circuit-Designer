@@ -2,7 +2,7 @@
 
 **A fully interactive digital circuit designer and simulator where you design, build, and test complete digital systems — from basic logic gates and flip-flops through arithmetic units, memory hierarchies with RAM, ROM, register files, FIFO queues and stacks, all the way to finite state machines — with real-time simulation, waveform analysis, signal tracing, truth table generation, and a live Memory Inspector that lets you watch and edit every register and memory cell as your circuit runs.**
 
-> **[Launch Circuit Designer Pro](https://maozepsein.github.io/Circuit-Designer/app.html)**
+[![Launch App](https://img.shields.io/badge/%F0%9F%9A%80_Launch_Circuit_Designer_Pro-Click_Here-blue?style=for-the-badge&logoColor=white)](https://maozepsein.github.io/Circuit-Designer/app.html)
 
 ---
 
