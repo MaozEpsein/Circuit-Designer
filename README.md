@@ -1,172 +1,99 @@
 # Circuit Designer Pro
 
-**Professional digital circuit design & debugging workbench — built for the browser.**
+**A fully interactive digital circuit designer and simulator where you design, build, and test complete digital systems — from basic logic gates and flip-flops through arithmetic units, memory hierarchies with RAM, ROM, register files, FIFO queues and stacks, all the way to finite state machines — with real-time simulation, waveform analysis, signal tracing, truth table generation, and a live Memory Inspector that lets you watch and edit every register and memory cell as your circuit runs.**
 
-Circuit Designer Pro is a visual EDA tool for designing, simulating, and debugging digital logic circuits. It provides a clean canvas with drag-and-drop components, real-time signal propagation, waveform analysis, and intuitive debugging tools — all in the browser with zero installation.
-
-Built for industry use: clean visuals, clear signal flow, and a simple interface that keeps even complex circuits readable and easy to debug.
+> **[Launch Circuit Designer Pro](https://maozepsein.github.io/Circuit-Designer/app.html)**
 
 ---
 
-## Vision
+## Features
 
-A **professional circuit design and debugging platform** for hardware engineers who need to quickly build, test, and troubleshoot digital circuits. The emphasis is on clarity — every circuit should look clean and be immediately understandable, not a tangled mess of wires and components.
+### Component Library
 
-### Core Principles
+#### Logic Gates
+AND, OR, XOR, NAND, NOR, XNOR, NOT, Buffer, Tri-state Buffer
 
-- **Clarity above all** — Clean layout, clear signal flow, readable at a glance
-- **Debugging-first** — Every feature helps the user find and fix problems faster
-- **Zero friction** — No installation, no signup, instant productivity
-- **Industry-grade** — Built for professionals, not a classroom toy
+#### Sequential Elements
+- **Flip-Flops** — D, T, SR, JK (edge-triggered)
+- **Latches** — D-Latch, SR-Latch (level-sensitive)
 
----
+#### Arithmetic & Combinational Blocks
+| Component | Description |
+|-----------|-------------|
+| Half Adder | A + B = Sum, Carry |
+| Full Adder | A + B + Cin = Sum, Cout |
+| Comparator | EQ, GT, LT outputs |
+| MUX | N:1 multiplexer (configurable 2-8 inputs) |
+| DEMUX | 1:N demultiplexer |
+| Decoder | N-to-2^N one-hot |
+| Encoder | Priority encoder |
 
-## Current State
+#### Memory Components
+| Component | Inputs | Outputs | Description |
+|-----------|--------|---------|-------------|
+| Register | DATA, EN, CLR, CLK | Q | N-bit register with enable and clear |
+| Shift Register | DIN, DIR, EN, CLR, CLK | Q | Bidirectional shift register |
+| Counter | EN, LOAD, DATA, CLR, CLK | Q, TC | Up counter with parallel load |
+| RAM | ADDR, DATA, WE, RE, CLK | Q | Read/write random access memory |
+| ROM | ADDR, RE, CLK | Q | Read-only memory with preset data |
+| Register File | RD_A, WR_A, WR_D, WE, CLK | RD_DATA | Multi-register file (configurable 2-32 registers) |
+| FIFO | DATA, WR, RD, CLR, CLK | Q, FULL, EMPTY | First-In First-Out queue |
+| Stack | DATA, PUSH, POP, CLR, CLK | Q, FULL, EMPTY | Last-In First-Out stack |
+| PC | JMP_A, JMP, EN, CLR, CLK | ADDR | Program Counter with jump support |
 
-The project is based on a fully functional digital logic simulator with:
+#### I/O Components
+- **Input / Output** nodes
+- **Clock** generator
+- **MUX Switch** (toggle value)
+- **7-Segment Display**
 
-- HTML5 Canvas rendering at 60 FPS with pan/zoom
-- Logic gates (AND, OR, XOR, NAND, NOR, NOT)
-- Sequential elements (D-FF, T-FF, SR-FF, JK-FF)
-- Special components (Clock, MUX, 7-segment display)
-- Wire routing with Bézier curves and signal coloring
-- Waveform viewer (timing diagrams)
-- DAG-based topological evaluation engine
-- Undo/redo, export/import, dark/light themes
+### Simulation Engine
+- DAG-based topological evaluation with real-time propagation
+- Rising-edge clock detection for sequential elements
+- Asynchronous read / synchronous write for memory components
+- Bus-style multi-bit wires (packed integer values)
+- Automatic re-propagation on state changes
 
----
+### Debugging & Analysis
+- **Waveform Viewer** — timing diagrams for any signal
+- **Signal Probes** — attach to any wire for live monitoring
+- **Watch List** — pin signals to a persistent panel
+- **Truth Table Generator** — auto-generate for any sub-circuit
+- **Signal Tracing** — highlight signal paths forward/backward
+- **Error Overlay** — detect undefined/conflicting signals
+- **Memory Inspector** — live view of all memory components with:
+  - Per-bit register visualization with click-to-toggle
+  - RAM/ROM address table view
+  - Register File with all internal registers displayed
+  - FIFO/Stack buffer contents with fill level
+  - Inline value editing (decimal, hex, binary formats)
 
-## Development Plan
-
-The development is split into two parts:
-
-### Part 1 — Working Professional Tool (MVP)
-
-Build a fully functional, professional-grade design and debugging platform using the **existing component set** (logic gates, flip-flops, clock, MUX, 7-segment display). The goal is to get the tool working properly as a professional product before adding new components.
-
-#### Phase 1: Core Architecture Refactor
-> *Solid foundation for a professional tool*
-
-- [ ] Refactor to ES Modules with clean separation of concerns
-- [ ] Introduce a formal component model (base class for all circuit elements)
-- [ ] Replace global state with a centralized state manager (event-driven)
-- [ ] Add a command pattern for all user actions (robust undo/redo)
-- [ ] Implement a proper scene graph replacing flat node arrays
-- [ ] Remove game/educational scaffolding (levels, showcase, gallery)
-
-#### Phase 2: Professional Wire Routing
-> *Clean, readable wiring that doesn't become spaghetti*
-
-- [ ] Manhattan (orthogonal) wire routing with auto-path
-- [ ] Wire junctions and explicit splits (T-junction, cross-over)
-- [ ] Net naming — label wires for cross-referencing
-- [ ] Color-coded signal groups
-- [ ] Wire drag-to-reroute
-- [ ] Auto-routing with obstacle avoidance
-
-#### Phase 3: Simulation Engine Upgrade
-> *Accurate and debuggable simulation*
-
-- [ ] Gate propagation delay modeling (configurable per component)
-- [ ] Glitch detection and hazard analysis
-- [ ] Multi-clock domain support
-- [ ] Breakpoints — pause simulation on signal conditions
-- [ ] Step-by-step execution with full state inspection
-- [ ] Simulation speed control (slow-mo to max speed)
-- [ ] Signal value formats: binary, hex, decimal
-- [ ] Oscillation/loop detection with clear error reporting
-
-#### Phase 4: Debugging Workbench
-> *The core differentiator — find problems fast*
-
-- [ ] **Signal Probes** — attach probes to any wire, view live values
-- [ ] **Watch List** — pin signals to a persistent panel for monitoring
-- [ ] **Waveform Viewer Pro** — multi-signal timeline with zoom, cursors, markers, measurements
-- [ ] **Truth Table Generator** — auto-generate truth tables for any sub-circuit
-- [ ] **Signal Tracing** — highlight signal path from source to destination
-- [ ] **Error Overlay** — highlight nodes with undefined/conflicting signals
-- [ ] **Timing Diagram Export** — export waveforms as SVG/PNG
-
-#### Phase 5: Professional UX
-> *Clean, efficient interface for daily use*
-
-- [ ] Component search palette (Ctrl+K style)
-- [ ] Mini-map for navigation
-- [ ] Configurable snap-to-grid
-- [ ] Align & distribute tools
-- [ ] Copy/paste, multi-select (rubber-band + Shift+click)
-- [ ] Zoom-to-fit, zoom-to-selection
-- [ ] Annotation layer — text labels, boxes, arrows
-- [ ] Project save/load with IndexedDB
-- [ ] Export: PNG, SVG, JSON
+### Design Tools
+- Drag-and-drop component placement from palette tabs
+- Double-click to edit component properties (size, label, bit width)
+- Properties panel for selected component configuration
+- Manhattan wire routing with Bezier curves
+- Multi-select, align, and distribute
+- Copy/paste, undo/redo
+- Snap-to-grid
+- Pan and zoom with minimap
+- Command palette (Ctrl+K) for quick access
+- Export/import circuits as JSON
+- Project save/load with IndexedDB
+- Screenshot export
 
 ---
 
-### Part 2 — Extended Component Library
+## Palette Tabs
 
-Once the tool is stable and fully functional with the base components, expand the library to cover a wide range of real-world digital components.
+| Tab | Components |
+|-----|------------|
+| **LOGIC** | Gates (AND, OR, XOR, NAND, NOR, XNOR, NOT, BUF, TRI), Flip-Flops (D, T, SR, JK), Latches (D, SR) |
+| **BLOCKS** | MUX, DEMUX, Decoder, Encoder, Half Adder, Full Adder, Comparator |
+| **MEMORY** | Register, Shift Register, Counter, RAM, ROM, Register File, FIFO, Stack, PC |
+| **OTHER** | MUX Switch, 7-Segment Display |
 
-#### Combinational Logic
-- [ ] Half Adder, Full Adder
-- [ ] Comparator
-- [ ] Decoder, Encoder, Priority Encoder
-- [ ] Barrel Shifter
-
-#### Arithmetic
-- [ ] ALU
-- [ ] N-bit Adder / Subtractor
-- [ ] Multiplier
-
-#### Memory
-- [ ] Register, Register File
-- [ ] RAM, ROM
-- [ ] FIFO, Shift Register
-
-#### I/O & Interface
-- [ ] LED matrix
-- [ ] DIP switch array
-- [ ] Hex display
-- [ ] Button (momentary / toggle)
-- [ ] Tri-state buffer
-
-#### Bus & Connectivity
-- [ ] Multi-bit bus wires (data bus, address bus)
-- [ ] Bus splitter / merger
-- [ ] Bus notation and labeling
-
-#### Custom Components
-- [ ] Group sub-circuits into reusable blocks (hierarchical design)
-- [ ] Component parameter configuration (bit width, initial values)
-- [ ] Import/export custom component libraries
-
----
-
-## MVP Summary
-
-**Part 1** delivers a complete, professional circuit design tool with:
-
-1. Clean modular architecture
-2. Professional wire routing with clear, readable layouts
-3. Accurate simulation with breakpoints and step execution
-4. Debugging tools: probes, waveform viewer, truth tables, signal tracing
-5. Polished UX with search, mini-map, annotations, and export
-
-All built on the existing component set: **logic gates, flip-flops, clock, MUX, and 7-segment display**.
-
-**Target audience**: Hardware engineers and professionals in the industry who need a fast, visual tool to design and debug digital circuits.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Rendering | HTML5 Canvas 2D |
-| Language | JavaScript (ES Modules) |
-| Storage | IndexedDB (local) + Firebase (cloud) |
-| Styling | CSS with custom properties (dark/light themes) |
-| Font | JetBrains Mono |
-| Build | None (zero-build static hosting) |
+Quick toolbar: IN, OUT, WIRE, CLK
 
 ---
 
@@ -174,15 +101,40 @@ All built on the existing component set: **logic gates, flip-flops, clock, MUX, 
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/MaozEpsein/Circuit-Designer.git
 cd Circuit-Designer
 
-# No build step — open index.html or use any static server:
+# No build step required — open directly or use any static server:
 npx serve .
 ```
+
+Then open `app.html` in your browser.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Rendering | HTML5 Canvas 2D (60 FPS) |
+| Language | Vanilla JavaScript (ES Modules) |
+| Storage | IndexedDB (local) + Firebase (cloud) |
+| Styling | CSS with dark theme |
+| Font | JetBrains Mono |
+| Build | None — zero dependencies, static hosting |
+
+---
+
+## Roadmap
+
+- [ ] **CPU tab** — ALU, Instruction Register, Control Unit, Bus, Immediate value
+- [ ] **Sub-circuits** — group circuits into reusable custom blocks
+- [ ] **Multi-bit bus wires** — visual distinction for bus vs. single-bit wires
+- [ ] **Timing diagram export** — SVG/PNG export of waveforms
+- [ ] **Gate propagation delay** — configurable delay modeling
 
 ---
 
 ## License
 
-TBD
+MIT
