@@ -442,9 +442,13 @@
       <div id="rom-editor-header">
         <span>ROM EDITOR</span>
         <div>
-          <button id="btn-rom-view-toggle" style="font-size:9px;padding:2px 8px;background:#0a1520;border:1px solid #2a4060;color:#00d4ff;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace">TABLE</button>
+          <div id="rom-view-tabs" style="display:flex;gap:0;margin-right:8px">
+            <button class="rom-tab active" data-romview="c">C</button>
+            <button class="rom-tab" data-romview="asm">ASM</button>
+            <button class="rom-tab" data-romview="table">TABLE</button>
+          </div>
           <button id="btn-rom-load" style="font-size:9px;padding:2px 8px;background:#1a1a30;border:1px solid #5a3d8a;color:#c0a0f0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">LOAD FILE</button>
-          <input type="file" id="rom-file-input" accept=".asm,.hex,.txt,.json,.bin" style="display:none" />
+          <input type="file" id="rom-file-input" accept=".asm,.hex,.txt,.json,.bin,.c" style="display:none" />
           <button id="btn-rom-save" style="font-size:9px;padding:2px 8px;background:#1a4a2a;border:1px solid #39ff14;color:#39ff14;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">SAVE</button>
           <button id="btn-rom-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
         </div>

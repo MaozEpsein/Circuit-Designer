@@ -12,6 +12,7 @@ import * as Input from './interaction/InputHandler.js';
 import { MEMORY_TYPE_SET, COMPONENT_TYPES } from './components/Component.js';
 import { SetNodePropsCommand, RemoveNodeCommand } from './components/CircuitCommands.js';
 import { assemble, disassemble, getOpcodeNames, getOpcodeFormat } from './cpu/Assembler.js';
+import { compileCToROM } from './cpu/compiler/CCompiler.js';
 import { SubCircuitRegistry } from './core/SubCircuitRegistry.js';
 import { ShortcutManager } from './core/ShortcutManager.js';
 import { SimulationController, formatValue, VALUE_FORMAT } from './engine/SimulationController.js';
@@ -1943,13 +1944,15 @@ const romBody    = document.getElementById('rom-editor-body');
 let _romEditorNode = null;
 let _romEditorData = {}; // addr → value
 
-let _romViewMode = 'code'; // 'code' or 'table'
+let _romViewMode = 'c'; // 'c', 'asm', or 'table'
+let _romCSource = '';   // stores C source separately
 
 function _openRomEditor(node) {
   _romEditorNode = node;
   _romEditorData = node.memory ? { ...node.memory } : {};
+  _romCSource = node._cSource || '';
   _initRomBuilderDropdowns();
-  _romViewMode = 'code';
+  _romViewMode = 'c';
   _updateRomView();
   romOverlay?.classList.remove('hidden');
 }
@@ -1957,22 +1960,39 @@ function _openRomEditor(node) {
 function _updateRomView() {
   const codeView = document.getElementById('rom-code-view');
   const tableWrap = document.getElementById('rom-editor-table-wrap');
-  const toggleBtn = document.getElementById('btn-rom-view-toggle');
 
-  if (_romViewMode === 'code') {
+  // Update tab active state
+  document.querySelectorAll('.rom-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.romview === _romViewMode);
+  });
+
+  // Hide builder in C mode
+  const builder = document.getElementById('rom-editor-builder');
+  if (builder) builder.style.display = _romViewMode === 'c' ? 'none' : '';
+
+  if (_romViewMode === 'c') {
     codeView?.classList.remove('hidden');
     tableWrap?.classList.add('hidden');
-    if (toggleBtn) toggleBtn.textContent = 'TABLE';
-    _renderCodeView();
+    if (codeView) {
+      if (!_romCSource) {
+        _romCSource = 'R3 = R1 + R2;\nhalt;\n';
+      }
+      codeView.value = _romCSource;
+      codeView.style.color = '#c8d8f0';
+    }
+  } else if (_romViewMode === 'asm') {
+    codeView?.classList.remove('hidden');
+    tableWrap?.classList.add('hidden');
+    _renderAsmView();
+    if (codeView) codeView.style.color = '#c8d8f0';
   } else {
     codeView?.classList.add('hidden');
     tableWrap?.classList.remove('hidden');
-    if (toggleBtn) toggleBtn.textContent = 'CODE';
     _renderRomTable();
   }
 }
 
-function _renderCodeView() {
+function _renderAsmView() {
   const codeView = document.getElementById('rom-code-view');
   if (!codeView || !_romEditorNode) return;
   const addrCount = 1 << (_romEditorNode.addrBits || 3);
@@ -1980,7 +2000,6 @@ function _renderCodeView() {
   for (let a = 0; a < addrCount; a++) {
     const val = _romEditorData[a] ?? 0;
     if (val === 0 && a > 0) {
-      // Skip trailing empty lines
       let hasMore = false;
       for (let b = a; b < addrCount; b++) {
         if (_romEditorData[b]) { hasMore = true; break; }
@@ -1995,16 +2014,32 @@ function _renderCodeView() {
 function _syncCodeViewToData() {
   const codeView = document.getElementById('rom-code-view');
   if (!codeView || !_romEditorNode) return;
-  const lines = codeView.value.split('\n');
   const addrCount = 1 << (_romEditorNode.addrBits || 3);
-  // Clear existing
-  for (let a = 0; a < addrCount; a++) _romEditorData[a] = 0;
-  // Parse lines
-  for (let i = 0; i < Math.min(lines.length, addrCount); i++) {
-    const line = lines[i].trim();
-    if (!line || line.startsWith(';') || line.startsWith('//')) continue;
-    _romEditorData[i] = assemble(line);
+
+  if (_romViewMode === 'c') {
+    // Save C source
+    _romCSource = codeView.value;
+    // Compile C to ROM
+    const { memory, errors } = compileCToROM(codeView.value);
+    for (let a = 0; a < addrCount; a++) _romEditorData[a] = 0;
+    for (const [addr, val] of Object.entries(memory)) {
+      _romEditorData[parseInt(addr)] = val;
+    }
+    if (errors.length > 0) {
+      alert('Compilation errors:\n' + errors.join('\n'));
+    }
+  } else if (_romViewMode === 'asm') {
+    const lines = codeView.value.split('\n');
+    for (let a = 0; a < addrCount; a++) _romEditorData[a] = 0;
+    let addr = 0;
+    for (let i = 0; i < lines.length && addr < addrCount; i++) {
+      const line = lines[i].trim();
+      if (!line || line.startsWith(';') || line.startsWith('//')) continue;
+      _romEditorData[addr] = assemble(line);
+      addr++;
+    }
   }
+  // table mode syncs via inline inputs
 }
 
 function _initRomBuilderDropdowns() {
@@ -2127,6 +2162,7 @@ document.getElementById('rom-file-input')?.addEventListener('change', (e) => {
 
   const reader = new FileReader();
   const isBin = file.name.endsWith('.bin');
+  const isCFile = file.name.endsWith('.c');
 
   reader.onload = () => {
     const addrCount = 1 << (_romEditorNode.addrBits || 3);
@@ -2137,6 +2173,19 @@ document.getElementById('rom-file-input')?.addEventListener('change', (e) => {
       for (let i = 0; i < Math.min(view.byteLength / 2, addrCount); i++) {
         _romEditorData[i] = view.getUint16(i * 2, false); // big-endian
       }
+    } else if (isCFile) {
+      // C-like source: compile to ROM
+      const text = reader.result.trim();
+      const { memory, errors } = compileCToROM(text);
+      for (let a = 0; a < addrCount; a++) _romEditorData[a] = 0;
+      for (const [addr, val] of Object.entries(memory)) {
+        _romEditorData[parseInt(addr)] = val;
+      }
+      if (errors.length > 0) alert('Compilation errors:\n' + errors.join('\n'));
+      // Switch to C tab
+      _romCSource = text;
+      _romViewMode = 'c';
+      _updateRomView();
     } else {
       // Text: asm, hex, or json
       const text = reader.result.trim();
@@ -2170,6 +2219,10 @@ document.getElementById('rom-file-input')?.addEventListener('change', (e) => {
       }
     }
 
+    // Switch to ASM view for non-C files
+    if (!isCFile) {
+      _romViewMode = 'asm';
+    }
     _updateRomView();
   };
 
@@ -2183,20 +2236,26 @@ document.getElementById('rom-file-input')?.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-// Toggle code/table view
-document.getElementById('btn-rom-view-toggle')?.addEventListener('click', () => {
-  // Sync current view to data before switching
-  if (_romViewMode === 'code') {
+// ROM view tab switching
+document.querySelectorAll('.rom-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    // Sync current view before switching
     _syncCodeViewToData();
-  }
-  _romViewMode = _romViewMode === 'code' ? 'table' : 'code';
-  _updateRomView();
+    // Save C source if leaving C tab
+    if (_romViewMode === 'c') {
+      const codeView = document.getElementById('rom-code-view');
+      if (codeView) _romCSource = codeView.value;
+    }
+    _romViewMode = tab.dataset.romview;
+    _updateRomView();
+  });
 });
 
 document.getElementById('btn-rom-save')?.addEventListener('click', () => {
-  // Sync code view to data before saving
-  if (_romViewMode === 'code') _syncCodeViewToData();
+  _syncCodeViewToData();
   if (!_romEditorNode) return;
+  // Save C source on the node for persistence
+  _romEditorNode._cSource = _romCSource;
   commands.execute(new SetNodePropsCommand(scene, _romEditorNode.id, { memory: { ..._romEditorData } }));
   state.ffStates.delete(_romEditorNode.id);
   romOverlay?.classList.add('hidden');

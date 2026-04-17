@@ -1155,20 +1155,45 @@
   font-size: 12px;
 }
 
+/* ── ROM View Tabs ──────────────────────────────────────── */
+.rom-tab {
+  font: bold 9px 'JetBrains Mono', monospace;
+  padding: 3px 10px;
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  color: #4a6080;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rom-tab:first-child { border-radius: 3px 0 0 3px; }
+.rom-tab:last-child { border-radius: 0 3px 3px 0; }
+.rom-tab:not(:first-child) { border-left: none; }
+
+.rom-tab.active {
+  background: #1a2a40;
+  color: #00d4ff;
+  border-color: #00d4ff;
+}
+
+.rom-tab:hover:not(.active) {
+  color: #8090a8;
+}
+
 /* ── ROM Code View ──────────────────────────────────────── */
 #rom-code-view {
   flex: 1;
   width: 100%;
-  min-height: 200px;
+  min-height: 350px;
   background: #0a0e14;
   border: none;
   border-top: 1px solid #1e3a50;
   color: #c8d8f0;
-  font: 13px 'JetBrains Mono', monospace;
-  padding: 12px 16px;
+  font: 14px 'JetBrains Mono', monospace;
+  padding: 16px 20px;
   resize: none;
   outline: none;
-  line-height: 1.6;
+  line-height: 1.7;
   tab-size: 4;
 }
 
@@ -1191,8 +1216,9 @@
   background: #0a0e14;
   border: 1px solid #5a3d8a;
   border-radius: 10px;
-  width: 540px;
-  max-height: 80vh;
+  width: 90vw;
+  max-width: 1200px;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
   font-family: 'JetBrains Mono', monospace;
