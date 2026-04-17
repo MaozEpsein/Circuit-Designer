@@ -13,6 +13,7 @@ import { MEMORY_TYPE_SET, COMPONENT_TYPES } from './components/Component.js';
 import { SetNodePropsCommand, RemoveNodeCommand } from './components/CircuitCommands.js';
 import { assemble, disassemble, getOpcodeNames, getOpcodeFormat } from './cpu/Assembler.js';
 import { SubCircuitRegistry } from './core/SubCircuitRegistry.js';
+import { ShortcutManager } from './core/ShortcutManager.js';
 import { SimulationController, formatValue, VALUE_FORMAT } from './engine/SimulationController.js';
 import { ProbeManager } from './debug/SignalProbe.js';
 import { WatchList } from './debug/WatchList.js';
@@ -28,6 +29,7 @@ import { ProjectStorage } from './ui/ProjectStorage.js';
 // ── Singletons ──────────────────────────────────────────────
 const scene    = new SceneGraph();
 const subRegistry = new SubCircuitRegistry();
+const shortcuts = new ShortcutManager();
 const state    = new StateManager();
 const commands = new CommandManager(100);
 const simCtrl  = new SimulationController();
@@ -432,6 +434,109 @@ draw();
 </body></html>`);
   popup.document.close();
 }
+
+// ── Keyboard Shortcuts Panel ────────────────────────────────
+const shortcutsOverlay = document.getElementById('shortcuts-overlay');
+const shortcutsBody = document.getElementById('shortcuts-body');
+
+let _scEditingId = null;
+
+function _showShortcuts() {
+  const grouped = shortcuts.getGrouped();
+  let html = '';
+
+  // Non-keyboard shortcuts (always shown, not editable)
+  const extras = [
+    { group: 'Mouse', items: [['Pan', 'Drag empty area'], ['Rename', 'Double-click'], ['Properties', 'Dbl-click (blocks)'], ['Multi-Select Add', 'Shift+Click'], ['Rubber-band', 'Q + Drag'], ['Context Menu', 'Right-click']] }
+  ];
+
+  for (const [groupName, items] of Object.entries(grouped)) {
+    html += `<div class="sc-group-title">${groupName}</div>`;
+    for (const sc of items) {
+      const displayKey = ShortcutManager.formatKey(sc.key);
+      const editBtn = `<button class="sc-edit-btn" data-scid="${sc.id}" title="Click to rebind">edit</button>`;
+      const resetBtn = sc.isDefault ? '' : `<button class="sc-reset-btn" data-scid="${sc.id}" title="Reset to default">reset</button>`;
+      html += `<div class="sc-row">
+        <span class="sc-action">${sc.label}</span>
+        <span style="display:flex;gap:4px;align-items:center">
+          ${resetBtn}
+          <span class="sc-key" id="sc-key-${sc.id}">${displayKey}</span>
+          ${editBtn}
+        </span>
+      </div>`;
+    }
+  }
+
+  for (const extra of extras) {
+    html += `<div class="sc-group-title">${extra.group}</div>`;
+    for (const [action, key] of extra.items) {
+      html += `<div class="sc-row"><span class="sc-action">${action}</span><span class="sc-key">${key}</span></div>`;
+    }
+  }
+
+  html += `<div style="margin-top:12px;text-align:center"><button id="btn-sc-resetall" style="font:10px 'JetBrains Mono',monospace;padding:4px 12px;background:#2a1010;border:1px solid #4a2020;color:#ff6666;border-radius:3px;cursor:pointer">Reset All to Defaults</button></div>`;
+
+  shortcutsBody.innerHTML = html;
+
+  // Edit buttons
+  shortcutsBody.querySelectorAll('.sc-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.scid;
+      _scEditingId = id;
+      const keyEl = document.getElementById('sc-key-' + id);
+      if (keyEl) {
+        keyEl.textContent = 'Press key...';
+        keyEl.style.borderColor = '#ffa028';
+        keyEl.style.color = '#ffa028';
+      }
+    });
+  });
+
+  // Reset buttons
+  shortcutsBody.querySelectorAll('.sc-reset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      shortcuts.resetKey(btn.dataset.scid);
+      _showShortcuts();
+    });
+  });
+
+  // Reset all
+  document.getElementById('btn-sc-resetall')?.addEventListener('click', () => {
+    if (confirm('Reset all shortcuts to defaults?')) {
+      shortcuts.resetAll();
+      _showShortcuts();
+    }
+  });
+
+  shortcutsOverlay?.classList.remove('hidden');
+}
+
+// Capture key when editing a shortcut
+window.addEventListener('keydown', (e) => {
+  if (!_scEditingId) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') { _scEditingId = null; _showShortcuts(); return; }
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return; // wait for actual key
+  const keyStr = ShortcutManager.eventToKeyStr(e);
+  shortcuts.setKey(_scEditingId, keyStr);
+  _scEditingId = null;
+  _showShortcuts();
+}, true);
+
+document.getElementById('btn-shortcuts')?.addEventListener('click', _showShortcuts);
+document.getElementById('btn-shortcuts-close')?.addEventListener('click', () => shortcutsOverlay?.classList.add('hidden'));
+shortcutsOverlay?.addEventListener('click', (e) => { if (e.target === shortcutsOverlay) shortcutsOverlay.classList.add('hidden'); });
+
+// Also open with ? key
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+    e.preventDefault();
+    if (shortcutsOverlay?.classList.contains('hidden')) _showShortcuts();
+    else shortcutsOverlay?.classList.add('hidden');
+  }
+});
 
 // ── Wire Tooltip ────────────────────────────────────────────
 const wireTooltipEl = document.getElementById('wire-tooltip');
@@ -1315,7 +1420,7 @@ document.getElementById('btn-waveform-export')?.addEventListener('click', () => 
 
 // Keyboard shortcut: Ctrl+D toggles debug panel
 window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.code === 'KeyD') {
+  if (shortcuts.matches(e, 'sys-debug')) {
     e.preventDefault();
     _toggleDebugPanel();
   }
@@ -1638,37 +1743,30 @@ window.addEventListener('keydown', (e) => {
   const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
   if (isTyping) return;
 
-  // Ctrl+Shift+X: Emergency reset — clear everything
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyX') {
+  const match = shortcuts.findMatch(e);
+
+  if (match === 'sys-reset') {
     e.preventDefault();
     if (confirm('Reset everything? This will clear the canvas and saved state.')) {
-      scene.clear();
-      state.selectedNodeId = null;
-      state.ffStates.clear();
-      selection.clearSelection();
-      localStorage.removeItem('circuit_designer_pro');
-      commands.clear();
-      Renderer.zoomToFit([]);
+      scene.clear(); state.selectedNodeId = null; state.ffStates.clear();
+      selection.clearSelection(); localStorage.removeItem('circuit_designer_pro');
+      commands.clear(); Renderer.zoomToFit([]);
     }
     return;
   }
-
-  if (e.ctrlKey && e.code === 'KeyC') {
+  if (match === 'action-copy') {
     e.preventDefault();
-    // If no multi-selection but a single node is selected, add it to selection first
-    if (selection.count === 0 && state.selectedNodeId) {
-      selection.select(state.selectedNodeId);
-    }
+    if (selection.count === 0 && state.selectedNodeId) selection.select(state.selectedNodeId);
     selection.copy();
   }
-  if (e.ctrlKey && e.code === 'KeyV') { e.preventDefault(); selection.paste(); }
-  if (e.ctrlKey && e.code === 'KeyA') { e.preventDefault(); selection.selectAll(); }
-  if (e.ctrlKey && e.code === 'KeyF') {
+  if (match === 'action-paste') { e.preventDefault(); selection.paste(); }
+  if (match === 'action-selectall') { e.preventDefault(); selection.selectAll(); }
+  if (match === 'nav-zoomsel') {
     e.preventDefault();
     const node = state.selectedNodeId ? scene.getNode(state.selectedNodeId) : null;
     if (node) Renderer.zoomToNode(node);
   }
-  if (e.code === 'Delete' || e.code === 'Backspace') {
+  if (match === 'edit-delete' || match === 'edit-delete2') {
     // Multi-select delete
     if (selection.count > 0) {
       const before = scene.snapshot();
@@ -1820,6 +1918,24 @@ document.getElementById('btn-export-svg')?.addEventListener('click', () => {
 document.getElementById('btn-zoom-fit')?.addEventListener('click', () => {
   Renderer.zoomToFit(scene.nodes);
 });
+bus.on('nav:zoomfit', () => Renderer.zoomToFit(scene.nodes));
+bus.on('nav:meminspector', _toggleMemInspector);
+
+// Bind shortcut from Command Palette (Ctrl+Enter)
+bus.on('shortcut:bind', ({ actionId, keyStr, label }) => {
+  // Create or update shortcut
+  const allSc = shortcuts.getAll();
+  if (allSc[actionId]) {
+    // Update existing
+    shortcuts.setKey(actionId, keyStr);
+  } else {
+    // Add new — register in ShortcutManager
+    allSc[actionId] = { key: keyStr, label, group: 'Custom' };
+    shortcuts.setKey(actionId, keyStr);
+  }
+  const display = ShortcutManager.formatKey(keyStr);
+  alert(`Shortcut set: ${label} → ${display}`);
+});
 
 // ── ROM Editor ──────────────────────────────────────────────
 const romOverlay = document.getElementById('rom-editor-overlay');
@@ -1827,12 +1943,68 @@ const romBody    = document.getElementById('rom-editor-body');
 let _romEditorNode = null;
 let _romEditorData = {}; // addr → value
 
+let _romViewMode = 'code'; // 'code' or 'table'
+
 function _openRomEditor(node) {
   _romEditorNode = node;
   _romEditorData = node.memory ? { ...node.memory } : {};
   _initRomBuilderDropdowns();
-  _renderRomTable();
+  _romViewMode = 'code';
+  _updateRomView();
   romOverlay?.classList.remove('hidden');
+}
+
+function _updateRomView() {
+  const codeView = document.getElementById('rom-code-view');
+  const tableWrap = document.getElementById('rom-editor-table-wrap');
+  const toggleBtn = document.getElementById('btn-rom-view-toggle');
+
+  if (_romViewMode === 'code') {
+    codeView?.classList.remove('hidden');
+    tableWrap?.classList.add('hidden');
+    if (toggleBtn) toggleBtn.textContent = 'TABLE';
+    _renderCodeView();
+  } else {
+    codeView?.classList.add('hidden');
+    tableWrap?.classList.remove('hidden');
+    if (toggleBtn) toggleBtn.textContent = 'CODE';
+    _renderRomTable();
+  }
+}
+
+function _renderCodeView() {
+  const codeView = document.getElementById('rom-code-view');
+  if (!codeView || !_romEditorNode) return;
+  const addrCount = 1 << (_romEditorNode.addrBits || 3);
+  const lines = [];
+  for (let a = 0; a < addrCount; a++) {
+    const val = _romEditorData[a] ?? 0;
+    if (val === 0 && a > 0) {
+      // Skip trailing empty lines
+      let hasMore = false;
+      for (let b = a; b < addrCount; b++) {
+        if (_romEditorData[b]) { hasMore = true; break; }
+      }
+      if (!hasMore) break;
+    }
+    lines.push(disassemble(val));
+  }
+  codeView.value = lines.join('\n');
+}
+
+function _syncCodeViewToData() {
+  const codeView = document.getElementById('rom-code-view');
+  if (!codeView || !_romEditorNode) return;
+  const lines = codeView.value.split('\n');
+  const addrCount = 1 << (_romEditorNode.addrBits || 3);
+  // Clear existing
+  for (let a = 0; a < addrCount; a++) _romEditorData[a] = 0;
+  // Parse lines
+  for (let i = 0; i < Math.min(lines.length, addrCount); i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith(';') || line.startsWith('//')) continue;
+    _romEditorData[i] = assemble(line);
+  }
 }
 
 function _initRomBuilderDropdowns() {
@@ -1944,7 +2116,86 @@ document.getElementById('btn-rom-insert')?.addEventListener('click', () => {
 });
 
 // SAVE button
+// ROM file loading
+document.getElementById('btn-rom-load')?.addEventListener('click', () => {
+  document.getElementById('rom-file-input')?.click();
+});
+
+document.getElementById('rom-file-input')?.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file || !_romEditorNode) return;
+
+  const reader = new FileReader();
+  const isBin = file.name.endsWith('.bin');
+
+  reader.onload = () => {
+    const addrCount = 1 << (_romEditorNode.addrBits || 3);
+
+    if (isBin) {
+      // Binary: read as ArrayBuffer, 2 bytes per instruction (16-bit)
+      const view = new DataView(reader.result);
+      for (let i = 0; i < Math.min(view.byteLength / 2, addrCount); i++) {
+        _romEditorData[i] = view.getUint16(i * 2, false); // big-endian
+      }
+    } else {
+      // Text: asm, hex, or json
+      const text = reader.result.trim();
+
+      // Try JSON first
+      if (text.startsWith('{')) {
+        try {
+          const obj = JSON.parse(text);
+          for (const [addr, val] of Object.entries(obj)) {
+            _romEditorData[parseInt(addr)] = typeof val === 'number' ? val : parseInt(val, 16);
+          }
+        } catch (_) {
+          alert('Invalid JSON file.');
+          return;
+        }
+      } else {
+        // Line-by-line: detect asm vs hex
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//') && !l.startsWith(';'));
+        // Check if first non-empty line looks like assembly (contains letters beyond hex digits)
+        const isAsm = lines.length > 0 && /[g-zG-Z]/.test(lines[0]);
+
+        for (let i = 0; i < Math.min(lines.length, addrCount); i++) {
+          if (isAsm) {
+            _romEditorData[i] = assemble(lines[i]);
+          } else {
+            // Hex: strip 0x prefix if present
+            const hex = lines[i].replace(/^0x/i, '');
+            _romEditorData[i] = parseInt(hex, 16) || 0;
+          }
+        }
+      }
+    }
+
+    _updateRomView();
+  };
+
+  if (isBin) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file);
+  }
+
+  // Reset file input so same file can be loaded again
+  e.target.value = '';
+});
+
+// Toggle code/table view
+document.getElementById('btn-rom-view-toggle')?.addEventListener('click', () => {
+  // Sync current view to data before switching
+  if (_romViewMode === 'code') {
+    _syncCodeViewToData();
+  }
+  _romViewMode = _romViewMode === 'code' ? 'table' : 'code';
+  _updateRomView();
+});
+
 document.getElementById('btn-rom-save')?.addEventListener('click', () => {
+  // Sync code view to data before saving
+  if (_romViewMode === 'code') _syncCodeViewToData();
   if (!_romEditorNode) return;
   commands.execute(new SetNodePropsCommand(scene, _romEditorNode.id, { memory: { ..._romEditorData } }));
   state.ffStates.delete(_romEditorNode.id);
@@ -2296,6 +2547,7 @@ function start() {
   state._subRegistry = subRegistry;
 
   Input.init(canvas, scene, state, commands, selection);
+  Input.setShortcutManager(shortcuts);
 
   // Load saved design
   const saved = localStorage.getItem('circuit_designer_pro');

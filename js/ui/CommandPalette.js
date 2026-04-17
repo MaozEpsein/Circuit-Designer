@@ -46,6 +46,7 @@ export class CommandPalette {
       <div id="command-palette-box">
         <input id="command-palette-input" type="text" placeholder="Type a command or node name..." autocomplete="off" spellcheck="false" />
         <div id="command-palette-list"></div>
+        <div style="padding:4px 12px;color:#3a5070;font-size:8px;border-top:1px solid #1e3a50">Enter = execute &nbsp; Ctrl+Enter = bind shortcut key</div>
       </div>
     `;
     document.body.appendChild(this._overlay);
@@ -74,6 +75,10 @@ export class CommandPalette {
         e.preventDefault();
         this._selectedIndex = Math.max(this._selectedIndex - 1, 0);
         this._render();
+      } else if (e.key === 'Enter' && e.ctrlKey) {
+        // Ctrl+Enter: bind shortcut to selected action
+        e.preventDefault();
+        this._bindShortcutToSelected();
       } else if (e.key === 'Enter') {
         e.preventDefault();
         this._executeSelected();
@@ -215,6 +220,46 @@ export class CommandPalette {
       this.hide();
       item.action();
     }
+  }
+
+  _bindShortcutToSelected() {
+    const item = this._filteredItems[this._selectedIndex];
+    if (!item) return;
+
+    this._input.value = '';
+    this._input.placeholder = `Press key for "${item.label}"... (ESC to cancel)`;
+    this._input.style.borderColor = '#ffa028';
+
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        cleanup();
+        return;
+      }
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+
+      // Build key string
+      let parts = [];
+      if (e.ctrlKey || e.metaKey) parts.push('ctrl');
+      if (e.shiftKey) parts.push('shift');
+      if (e.altKey) parts.push('alt');
+      parts.push(e.code);
+      const keyStr = parts.join('+');
+
+      // Emit bind event
+      bus.emit('shortcut:bind', { actionId: item.id, keyStr, label: item.label });
+      cleanup();
+    };
+
+    const cleanup = () => {
+      this._input.removeEventListener('keydown', handler, true);
+      this._input.placeholder = 'Type a command or node name...';
+      this._input.style.borderColor = '';
+      this.hide();
+    };
+
+    this._input.addEventListener('keydown', handler, true);
   }
 
   show() {

@@ -870,6 +870,102 @@
   margin: 3px 8px;
 }
 
+/* ── Keyboard Shortcuts Panel ───────────────────────────── */
+#shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#shortcuts-modal {
+  background: #0a0e14;
+  border: 1px solid #2a4060;
+  border-radius: 10px;
+  width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#shortcuts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e3a50;
+  color: #00d4ff;
+  font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+#shortcuts-body {
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+}
+
+.sc-group-title {
+  color: #4a6080;
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  margin: 12px 0 4px;
+  text-transform: uppercase;
+}
+
+.sc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.sc-action {
+  color: #c8d8f0;
+  font-size: 11px;
+}
+
+.sc-key {
+  background: #161e2e;
+  border: 1px solid #2a3a50;
+  border-radius: 3px;
+  padding: 2px 8px;
+  color: #00d4ff;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 30px;
+  text-align: center;
+}
+
+.sc-edit-btn {
+  background: none;
+  border: 1px solid #2a3a50;
+  color: #4a6080;
+  font: 8px 'JetBrains Mono', monospace;
+  padding: 1px 5px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.sc-edit-btn:hover { color: #ffa028; border-color: #ffa028; }
+
+.sc-reset-btn {
+  background: none;
+  border: 1px solid #3a2020;
+  color: #ff6666;
+  font: 8px 'JetBrains Mono', monospace;
+  padding: 1px 5px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.sc-reset-btn:hover { background: #2a1010; }
+
 /* ── Palette Search ─────────────────────────────────────── */
 #palette-search {
   width: 90px;
@@ -1057,6 +1153,27 @@
 .cu-hex {
   color: #5a7090;
   font-size: 12px;
+}
+
+/* ── ROM Code View ──────────────────────────────────────── */
+#rom-code-view {
+  flex: 1;
+  width: 100%;
+  min-height: 200px;
+  background: #0a0e14;
+  border: none;
+  border-top: 1px solid #1e3a50;
+  color: #c8d8f0;
+  font: 13px 'JetBrains Mono', monospace;
+  padding: 12px 16px;
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+#rom-code-view::selection {
+  background: rgba(0, 212, 255, 0.2);
 }
 
 /* ── ROM Editor Modal ───────────────────────────────────── */

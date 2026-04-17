@@ -1,0 +1,14 @@
+; All ALU operations test
+; Pre-load: R1=15 (0x0F), R2=3
+ADD R3, R1, R2
+SUB R4, R1, R2
+AND R5, R1, R2
+OR  R6, R1, R2
+XOR R7, R1, R2
+SHL R3, R1, R2
+SHR R4, R1, R2
+CMP R1, R2
+HALT
+; ADD: 15+3=18, SUB: 15-3=12, AND: 15&3=3, OR: 15|3=15
+; XOR: 15^3=12, SHL: 15<<3=120, SHR: 15>>3=1
+; CMP: 15>3 → C=1, Z=0

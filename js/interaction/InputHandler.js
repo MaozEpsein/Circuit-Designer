@@ -8,6 +8,9 @@ import * as Renderer from '../rendering/CanvasRenderer.js';
 import { createComponent, createWire, COMPONENT_TYPES, MEMORY_TYPE_SET } from '../components/Component.js';
 import { AddNodeCommand, RemoveNodeCommand, AddWireCommand, RemoveWireCommand, SetGateCommand, SetFfTypeCommand, SetNodePropsCommand } from '../components/CircuitCommands.js';
 
+let _shortcuts = null;
+export function setShortcutManager(sm) { _shortcuts = sm; }
+
 let _canvas;
 let _scene;
 let _state;
@@ -942,48 +945,47 @@ function _initKeyboard() {
     const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
     if (isTyping && e.key !== 'Escape') return;
 
-    // Undo: Ctrl+Z
-    if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ') {
-      e.preventDefault();
-      _commands.undo();
-      return;
-    }
-    // Redo: Ctrl+Y or Ctrl+Shift+Z
-    if ((e.ctrlKey && e.code === 'KeyY') || (e.ctrlKey && e.shiftKey && e.code === 'KeyZ')) {
-      e.preventDefault();
-      _commands.redo();
-      return;
-    }
-
-    // Tool shortcuts
-    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-      const shortcut = {
-        'KeyS': 'select', 'KeyQ': 'multiselect',
-        'KeyI': 'place-input', 'KeyO': 'place-output',
-        'KeyC': 'place-clock', 'KeyM': 'place-mux', 'Digit7': 'place-7seg',
-        'KeyW': 'wire', 'KeyD': 'delete',
-      }[e.code];
-      if (shortcut) {
+    // Use ShortcutManager if available
+    if (_shortcuts) {
+      const match = _shortcuts.findMatch(e);
+      if (match) {
         e.preventDefault();
-        _state.tool = shortcut;
-        return;
+        const toolMap = {
+          'tool-select': 'select', 'tool-multiselect': 'multiselect',
+          'tool-wire': 'wire', 'tool-delete': 'delete',
+          'tool-input': 'place-input', 'tool-output': 'place-output',
+          'tool-clock': 'place-clock',
+        };
+        if (toolMap[match]) { _state.tool = toolMap[match]; return; }
+        if (match === 'action-undo') { _commands.undo(); return; }
+        if (match === 'action-redo') { _commands.redo(); return; }
+        if (match === 'nav-stepclock') { bus.emit('clock:step'); return; }
+        if (match === 'nav-zoomfit') { bus.emit('nav:zoomfit'); return; }
+        if (match === 'nav-meminspector') { bus.emit('nav:meminspector'); return; }
+        // Custom bound shortcuts — emit as palette tool
+        if (match.startsWith('place-') || match.startsWith('tool-')) {
+          bus.emit('palette:tool', match.startsWith('tool-') ? match.replace('tool-', '') : match);
+          return;
+        }
+        if ((match === 'edit-delete' || match === 'edit-delete2') && _state.selectedNodeId) {
+          const cmd = new RemoveNodeCommand(_scene, _state.selectedNodeId);
+          _commands.execute(cmd);
+          _state.selectedNodeId = null;
+          return;
+        }
       }
-    }
-
-    // Delete selected node
-    if ((e.key === 'Delete' || e.key === 'Backspace') && _state.selectedNodeId) {
-      e.preventDefault();
-      const cmd = new RemoveNodeCommand(_scene, _state.selectedNodeId);
-      _commands.execute(cmd);
-      _state.selectedNodeId = null;
-      return;
-    }
-
-    // Step clock: Space
-    if (e.code === 'Space') {
-      e.preventDefault();
-      bus.emit('clock:step');
-      return;
+    } else {
+      // Fallback hardcoded shortcuts
+      if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ') { e.preventDefault(); _commands.undo(); return; }
+      if ((e.ctrlKey && e.code === 'KeyY') || (e.ctrlKey && e.shiftKey && e.code === 'KeyZ')) { e.preventDefault(); _commands.redo(); return; }
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        const sc = {'KeyS':'select','KeyQ':'multiselect','KeyI':'place-input','KeyO':'place-output','KeyC':'place-clock','KeyW':'wire','KeyD':'delete'}[e.code];
+        if (sc) { e.preventDefault(); _state.tool = sc; return; }
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && _state.selectedNodeId) {
+        e.preventDefault(); _commands.execute(new RemoveNodeCommand(_scene, _state.selectedNodeId)); _state.selectedNodeId = null; return;
+      }
+      if (e.code === 'Space') { e.preventDefault(); bus.emit('clock:step'); return; }
     }
 
     if (e.key === 'Escape') {

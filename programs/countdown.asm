@@ -1,0 +1,13 @@
+; Countdown from 10 to 0
+; Pre-load: R1=10, R2=1
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+SUB R1, R1, R2
+HALT

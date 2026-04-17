@@ -1,0 +1,10 @@
+; Memory test: STORE and LOAD
+; Pre-load: R1=42, R2=3
+ADD R3, R1, R2
+STORE R1, R0
+STORE R3, R2
+LOAD R5, R0
+LOAD R6, R2
+ADD R7, R5, R6
+HALT
+; Results: RAM[0]=42, RAM[3]=45, R5=42, R6=45, R7=87

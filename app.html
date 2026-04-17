@@ -53,6 +53,7 @@
       <div id="hud-right-top">
         <button id="btn-design-undo" class="hud-action-btn" title="Undo (Ctrl+Z)">&#8630;</button>
         <button id="btn-design-redo" class="hud-action-btn" title="Redo (Ctrl+Y)">&#8631;</button>
+        <button id="btn-shortcuts" class="hud-action-btn" title="Keyboard Shortcuts (?)">?</button>
       </div>
       <input type="text" id="palette-search" placeholder="Search..." autocomplete="off" spellcheck="false" />
       <div id="palette-tabs">
@@ -388,6 +389,17 @@
     <div class="ctx-item ctx-danger" data-action="delete">Delete</div>
   </div>
 
+  <!-- Keyboard Shortcuts Panel -->
+  <div id="shortcuts-overlay" class="hidden">
+    <div id="shortcuts-modal">
+      <div id="shortcuts-header">
+        <span>KEYBOARD SHORTCUTS</span>
+        <button id="btn-shortcuts-close" style="font-size:11px;padding:4px 10px;background:#2a1010;border:1px solid #4a2020;color:#ff6666;border-radius:4px;cursor:pointer;font-family:'JetBrains Mono',monospace">CLOSE</button>
+      </div>
+      <div id="shortcuts-body"></div>
+    </div>
+  </div>
+
   <!-- Wire Tooltip -->
   <div id="wire-tooltip" class="hidden"></div>
 
@@ -430,11 +442,15 @@
       <div id="rom-editor-header">
         <span>ROM EDITOR</span>
         <div>
+          <button id="btn-rom-view-toggle" style="font-size:9px;padding:2px 8px;background:#0a1520;border:1px solid #2a4060;color:#00d4ff;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace">TABLE</button>
+          <button id="btn-rom-load" style="font-size:9px;padding:2px 8px;background:#1a1a30;border:1px solid #5a3d8a;color:#c0a0f0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">LOAD FILE</button>
+          <input type="file" id="rom-file-input" accept=".asm,.hex,.txt,.json,.bin" style="display:none" />
           <button id="btn-rom-save" style="font-size:9px;padding:2px 8px;background:#1a4a2a;border:1px solid #39ff14;color:#39ff14;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">SAVE</button>
           <button id="btn-rom-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
         </div>
       </div>
-      <div id="rom-editor-table-wrap">
+      <textarea id="rom-code-view" spellcheck="false"></textarea>
+      <div id="rom-editor-table-wrap" class="hidden">
         <table id="rom-editor-table">
           <thead><tr><th>ADDR</th><th>HEX</th><th>ASSEMBLY</th><th></th></tr></thead>
           <tbody id="rom-editor-body"></tbody>
