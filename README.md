@@ -332,11 +332,13 @@ Each phase is independently shippable — you can stop at the end of any phase a
   Right-click on any signal row opens a DOM context menu with: Copy value, Hide, Show all, Pin to top, and per-signal Radix override (DEC / HEX / BIN / use global).
 
 #### Phase 4 — Power Features *(~3–4 days)*
-- [ ] Jump to next/previous edge of active signal (`←` / `→`)
+- [x] Jump to next/previous edge of active signal (`←` / `→`)
+  Active signal = row under the mouse cursor (falls back to the first visible signal). Also `Home` / `End` jump to first/last cycle. Auto-scrolls horizontally to keep the cursor in view.
 - [ ] Pattern search ("find when `PC == 10`" or "`RegWrite` rising edge")
 - [ ] Trigger mode — begin recording only when a user-defined condition becomes true
 - [ ] Signal groups with collapsible headers (`▼ CPU core`, `▼ Memory`)
-- [ ] Named bookmarks at specific cycles
+- [x] Named bookmarks at specific cycles
+  `B` prompts for a name and places a bookmark at the cursor; rendered as dashed soft-purple vertical line with name tag. Right-click also exposes "Add bookmark here" and "Clear all bookmarks".
 
 #### Phase 5 — Industry Integration *(~2–3 days)*
 - [ ] **VCD export** — standard Value Change Dump format, consumable by GTKWave / ModelSim / Vivado without modification
@@ -356,10 +358,10 @@ Each phase is independently shippable — you can stop at the end of any phase a
 | Phase 1 | 5 / 5 tasks ✅ |
 | Phase 2 | 4 / 4 tasks ✅ |
 | Phase 3 | 6 / 6 tasks ✅ |
-| Phase 4 | 0 / 5 tasks |
+| Phase 4 | 2 / 5 tasks |
 | Phase 5 | 0 / 3 tasks |
 | Phase 6 | 0 / 4 tasks |
-| **Total** | **15 / 27 tasks** |
+| **Total** | **17 / 27 tasks** |
 | Last updated | 2026-04-19 |
 
 ### How to update this section

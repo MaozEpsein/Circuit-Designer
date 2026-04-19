@@ -450,13 +450,20 @@ function _showShortcuts() {
   const extras = [
     { group: 'Mouse', items: [['Pan', 'Drag empty area'], ['Rename', 'Double-click'], ['Properties', 'Dbl-click (blocks)'], ['Multi-Select Add', 'Shift+Click'], ['Rubber-band', 'Q + Drag'], ['Context Menu', 'Right-click']] },
     { group: 'Waveform', items: [
-      ['Zoom',              'Ctrl + Wheel'],
-      ['Horizontal pan',    'Drag inside data / Shift+Wheel / Wheel'],
-      ['Vertical scroll',   'Wheel (when overflow) / Drag scrollbar'],
-      ['Fit to window',     'F'],
-      ['Jump in scrollbar', 'Click on track'],
-      ['Toggle panel',      'W'],
-      ['Cycle radix',       'DEC button in header'],
+      ['Zoom',                    'Ctrl + Wheel'],
+      ['Horizontal pan',          'Drag inside data / Shift+Wheel / Wheel'],
+      ['Vertical scroll',         'Wheel (when overflow) / Drag scrollbar'],
+      ['Fit to window',           'F'],
+      ['Next edge (active sig)',  '→'],
+      ['Prev edge (active sig)',  '←'],
+      ['First / last cycle',      'Home / End'],
+      ['Add bookmark',            'B'],
+      ['Place marker A / B',      'Click / Shift+Click'],
+      ['Clear both markers',      'Double-click data area'],
+      ['Signal options menu',     'Right-click row'],
+      ['Reorder signals',         'Drag label up/down'],
+      ['Toggle panel',            'W'],
+      ['Cycle radix',             'DEC button in header'],
     ]},
   ];
 
@@ -1179,6 +1186,9 @@ document.getElementById('btn-waveform-radix')?.addEventListener('click', (e) => 
   const next = Waveform.cycleRadix();
   e.target.textContent = next.toUpperCase();
 });
+document.getElementById('btn-waveform-prev')?.addEventListener('click', () => Waveform.jumpEdge(-1));
+document.getElementById('btn-waveform-next')?.addEventListener('click', () => Waveform.jumpEdge(+1));
+document.getElementById('btn-waveform-bmk') ?.addEventListener('click', () => Waveform.addBookmarkAtCursor());
 
 // ── Sequential Controls ─────────────────────────────────────
 function _updateSequentialUI() {

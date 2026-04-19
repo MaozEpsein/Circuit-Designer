@@ -43,6 +43,8 @@ export const state = {
   // fromIdx is the source row index (visible-signals list); targetIdx is
   // where it would land if released now; ghostY is the current mouse Y.
   reorderDrag: null,
+  // User-defined named bookmarks: [{ step, name }].
+  bookmarks: [],
 };
 
 export function reset() {
@@ -142,6 +144,49 @@ export function radixFor(sigId) {
 export function setRadix(r) {
   if (r === 'hex' || r === 'dec' || r === 'bin') state.radix = r;
 }
+
+/**
+ * Find the next cycle after `fromStep` where `sigId` changes value.
+ * Returns the cycle index or -1 if no further transition is recorded.
+ */
+export function nextEdgeStep(sigId, fromStep) {
+  const start = Math.floor(fromStep) + 1;
+  const n = state.history.length;
+  let prev = valueAtStep(sigId, Math.floor(fromStep));
+  for (let i = start; i < n; i++) {
+    const v = state.history[i].signals.get(sigId);
+    if (v !== prev) return i;
+  }
+  return -1;
+}
+
+/** Like nextEdgeStep but searching backwards. */
+export function prevEdgeStep(sigId, fromStep) {
+  const start = Math.floor(fromStep) - 1;
+  if (start < 0) return -1;
+  const curr = valueAtStep(sigId, Math.floor(fromStep));
+  let lookingFor = curr;
+  // Walk back until the value differs from the one under the cursor.
+  for (let i = start; i >= 0; i--) {
+    const v = state.history[i].signals.get(sigId);
+    if (v !== lookingFor) return i + 1; // the transition point is just after this differing value
+  }
+  return -1;
+}
+
+export function addBookmark(step, name) {
+  if (step == null) return;
+  const label = name || ('B' + (state.bookmarks.length + 1));
+  state.bookmarks.push({ step: Math.floor(step), name: label });
+  // Keep sorted by cycle for easier rendering / navigation.
+  state.bookmarks.sort((a, b) => a.step - b.step);
+}
+
+export function removeBookmarkAt(step) {
+  state.bookmarks = state.bookmarks.filter(b => b.step !== step);
+}
+
+export function clearBookmarks() { state.bookmarks = []; }
 
 /**
  * Return the recorded value of `sigId` at step index `stepIdx` (floor).

@@ -170,6 +170,9 @@ function _drawMarkersAndCursor(w, h) {
   _ctx.rect(METRICS.LABEL_W, 0, w - METRICS.LABEL_W, h);
   _ctx.clip();
 
+  // Bookmarks — drawn first so markers + cursor overlay them.
+  _drawBookmarks(w, h);
+
   // Markers (drawn under cursor so cursor stays on top).
   if (state.markerA !== null) _drawMarker(state.markerA, 'A', '#ff6b9d', w, h);
   if (state.markerB !== null) _drawMarker(state.markerB, 'B', '#ffcc00', w, h);
@@ -198,21 +201,58 @@ function _drawMarker(step, label, color, w, h) {
   const x = xForStep(Math.floor(step));
   if (x < METRICS.LABEL_W - 1 || x > w) return;
   _ctx.strokeStyle = color;
-  _ctx.lineWidth = 1.5;
+  _ctx.lineWidth = 2;
   _ctx.beginPath();
   _ctx.moveTo(x, METRICS.HEADER_H);
   _ctx.lineTo(x, h);
   _ctx.stroke();
 
-  // Flag at top with label.
+  // Bold flag at the top with the A/B letter — much larger than before so
+  // the markers are legible at a glance.
   _ctx.fillStyle = color;
-  const flagW = 14, flagH = 12;
+  const flagW = 22, flagH = 20;
   _ctx.fillRect(x, METRICS.HEADER_H - flagH, flagW, flagH);
+  // Small notch at the bottom-right for a "flag" silhouette
+  _ctx.beginPath();
+  _ctx.moveTo(x + flagW, METRICS.HEADER_H);
+  _ctx.lineTo(x + flagW + 6, METRICS.HEADER_H - flagH / 2);
+  _ctx.lineTo(x + flagW, METRICS.HEADER_H - flagH);
+  _ctx.closePath();
+  _ctx.fill();
+
   _ctx.fillStyle = '#0a0e14';
-  _ctx.font = 'bold 9px "JetBrains Mono", monospace';
+  _ctx.font = 'bold 14px "JetBrains Mono", monospace';
   _ctx.textAlign = 'center';
   _ctx.textBaseline = 'middle';
   _ctx.fillText(label, x + flagW / 2, METRICS.HEADER_H - flagH / 2);
+}
+
+function _drawBookmarks(w, h) {
+  const bmColor = '#b090ff'; // brighter soft purple — distinct + readable
+  _ctx.font = 'bold 12px "JetBrains Mono", monospace';
+  state.bookmarks.forEach(bm => {
+    const x = xForStep(bm.step);
+    if (x < METRICS.LABEL_W - 1 || x > w) return;
+    // Dashed vertical line across the signals area.
+    _ctx.strokeStyle = bmColor;
+    _ctx.lineWidth = 1.5;
+    _ctx.setLineDash([3, 4]);
+    _ctx.beginPath();
+    _ctx.moveTo(x, METRICS.HEADER_H);
+    _ctx.lineTo(x, h);
+    _ctx.stroke();
+    _ctx.setLineDash([]);
+
+    // Readable name tag at the top of the line (bigger + padded).
+    const tw = _ctx.measureText(bm.name).width;
+    const tagW = tw + 14, tagH = 20;
+    _ctx.fillStyle = bmColor;
+    _ctx.fillRect(x + 2, METRICS.HEADER_H + 2, tagW, tagH);
+    _ctx.fillStyle = '#0a0e14';
+    _ctx.textAlign = 'left';
+    _ctx.textBaseline = 'middle';
+    _ctx.fillText(bm.name, x + 9, METRICS.HEADER_H + 2 + tagH / 2);
+  });
 }
 
 function _drawMarkerFooter(w, h) {

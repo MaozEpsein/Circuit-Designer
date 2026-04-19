@@ -4,13 +4,17 @@
  * actions funnel through here; the renderer stays pure.
  */
 
-import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord, setRadix as stateSetRadix, visibleSignals, reorderSignal, toggleHidden, showAllSignals, valueAtStep, formatValue, signalBits, isBusSignal, radixFor } from './WaveformState.js';
+import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord, setRadix as stateSetRadix, visibleSignals, reorderSignal, toggleHidden, showAllSignals, valueAtStep, formatValue, signalBits, isBusSignal, radixFor, nextEdgeStep, prevEdgeStep, addBookmark, removeBookmarkAt } from './WaveformState.js';
 import * as Renderer from './WaveformRenderer.js';
 import { METRICS } from './WaveformTheme.js';
 
 let _canvas = null;
 let _panel  = null;
 let _rafPending = false;
+// The signal currently "active" for keyboard edge-jump navigation.
+// Defaults to whichever signal row the mouse last hovered over; falls back
+// to the first visible signal when nothing has been hovered yet.
+let _activeSigId = null;
 
 // ── Public API (keeps the old surface so app.js doesn't change) ──
 export function init(canvasEl) {
@@ -40,6 +44,12 @@ export function render() {
   if (!state.visible) return;
   Renderer.render();
 }
+
+/** Jump the cursor to the next (+1) or previous (-1) edge of the active signal. */
+export function jumpEdge(direction) { _jumpEdge(direction); }
+
+/** Prompt for a bookmark name and place it at the cursor / last cycle. */
+export function addBookmarkAtCursor() { _promptBookmark(); }
 
 /** Cycle the global radix: DEC → HEX → BIN → DEC. Returns new value. */
 export function cycleRadix() {
@@ -235,11 +245,18 @@ function _attachInput() {
     _requestRender();
   });
 
-  // Hover tracking — drives the vertical cursor + value readout in labels.
+  // Hover tracking — drives the vertical cursor + value readout in labels
+  // and sets the "active signal" for keyboard edge-jumps.
   _canvas.addEventListener('mousemove', (e) => {
     if (!state.visible) return;
     const rect = _canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const rowIdx = Renderer.signalAtY(my);
+    if (rowIdx >= 0) {
+      const sig = visibleSignals()[rowIdx];
+      if (sig) _activeSigId = sig.id;
+    }
     if (mx < METRICS.LABEL_W) {
       if (state.cursorStep !== null) { state.cursorStep = null; _requestRender(); }
       return;
@@ -361,8 +378,14 @@ function _showSignalMenu(sig, screenX, screenY) {
   }
 
   // Global actions always available (below the per-signal block).
+  if (sig) rows.push({ kind: 'sep' });
+  if (state.cursorStep !== null) {
+    rows.push({ kind: 'action', label: 'Add bookmark here', hint: 'Cycle ' + Math.floor(state.cursorStep), action: () => _promptBookmark() });
+  }
+  if (state.bookmarks.length > 0) {
+    rows.push({ kind: 'action', label: 'Clear all bookmarks', hint: `${state.bookmarks.length} saved`, action: () => { state.bookmarks = []; _requestRender(); } });
+  }
   if (state.hiddenSignals.size > 0) {
-    if (sig) rows.push({ kind: 'sep' });
     rows.push({ kind: 'action', label: 'Show all signals', hint: `${state.hiddenSignals.size} hidden`, action: () => { showAllSignals(); _requestRender(); } });
   }
   if (state.markerA !== null || state.markerB !== null) {
@@ -465,16 +488,82 @@ function _attachLabelReorder() {
   });
 }
 
-// ── Input: Keyboard shortcuts (F = fit-to-window) ────────────────
+// ── Input: Keyboard shortcuts ────────────────────────────────────
+// F          — fit-to-window
+// ← / →      — jump to previous/next edge of the active signal
+// Home / End — jump to first / last cycle
+// B          — add a named bookmark at the current cursor cycle
 function _attachKeyboard() {
   window.addEventListener('keydown', (e) => {
     if (!state.visible) return;
     const isTyping = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
     if (isTyping) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+
     if (e.key === 'f' || e.key === 'F') {
       e.preventDefault();
       fitToWindow();
+      return;
     }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      console.log('[Waveform] ArrowRight — active:', _activeSigId, 'cursor:', state.cursorStep, 'history:', state.history.length);
+      _jumpEdge(+1);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      console.log('[Waveform] ArrowLeft — active:', _activeSigId, 'cursor:', state.cursorStep, 'history:', state.history.length);
+      _jumpEdge(-1);
+      return;
+    }
+    if (e.key === 'Home')       { e.preventDefault(); _setCursorCycle(0); return; }
+    if (e.key === 'End')        { e.preventDefault(); _setCursorCycle(state.history.length - 1); return; }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); _promptBookmark(); return; }
   });
+}
+
+/** Which signal should arrow keys navigate through? */
+function _activeSignal() {
+  const vis = visibleSignals();
+  if (_activeSigId) {
+    const found = vis.find(s => s.id === _activeSigId);
+    if (found) return found;
+  }
+  return vis[0] || null;
+}
+
+/** Move the cursor to the next/prev transition of the active signal. */
+function _jumpEdge(direction) {
+  const sig = _activeSignal();
+  if (!sig) return;
+  const from = state.cursorStep !== null ? state.cursorStep : 0;
+  const next = direction > 0 ? nextEdgeStep(sig.id, from) : prevEdgeStep(sig.id, from);
+  if (next >= 0) _setCursorCycle(next);
+}
+
+/** Set cursor to a specific cycle and make sure it's within the viewport. */
+function _setCursorCycle(step) {
+  const clamped = Math.max(0, Math.min(state.history.length - 1, step));
+  state.cursorStep = clamped;
+  // Auto-scroll horizontally if the cursor is outside the visible window.
+  const stepW = METRICS.BASE_STEP_W * state.zoom;
+  const x = clamped * stepW;
+  const viewW = Renderer.viewportDataWidth();
+  if (x < state.panOffset)            state.panOffset = Math.max(0, x - stepW);
+  else if (x > state.panOffset + viewW - stepW)
+    state.panOffset = Math.max(0, x - viewW + stepW * 2);
+  _requestRender();
+}
+
+function _promptBookmark() {
+  const step = state.cursorStep !== null
+    ? Math.floor(state.cursorStep)
+    : state.history.length - 1;
+  if (step < 0) return;
+  // eslint-disable-next-line no-alert
+  const name = window.prompt('Bookmark name:', 'bm' + (state.bookmarks.length + 1));
+  if (name === null) return; // cancelled
+  addBookmark(step, (name || '').trim() || ('bm' + (state.bookmarks.length + 1)));
+  _requestRender();
 }
