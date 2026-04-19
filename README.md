@@ -338,6 +338,153 @@ Run any single file with `node examples/tests/<file>.mjs`.
 
 ---
 
+## HDL Toolchain (Verilog Import / Export) — Development Plan
+
+The next major initiative. Converts Circuit Designer from a self-contained simulator into a first-class RTL design tool that interoperates with the industry toolchain (Yosys, Verilator, ModelSim, Vivado, FPGA flows). All work lives in a new isolated module under `js/hdl/` — no existing subsystem is touched.
+
+### Goals
+
+| Goal | Outcome |
+|---|---|
+| Export a circuit to synthesizable Verilog | `.v` file opens in Yosys / Verilator / Vivado, passes synthesis, matches simulation cycle-for-cycle |
+| Generate an automated testbench | Verilog TB that drives the same inputs and dumps VCD, importable back into Waveform Pro for diff |
+| Import a Verilog subset back into the canvas | Common synthesizable constructs (assign / always / case / module instantiation) reconstruct the schematic |
+| Zero impact on existing runtime | Export/import only run on explicit user action; no cost to the render or simulation loops |
+| Graceful extensibility | Adding a new component requires one translator function, nothing else |
+
+### Module Layout
+
+```
+js/hdl/
+├── VerilogExporter.js        — public entry: circuitJSON → Verilog string
+├── VerilogImporter.js        — public entry: Verilog string → circuitJSON
+├── translators/              — one file per component family
+│   ├── index.js              —   registry + dispatch
+│   ├── logic-gates.js
+│   ├── flip-flops.js
+│   ├── memory.js
+│   └── cpu.js
+├── parser/                   — Verilog subset parser
+│   ├── lexer.js
+│   ├── ast.js
+│   └── elaborate.js
+├── layout/
+│   └── grid-layout.js        — auto-placement for imported designs
+└── tests/
+    ├── export-primitives.mjs
+    ├── export-roundtrip.mjs
+    ├── import-subset.mjs
+    └── yosys-verify.mjs       — optional (runs only if Yosys is installed locally)
+```
+
+### Phases
+
+Each phase produces a concrete, testable deliverable. Work one phase at a time; do not skip ahead.
+
+#### Phase 1 — Foundation & Export Skeleton
+- [ ] Create `js/hdl/` directory structure exactly as above.
+- [ ] Write `VerilogExporter.js` with a single exported function `exportCircuit(circuitJSON, options) → string`.
+- [ ] Define the translator registry in `translators/index.js` — a map `{ componentType → translatorFn(node, ctx) }`.
+- [ ] Implement module header generation: `module top(input ..., output ...);`.
+- [ ] Implement wire declaration pass — every net in the circuit becomes a `wire` line, with bus widths (`[N-1:0]`).
+- [ ] Implement a safe-identifier sanitizer (Verilog reserved words, illegal chars in node labels).
+- [ ] Wire a `FILE → Export → Verilog (.v)` menu item that downloads the result.
+- [ ] Add `examples/tests/test-hdl-skeleton.mjs` — checks that an empty circuit exports a valid empty module.
+
+#### Phase 2 — Combinational Logic Export
+- [ ] Translators for all logic gates: AND, OR, XOR, NAND, NOR, XNOR, NOT, BUF, TRI.
+- [ ] Half Adder, Full Adder — pure `assign` statements.
+- [ ] Comparator (EQ / GT / LT flags).
+- [ ] MUX / DEMUX / Decoder / Encoder — `case` statements with bus widths from component config.
+- [ ] Bus MUX (multi-bit) and Sign Extender (`{ {N{msb}}, data }`).
+- [ ] `examples/tests/test-hdl-combinational.mjs` — for each component, build a tiny circuit → export → re-parse → compare.
+- [ ] Manual verification: run one circuit per component through Yosys synthesis and confirm no errors.
+
+#### Phase 3 — Sequential Logic Export
+- [ ] Flip-Flops: D, T, SR, JK — `always @(posedge clk)` blocks, async clear → `or negedge clr`.
+- [ ] Latches: D, SR — `always @(*)` with enable condition.
+- [ ] Registers (N-bit with EN / CLR / CLK).
+- [ ] Shift Register (bidirectional).
+- [ ] Counter (EN / LOAD / DATA / CLR) with TC output.
+- [ ] Pipeline Register (STALL / FLUSH logic).
+- [ ] `examples/tests/test-hdl-sequential.mjs` — drive a clock in both our simulator and Verilator, diff the VCDs.
+
+#### Phase 4 — Memory & CPU Components Export
+- [ ] RAM → `reg [W-1:0] mem [0:DEPTH-1]` + sync write, async read.
+- [ ] ROM → `reg` array with `initial` block populated from ROM Editor contents, or `$readmemh` with a sidecar file.
+- [ ] Register File (multi-port).
+- [ ] FIFO / Stack with full / empty flags.
+- [ ] PC (JMP_A / JMP / EN / CLR).
+- [ ] ALU — `case (op)` with 8 operations, Z/C flag logic.
+- [ ] IR — field extraction into OP / RD / RS1 / RS2.
+- [ ] CU — opcode → control signals `case` table (16 opcodes).
+- [ ] BUS — tri-state arbitration with `z` on inactive drivers.
+- [ ] IMM — `assign out = CONST;`.
+- [ ] `examples/tests/test-hdl-cpu.mjs` — full Simple-CPU countdown exported, simulated externally, VCD matches.
+
+#### Phase 5 — Hierarchical Design & Sub-circuits
+- [ ] Each sub-circuit exports as its own `module` above `module top`.
+- [ ] Parameterise bit widths via `parameter WIDTH = 8` where the sub-circuit is width-configurable.
+- [ ] Port-name collision handling (sub-circuit's internal labels must not shadow top-level names).
+- [ ] Nested hierarchies (block inside block inside block) — recursive module generation with memoization so identical blocks export only once.
+- [ ] `examples/tests/test-hdl-hierarchy.mjs` — a 3-level deep design, verify module list + instantiation.
+
+#### Phase 6 — Export UX & Polish
+- [ ] Preview modal — shows generated Verilog with JetBrains Mono + basic syntax highlight (keywords, numbers, comments) before download.
+- [ ] Per-sub-circuit export — right-click a block → `Copy as Verilog` or `Export this block`.
+- [ ] Testbench generator — emits a `_tb.v` that reads the current VCD's stimulus, runs the module, dumps its own VCD for diff.
+- [ ] Export settings dialog — top module name, reset polarity (active-high / active-low), clock name override, comment style (short / verbose).
+- [ ] Round-trip self-check — after export, re-parse our own output with our importer (once Phase 7 exists) and verify identity.
+- [ ] Error surface — if any component lacks a translator, emit a `// TODO:` comment and surface a non-blocking warning in the UI.
+
+#### Phase 7 — Verilog Parser (Import Foundations)
+- [ ] Lexer for the target subset (identifiers, numbers w/ bases, operators, keywords, comments).
+- [ ] AST nodes: `Module`, `Port`, `Wire`, `Reg`, `Assign`, `Always`, `Case`, `If`, `Instantiation`, `BinaryOp`, `UnaryOp`, `Concat`, `Replicate`.
+- [ ] Parser builds AST from token stream; clear error messages with line / column.
+- [ ] Parameter resolution — `parameter WIDTH = 8; wire [WIDTH-1:0] d;` must fold to a concrete width.
+- [ ] `examples/tests/test-hdl-parser.mjs` — parses every `.v` file we've exported in Phases 2-5 without error.
+
+#### Phase 8 — Elaboration & Inference
+- [ ] Gate primitives (`and`, `or`, `xor`, `not`, `buf`) → map directly to palette components.
+- [ ] `assign y = a & b;` → AND gate instance. Build expression-tree → gate-network lowering.
+- [ ] `always @(*)` with `case` → MUX instance(s). Priority `if/else if` → MUX tree.
+- [ ] `always @(posedge clk)` with non-blocking assigns → FF or Register.
+- [ ] RAM / ROM pattern detection — `reg [W-1:0] mem [0:D-1]` with sync write / async read → RAM component.
+- [ ] Sub-module instantiation → recursively import and turn into a canvas sub-circuit.
+- [ ] Unsupported construct → fail-soft with a clear report of what was skipped.
+- [ ] `examples/tests/test-hdl-elaborate.mjs` — a mix of hand-written .v files (simple counter, FSM, ALU) produce correct circuitJSON.
+
+#### Phase 9 — Auto-Layout for Imported Designs
+- [ ] DAG topological layering: inputs on the left, outputs on the right, combinational depth determines column.
+- [ ] Grid placement within each column (deterministic, stable).
+- [ ] Wire routing — reuse the existing Manhattan router with Bezier corners.
+- [ ] Collision avoidance and minimum spacing.
+- [ ] Sub-circuits placed as single blocks; user can drill in via the Block Viewer.
+- [ ] `examples/tests/test-hdl-layout.mjs` — verify that imported designs have no overlapping components and all wires connect.
+
+#### Phase 10 — Import UX, End-to-End Tests & Release
+- [ ] `FILE → Import → Verilog (.v)` menu item with file picker.
+- [ ] Module picker dialog when the file contains multiple modules (user selects the top).
+- [ ] Import report — modal showing "Imported N modules, M gates, K flip-flops. Skipped X constructs (details…)".
+- [ ] Round-trip suite: for each example in `examples/circuits/`, do `export → import → export` and diff the two Verilog outputs (should match modulo comments).
+- [ ] Optional `yosys-verify.mjs` — if `yosys` is on PATH, run synthesis on every exported file in CI and assert zero errors.
+- [ ] README section: capability matrix (what Verilog subset is supported), known limitations, example workflows.
+- [ ] Tag release as `v2.0 — HDL toolchain`.
+
+### Success Criteria (End-of-Phase 6 MVP)
+
+- Exporting the Simple CPU example produces Verilog that synthesises in Yosys with zero errors and zero critical warnings.
+- A generated testbench simulated in Verilator produces a VCD that, when imported into Waveform Pro, is bit-identical to the native simulation VCD.
+- Adding a hypothetical new component requires editing exactly one translator file and adding exactly one test case — no changes to exporter core.
+
+### Success Criteria (End-of-Phase 10 Full Release)
+
+- Any hand-written Verilog within the documented subset imports to a valid, simulatable canvas circuit.
+- Round-trip (export → import → export) on the full example library produces byte-stable output.
+- External contributors can submit a single-file translator PR to add a new component's HDL support without understanding the rest of the codebase.
+
+---
+
 ## License
 
 MIT
