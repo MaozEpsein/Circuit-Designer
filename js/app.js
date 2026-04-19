@@ -450,12 +450,15 @@ function _showShortcuts() {
   const extras = [
     { group: 'Mouse', items: [['Pan', 'Drag empty area'], ['Rename', 'Double-click'], ['Properties', 'Dbl-click (blocks)'], ['Multi-Select Add', 'Shift+Click'], ['Rubber-band', 'Q + Drag'], ['Context Menu', 'Right-click']] },
     { group: 'Waveform', items: [
-      ['Zoom',                    'Ctrl + Wheel'],
-      ['Horizontal pan',          'Drag inside data / Shift+Wheel / Wheel'],
+      ['Zoom',                    'Ctrl+Wheel  or  + / −'],
+      ['Horizontal pan',          'Drag data / Shift+Wheel / Wheel / h / l'],
       ['Vertical scroll',         'Wheel (when overflow) / Drag scrollbar'],
       ['Fit to window',           'F'],
+      ['Full-screen panel',       'Shift+F  (Esc exits)'],
       ['Next edge (active sig)',  '→'],
       ['Prev edge (active sig)',  '←'],
+      ['Step cursor ± 1',         'h / l'],
+      ['Next / prev signal',      'k / j'],
       ['First / last cycle',      'Home / End'],
       ['Add bookmark',            'B'],
       ['Place marker A / B',      'Click / Shift+Click'],
@@ -1192,6 +1195,11 @@ document.getElementById('btn-waveform-radix')?.addEventListener('click', (e) => 
 document.getElementById('btn-waveform-prev')?.addEventListener('click', () => Waveform.jumpEdge(-1));
 document.getElementById('btn-waveform-next')?.addEventListener('click', () => Waveform.jumpEdge(+1));
 document.getElementById('btn-waveform-bmk') ?.addEventListener('click', () => Waveform.addBookmarkAtCursor());
+document.getElementById('btn-waveform-fullscreen')?.addEventListener('click', (e) => {
+  const on = Waveform.toggleFullscreen();
+  e.currentTarget.classList.toggle('active', on);
+  e.currentTarget.textContent = on ? '⛶ EXIT' : '⛶ FULL';
+});
 
 // Pattern search: Enter to run, N/P inside the input navigates matches.
 const wfSearchInp = document.getElementById('waveform-search');

@@ -103,6 +103,22 @@ export function importVCD(text) {
   return { signalCount: payload.signals.length, cycleCount: payload.history.length };
 }
 
+/** Toggle full-screen mode — panel expands to fill the viewport. */
+export function toggleFullscreen() {
+  state.fullscreen = !state.fullscreen;
+  if (_panel) _panel.classList.toggle('fullscreen', state.fullscreen);
+  // Resize the canvas twice — once on the next frame (after the browser has
+  // applied the class), then once more after any style recalc settles.
+  // Without this, the canvas can render against the old panel size and look
+  // squashed / blurry the first time fullscreen is activated.
+  requestAnimationFrame(() => {
+    Renderer.resize();
+    Renderer.render();
+    requestAnimationFrame(() => { Renderer.resize(); Renderer.render(); });
+  });
+  return state.fullscreen;
+}
+
 /** View-state snapshot for persistence alongside the project/design. */
 export function saveViewState() { return serializeView(); }
 
@@ -360,7 +376,6 @@ function _attachResize() {
   let moveCount = 0;
 
   handle.addEventListener('mousedown', (e) => {
-    console.log('[Waveform] resize mousedown fired', { y: e.clientY });
     dragging = true;
     moveCount = 0;
     startY = e.clientY;
@@ -374,9 +389,6 @@ function _attachResize() {
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
     moveCount++;
-    if (moveCount === 1 || moveCount % 30 === 0) {
-      console.log('[Waveform] resize mousemove', { delta: startY - e.clientY, moves: moveCount });
-    }
     // Panel is pinned at bottom; mouse moves UP → height increases.
     const delta = startY - e.clientY;
     const maxH = window.innerHeight * METRICS.MAX_PANEL_FRAC;
@@ -389,7 +401,6 @@ function _attachResize() {
 
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
-    console.log('[Waveform] resize mouseup — moves=' + moveCount);
     dragging = false;
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
@@ -555,10 +566,15 @@ function _attachLabelReorder() {
 }
 
 // ── Input: Keyboard shortcuts ────────────────────────────────────
-// F          — fit-to-window
-// ← / →      — jump to previous/next edge of the active signal
-// Home / End — jump to first / last cycle
-// B          — add a named bookmark at the current cursor cycle
+// f            — fit-to-window
+// Shift+f      — toggle full-screen
+// ← / →        — jump to previous/next edge of the active signal
+// h / l        — pan cursor left / right by one cycle
+// j / k        — cycle "active signal" down / up (for edge-jump navigation)
+// Home / End   — first / last cycle
+// b            — add a named bookmark at the cursor
+// + / =  /  -  — zoom in / zoom out
+// Esc          — exit full-screen
 function _attachKeyboard() {
   window.addEventListener('keydown', (e) => {
     if (!state.visible) return;
@@ -566,27 +582,67 @@ function _attachKeyboard() {
     if (isTyping) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-    if (e.key === 'f' || e.key === 'F') {
+    // Shift+F → full-screen toggle (check before plain f).
+    if (e.shiftKey && (e.key === 'F' || e.key === 'f')) {
       e.preventDefault();
-      fitToWindow();
+      toggleFullscreen();
       return;
     }
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      console.log('[Waveform] ArrowRight — active:', _activeSigId, 'cursor:', state.cursorStep, 'history:', state.history.length);
-      _jumpEdge(+1);
-      return;
+    if (e.shiftKey) return; // no other shift shortcuts — allow text entry etc.
+
+    switch (e.key) {
+      case 'f': case 'F':
+        e.preventDefault(); fitToWindow(); return;
+      case 'ArrowRight':
+        e.preventDefault(); _jumpEdge(+1); return;
+      case 'ArrowLeft':
+        e.preventDefault(); _jumpEdge(-1); return;
+      case 'l': case 'L':
+        e.preventDefault(); _setCursorCycle((state.cursorStep ?? 0) + 1); return;
+      case 'h': case 'H':
+        e.preventDefault(); _setCursorCycle((state.cursorStep ?? 0) - 1); return;
+      case 'j': case 'J':
+        e.preventDefault(); _cycleActiveSignal(+1); return;
+      case 'k': case 'K':
+        e.preventDefault(); _cycleActiveSignal(-1); return;
+      case 'Home':
+        e.preventDefault(); _setCursorCycle(0); return;
+      case 'End':
+        e.preventDefault(); _setCursorCycle(state.history.length - 1); return;
+      case 'b': case 'B':
+        e.preventDefault(); _promptBookmark(); return;
+      case '+': case '=':
+        e.preventDefault(); _zoomAroundCursor(1.25); return;
+      case '-': case '_':
+        e.preventDefault(); _zoomAroundCursor(1 / 1.25); return;
+      case 'Escape':
+        if (state.fullscreen) { e.preventDefault(); toggleFullscreen(); }
+        return;
     }
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      console.log('[Waveform] ArrowLeft — active:', _activeSigId, 'cursor:', state.cursorStep, 'history:', state.history.length);
-      _jumpEdge(-1);
-      return;
-    }
-    if (e.key === 'Home')       { e.preventDefault(); _setCursorCycle(0); return; }
-    if (e.key === 'End')        { e.preventDefault(); _setCursorCycle(state.history.length - 1); return; }
-    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); _promptBookmark(); return; }
   });
+}
+
+/** Move the "active signal" pointer up or down among the visible signals. */
+function _cycleActiveSignal(delta) {
+  const vis = visibleSignals();
+  if (vis.length === 0) return;
+  const curr = vis.findIndex(s => s.id === _activeSigId);
+  const next = ((curr < 0 ? 0 : curr) + delta + vis.length) % vis.length;
+  _activeSigId = vis[next].id;
+  _requestRender();
+}
+
+/** Multiply zoom by `factor`, keeping the cursor position (if any) steady. */
+function _zoomAroundCursor(factor) {
+  const oldZoom = state.zoom;
+  const newZoom = Math.max(METRICS.MIN_ZOOM, Math.min(METRICS.MAX_ZOOM, oldZoom * factor));
+  if (newZoom === oldZoom) return;
+  const pivot = state.cursorStep !== null ? state.cursorStep : 0;
+  const viewBeforeX = pivot * METRICS.BASE_STEP_W * oldZoom - state.panOffset;
+  state.zoom = newZoom;
+  state.panOffset = pivot * METRICS.BASE_STEP_W * newZoom - viewBeforeX;
+  _clampPan();
+  _requestRender();
 }
 
 /** Which signal should arrow keys navigate through? */

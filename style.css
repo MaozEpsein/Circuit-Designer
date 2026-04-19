@@ -718,7 +718,17 @@ html, body {
   z-index: 200;
   display: flex;
   flex-direction: column;
+  /* Only animate show/hide — not the size itself, so the canvas stays in
+     sync during manual resize and fullscreen toggles. */
   transition: transform 0.35s ease-out, opacity 0.35s ease-out;
+}
+
+/* Full-screen mode — panel fills the viewport. Instant, no animation,
+   so the canvas gets a single, correct size to render against. */
+#waveform-panel.fullscreen {
+  top: 0 !important;
+  height: 100vh !important;
+  z-index: 500;
 }
 
 /* Top-edge drag handle for vertical resize of the waveform panel.

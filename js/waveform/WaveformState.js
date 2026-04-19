@@ -51,6 +51,8 @@ export const state = {
   search: { query: '', matches: [], index: -1, open: false },
   // Trigger mode: armed + expression; while armed-and-not-fired, record() skips storing.
   trigger: { expr: '', armed: false, fired: false },
+  // Full-screen mode — panel fills the viewport when true.
+  fullscreen: false,
 };
 
 export function reset() {
