@@ -1,6 +1,6 @@
 # Circuit Designer Pro
 
-**A fully interactive digital circuit designer and simulator where you design, build, and test complete digital systems — from basic logic gates through a full CPU with ALU, registers, RAM, and assembly programming — with real-time simulation, waveform analysis, a ROM Editor with built-in assembler, and a live Memory Inspector.**
+**A browser-based digital design and verification environment for RTL-level work — schematic capture, cycle-accurate simulation, industry-grade waveform analysis (VCD import/export), ROM/assembly toolchain, and live memory inspection. Built for engineers who need a fast, modern alternative to legacy CAD tools.**
 
 [![Launch App](https://img.shields.io/badge/%F0%9F%9A%80_Launch_Circuit_Designer_Pro-Click_Here-blue?style=for-the-badge&logoColor=white)](https://maozepsein.github.io/Circuit-Designer/app.html)
 
@@ -214,16 +214,16 @@ Then open `http://localhost:3000/app.html` in your browser.
 - [ ] **Forwarding Unit** — bypass ALU result to next instruction without stall
 
 ### Mid-term
-- [ ] **AI Chat Assistant** — in-app chat powered by Gemini API (user provides free API key). Ask the AI to build circuits, explain components, or write programs in natural language
-- [ ] **Python/C-style programming** — write `R3 = R1 + R2` instead of assembly
-- [ ] **Interactive tutorial** — step-by-step guided lessons: "build a counter", "build an ALU", "build a CPU"
-- [ ] **Timing diagram export** — SVG/PNG export of waveforms
+- [ ] **Verilog / VHDL import & export** — round-trip between schematic and synthesizable HDL (subset: modules, assign, always @, wire/reg)
+- [ ] **AI design assistant** — structured tool-use agent that reads the circuit JSON and performs targeted edits, bug analysis, and HDL generation on request
+- [ ] **High-level programming for the built-in CPU** — C-style syntax compiling to the 16-opcode ISA (`R3 = R1 + R2`)
+- [ ] **Timing diagram export** — SVG/PNG export of waveforms for design reviews and documentation
 
 ### Long-term
-- [ ] **Full pipelined CPU** — 5-stage pipeline with hazard detection, forwarding, and branch prediction
-- [ ] **Gate propagation delay** — configurable delay modeling per component
-- [ ] **Multi-clock domains** — support for different clock frequencies
-- [ ] **Component library sharing** — import/export custom sub-circuit libraries
+- [ ] **Pipelined CPU reference design** — 5-stage pipeline with hazard detection, forwarding, branch prediction, and per-stage pipeline inspection in the waveform panel
+- [ ] **Event-driven simulator** — per-gate propagation delay (ns), setup/hold checks, glitch detection — replacing the cycle-accurate engine for timing-critical work
+- [ ] **Multi-clock domains** — independent clock trees, CDC detection, metastability warnings
+- [ ] **Component library ecosystem** — versioned sub-circuit libraries, import / export / sharing
 
 ---
 
