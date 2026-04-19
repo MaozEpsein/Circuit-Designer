@@ -4,7 +4,7 @@
  * actions funnel through here; the renderer stays pure.
  */
 
-import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord } from './WaveformState.js';
+import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord, setRadix as stateSetRadix } from './WaveformState.js';
 import * as Renderer from './WaveformRenderer.js';
 import { METRICS } from './WaveformTheme.js';
 
@@ -37,6 +37,14 @@ export function toggle() { state.visible ? hide() : show(); }
 export function render() {
   if (!state.visible) return;
   Renderer.render();
+}
+
+/** Cycle the global radix: DEC → HEX → BIN → DEC. Returns new value. */
+export function cycleRadix() {
+  const next = state.radix === 'dec' ? 'hex' : state.radix === 'hex' ? 'bin' : 'dec';
+  stateSetRadix(next);
+  _requestRender();
+  return next;
 }
 
 /** Public action: fit the entire recorded history into the visible area. */
@@ -81,43 +89,119 @@ function _attachInput() {
       state.zoom = newZoom;
       _clampPan();
       _requestRender();
-    } else {
-      // Plain wheel = horizontal pan (either axis delta — right/left on a
-      // horizontal wheel, or up/down on a regular wheel, both scroll along
-      // the time axis). Shift+wheel still works for the same reason.
+    } else if (e.shiftKey) {
+      // Shift+wheel = explicit horizontal pan.
       e.preventDefault();
-      const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      state.panOffset += dx;
+      state.panOffset += e.deltaY;
       _clampPan();
+      _requestRender();
+    } else {
+      // Plain wheel = vertical scroll when the signal list overflows,
+      // otherwise horizontal pan. Horizontal-axis gestures (deltaX)
+      // always pan horizontally.
+      e.preventDefault();
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        state.panOffset += e.deltaX;
+        _clampPan();
+      } else {
+        const canScrollV = Renderer.contentHeight() > Renderer.viewportSignalHeight();
+        if (canScrollV) {
+          state.vScroll += e.deltaY;
+          Renderer.clampVScroll();
+        } else {
+          state.panOffset += e.deltaY;
+          _clampPan();
+        }
+      }
       _requestRender();
     }
   }, { passive: false });
 
-  // Drag-to-pan with middle or left button on the data area.
-  let dragging = false;
+  // Mouse interactions on the canvas: scrollbar thumb drag takes priority
+  // over data-area pan.
+  let mode = null; // 'pan' | 'vscroll' | 'hscroll' | null
   let dragStartX = 0;
   let dragStartPan = 0;
+  let scrollThumbOffset = 0;
+
+  function _inRect(x, y, r) {
+    return r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
   _canvas.addEventListener('mousedown', (e) => {
     if (!state.visible) return;
-    // Only inside the data area; leave the label column alone.
     const rect = _canvas.getBoundingClientRect();
-    if (e.clientX - rect.left < METRICS.LABEL_W) return;
-    dragging = true;
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    // Vertical scrollbar
+    const vTrack = Renderer.scrollbarRect();
+    const vThumb = Renderer.scrollbarThumbRect();
+    if (vThumb && _inRect(mx, my, vTrack)) {
+      if (_inRect(mx, my, vThumb)) {
+        scrollThumbOffset = my - vThumb.y;
+      } else {
+        state.vScroll = Renderer.scrollFromY(my - vThumb.h / 2);
+        Renderer.clampVScroll();
+        scrollThumbOffset = vThumb.h / 2;
+        _requestRender();
+      }
+      mode = 'vscroll';
+      document.body.style.cursor = 'ns-resize';
+      e.preventDefault();
+      return;
+    }
+
+    // Horizontal scrollbar
+    const hTrack = Renderer.hScrollbarRect();
+    const hThumb = Renderer.hScrollbarThumbRect();
+    if (hThumb && _inRect(mx, my, hTrack)) {
+      if (_inRect(mx, my, hThumb)) {
+        scrollThumbOffset = mx - hThumb.x;
+      } else {
+        state.panOffset = Renderer.panFromX(mx - hThumb.w / 2);
+        _clampPan();
+        scrollThumbOffset = hThumb.w / 2;
+        _requestRender();
+      }
+      mode = 'hscroll';
+      document.body.style.cursor = 'ew-resize';
+      e.preventDefault();
+      return;
+    }
+
+    // Pan inside the data area (outside the label column).
+    if (mx < METRICS.LABEL_W) return;
+    mode = 'pan';
     dragStartX = e.clientX;
     dragStartPan = state.panOffset;
     _canvas.style.cursor = 'grabbing';
     e.preventDefault();
   });
+
   window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    state.panOffset = dragStartPan - (e.clientX - dragStartX);
-    _clampPan();
+    if (!mode) return;
+    const rect = _canvas.getBoundingClientRect();
+    if (mode === 'pan') {
+      state.panOffset = dragStartPan - (e.clientX - dragStartX);
+      _clampPan();
+    } else if (mode === 'vscroll') {
+      const my = e.clientY - rect.top;
+      state.vScroll = Renderer.scrollFromY(my - scrollThumbOffset);
+      Renderer.clampVScroll();
+    } else if (mode === 'hscroll') {
+      const mx = e.clientX - rect.left;
+      state.panOffset = Renderer.panFromX(mx - scrollThumbOffset);
+      _clampPan();
+    }
     _requestRender();
   });
+
   window.addEventListener('mouseup', () => {
-    if (!dragging) return;
-    dragging = false;
+    if (!mode) return;
+    mode = null;
     _canvas.style.cursor = '';
+    document.body.style.cursor = '';
   });
 }
 

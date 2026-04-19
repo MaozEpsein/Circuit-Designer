@@ -448,7 +448,16 @@ function _showShortcuts() {
 
   // Non-keyboard shortcuts (always shown, not editable)
   const extras = [
-    { group: 'Mouse', items: [['Pan', 'Drag empty area'], ['Rename', 'Double-click'], ['Properties', 'Dbl-click (blocks)'], ['Multi-Select Add', 'Shift+Click'], ['Rubber-band', 'Q + Drag'], ['Context Menu', 'Right-click']] }
+    { group: 'Mouse', items: [['Pan', 'Drag empty area'], ['Rename', 'Double-click'], ['Properties', 'Dbl-click (blocks)'], ['Multi-Select Add', 'Shift+Click'], ['Rubber-band', 'Q + Drag'], ['Context Menu', 'Right-click']] },
+    { group: 'Waveform', items: [
+      ['Zoom',              'Ctrl + Wheel'],
+      ['Horizontal pan',    'Drag inside data / Shift+Wheel / Wheel'],
+      ['Vertical scroll',   'Wheel (when overflow) / Drag scrollbar'],
+      ['Fit to window',     'F'],
+      ['Jump in scrollbar', 'Click on track'],
+      ['Toggle panel',      'W'],
+      ['Cycle radix',       'DEC button in header'],
+    ]},
   ];
 
   for (const [groupName, items] of Object.entries(grouped)) {
@@ -1166,6 +1175,10 @@ function toggleWaveform() {
 btnWaveform?.addEventListener('click', toggleWaveform);
 document.getElementById('btn-waveform-close')?.addEventListener('click', toggleWaveform);
 document.getElementById('btn-waveform-fit')?.addEventListener('click', () => Waveform.fitToWindow());
+document.getElementById('btn-waveform-radix')?.addEventListener('click', (e) => {
+  const next = Waveform.cycleRadix();
+  e.target.textContent = next.toUpperCase();
+});
 
 // ── Sequential Controls ─────────────────────────────────────
 function _updateSequentialUI() {

@@ -21,6 +21,8 @@ export const COLORS = {
 
 export const METRICS = {
   ROW_H:        32,
+  ROW_H_BUS:    38,    // taller row for multi-bit bus signals (room for labels)
+  ROW_GAP:       4,    // vertical breathing space between rows
   LABEL_W:      96,
   HEADER_H:     28,
   BASE_STEP_W:  60,
@@ -34,6 +36,29 @@ export const METRICS = {
 export const TYPE = {
   axis:   '10px "JetBrains Mono", monospace',
   label:  'bold 11px "JetBrains Mono", monospace',
-  value:  '12px "JetBrains Mono", monospace',
+  value:  '11px "JetBrains Mono", monospace',
+  valueSmall: '9px "JetBrains Mono", monospace',
   hint:   '12px "JetBrains Mono", monospace',
 };
+
+// Curated palette for per-signal color assignment — harmonious, readable,
+// avoids pure red (tiring on the eyes per design principles).
+export const SIGNAL_PALETTE = [
+  '#39ff14', // green
+  '#00d4ff', // cyan
+  '#ff6b9d', // pink
+  '#ffcc00', // yellow
+  '#a060ff', // purple
+  '#ff8a5a', // orange
+  '#7fff8e', // mint
+  '#5ab0ff', // sky blue
+  '#e0a0f8', // lavender
+  '#ffd780', // peach
+];
+
+/** Stable hash of a string → index in SIGNAL_PALETTE (djb2). */
+export function colorForName(name) {
+  let h = 5381;
+  for (let i = 0; i < name.length; i++) h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;
+  return SIGNAL_PALETTE[h % SIGNAL_PALETTE.length];
+}

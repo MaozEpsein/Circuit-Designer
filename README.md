@@ -308,10 +308,14 @@ Each phase is independently shippable — you can stop at the end of any phase a
 **Refactor completed:** `js/rendering/WaveformRenderer.js` (single file) split into `js/waveform/{WaveformTheme, WaveformState, WaveformRenderer, WaveformController}.js` per the module layout in "Folder Structure" above. `WaveformSearch.js` and `WaveformVCD.js` will be created when Phases 4 and 5 begin.
 
 #### Phase 2 — Data Readability *(~1–2 days)*
-- [ ] Multi-bit bus rendering (hex/dec/bin labels inside hexagon shapes between transitions)
-- [ ] Global radix toggle (HEX / DEC / BIN) + per-signal override via context menu
-- [ ] Dynamic row height with consistent gap
-- [ ] Deterministic per-signal color assignment (hash of signal name → curated palette)
+- [x] Multi-bit bus rendering (hex/dec/bin labels inside hexagon shapes between transitions)
+  Bus signals auto-detected by max value > 1; rendered with classic X-crossover shape and value labels that shrink-to-fit or hide when there's no room.
+- [x] Global radix toggle (HEX / DEC / BIN) + per-signal override via context menu
+  Header button cycles DEC → HEX → BIN. Per-signal override API in place via `radixOverrides` Map; context-menu UI will land in Phase 3 alongside the rest of the signal menu.
+- [x] Dynamic row height with consistent gap
+  Bus rows use `ROW_H_BUS` (38 px) vs `ROW_H` (32 px) for 1-bit rows — more room for value labels; rows stack via cumulative y-offset.
+- [x] Deterministic per-signal color assignment (hash of signal name → curated palette)
+  djb2 hash over signal label → index into a 10-color curated palette (no red, vaporwave-leaning). Clock keeps its canonical yellow.
 
 #### Phase 3 — Interactivity *(~2–3 days)*
 - [ ] Vertical cursor following the mouse
@@ -344,12 +348,12 @@ Each phase is independently shippable — you can stop at the end of any phase a
 | Metric | Value |
 |---|---|
 | Phase 1 | 5 / 5 tasks ✅ |
-| Phase 2 | 0 / 4 tasks |
+| Phase 2 | 4 / 4 tasks ✅ |
 | Phase 3 | 0 / 6 tasks |
 | Phase 4 | 0 / 5 tasks |
 | Phase 5 | 0 / 3 tasks |
 | Phase 6 | 0 / 4 tasks |
-| **Total** | **5 / 27 tasks** |
+| **Total** | **9 / 27 tasks** |
 | Last updated | 2026-04-19 |
 
 ### How to update this section
