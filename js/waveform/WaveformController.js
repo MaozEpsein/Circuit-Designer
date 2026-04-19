@@ -4,8 +4,9 @@
  * actions funnel through here; the renderer stays pure.
  */
 
-import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord, setRadix as stateSetRadix, visibleSignals, reorderSignal, toggleHidden, showAllSignals, valueAtStep, formatValue, signalBits, isBusSignal, radixFor, nextEdgeStep, prevEdgeStep, addBookmark, removeBookmarkAt, toggleGroup, runSearch, searchNext, searchPrev } from './WaveformState.js';
+import { state, reset as stateReset, setSignals as stateSetSignals, record as stateRecord, setRadix as stateSetRadix, visibleSignals, reorderSignal, toggleHidden, showAllSignals, valueAtStep, formatValue, signalBits, isBusSignal, radixFor, nextEdgeStep, prevEdgeStep, addBookmark, removeBookmarkAt, toggleGroup, runSearch, searchNext, searchPrev, serializeView, deserializeView, applyImport } from './WaveformState.js';
 import * as Renderer from './WaveformRenderer.js';
+import * as VCD from './WaveformVCD.js';
 import { METRICS } from './WaveformTheme.js';
 
 let _canvas = null;
@@ -86,6 +87,27 @@ export function disarmTrigger() {
 export function getTriggerState() {
   return { armed: state.trigger.armed, fired: state.trigger.fired, expr: state.trigger.expr };
 }
+
+/** Produce a VCD text blob from the current history. */
+export function exportVCD(options) { return VCD.exportVCD(options); }
+
+/**
+ * Parse a VCD text blob and replace the current signals + history with it.
+ * Returns { signalCount, cycleCount }, or throws on malformed input.
+ */
+export function importVCD(text) {
+  const payload = VCD.importVCD(text);
+  applyImport(payload);
+  show();
+  _requestRender();
+  return { signalCount: payload.signals.length, cycleCount: payload.history.length };
+}
+
+/** View-state snapshot for persistence alongside the project/design. */
+export function saveViewState() { return serializeView(); }
+
+/** Restore a previously-saved view snapshot. Tolerates missing fields / old versions. */
+export function loadViewState(data) { deserializeView(data); _requestRender(); }
 
 /** Cycle the global radix: DEC → HEX → BIN → DEC. Returns new value. */
 export function cycleRadix() {

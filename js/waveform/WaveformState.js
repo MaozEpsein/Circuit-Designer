@@ -249,6 +249,94 @@ export function removeBookmarkAt(step) {
 export function clearBookmarks() { state.bookmarks = []; }
 
 /**
+ * Produce a JSON-safe snapshot of the current view settings (NOT the
+ * recorded history — just how the user has the viewer configured).
+ * Hooked into the project save path so view state rides along with designs.
+ */
+export function serializeView() {
+  return {
+    v: 1,
+    zoom: state.zoom,
+    panOffset: state.panOffset,
+    vScroll: state.vScroll,
+    panelHeight: state.panelHeight,
+    radix: state.radix,
+    radixOverrides: Object.fromEntries(state.radixOverrides),
+    hiddenSignals: [...state.hiddenSignals],
+    signalOrder: state.signalOrder,
+    collapsedGroups: [...state.collapsedGroups],
+    bookmarks: state.bookmarks.map(b => ({ ...b })),
+    markerA: state.markerA,
+    markerB: state.markerB,
+    trigger: { expr: state.trigger.expr, armed: state.trigger.armed, fired: state.trigger.fired },
+  };
+}
+
+/**
+ * Replace the current signals + history with a VCD-import payload.
+ * Resets view state that depends on the old signal set (hidden, order,
+ * overrides, bookmarks, markers) so the imported trace starts clean.
+ */
+export function applyImport(payload) {
+  if (!payload || !Array.isArray(payload.signals) || !Array.isArray(payload.history)) return;
+  state.signals = payload.signals.map(s => ({
+    id: s.id,
+    label: s.label,
+    color: s.color,
+    type: s.type || 'output',
+  }));
+  state.history = payload.history.map(e => ({
+    step: e.step,
+    signals: e.signals instanceof Map ? e.signals : new Map(Object.entries(e.signals || {})),
+  }));
+  // Recompute max values so bus detection works on imported data.
+  state.signalMax = new Map();
+  for (const entry of state.history) {
+    for (const [sigId, v] of entry.signals) {
+      if (typeof v === 'number') {
+        const prev = state.signalMax.get(sigId) ?? 0;
+        if (v > prev) state.signalMax.set(sigId, v);
+      }
+    }
+  }
+  // Reset view-dependent state to avoid stale references.
+  state.hiddenSignals   = new Set();
+  state.signalOrder     = null;
+  state.collapsedGroups = new Set();
+  state.radixOverrides  = new Map();
+  state.bookmarks       = [];
+  state.markerA         = null;
+  state.markerB         = null;
+  state.zoom            = 1;
+  state.panOffset       = 0;
+  state.vScroll         = 0;
+  state.cursorStep      = null;
+  state.trigger         = { expr: '', armed: false, fired: false };
+}
+
+/** Restore view settings from a serializeView() payload. Tolerates missing fields. */
+export function deserializeView(data) {
+  if (!data || typeof data !== 'object') return;
+  if (typeof data.zoom === 'number')        state.zoom = data.zoom;
+  if (typeof data.panOffset === 'number')   state.panOffset = data.panOffset;
+  if (typeof data.vScroll === 'number')     state.vScroll = data.vScroll;
+  if (typeof data.panelHeight === 'number') state.panelHeight = data.panelHeight;
+  if (data.radix === 'hex' || data.radix === 'dec' || data.radix === 'bin') state.radix = data.radix;
+  state.radixOverrides = new Map(Object.entries(data.radixOverrides || {}));
+  state.hiddenSignals  = new Set(Array.isArray(data.hiddenSignals) ? data.hiddenSignals : []);
+  state.signalOrder    = Array.isArray(data.signalOrder) ? data.signalOrder : null;
+  state.collapsedGroups = new Set(Array.isArray(data.collapsedGroups) ? data.collapsedGroups : []);
+  state.bookmarks      = Array.isArray(data.bookmarks) ? data.bookmarks.map(b => ({ step: b.step|0, name: String(b.name || '') })) : [];
+  state.markerA        = (typeof data.markerA === 'number') ? data.markerA : null;
+  state.markerB        = (typeof data.markerB === 'number') ? data.markerB : null;
+  if (data.trigger) {
+    state.trigger.expr  = String(data.trigger.expr || '');
+    state.trigger.armed = !!data.trigger.armed;
+    state.trigger.fired = !!data.trigger.fired;
+  }
+}
+
+/**
  * Parse a simple search/trigger expression and return an evaluator function.
  * Supported forms:
  *   <signal>            — rising edge of the signal (0 → 1)

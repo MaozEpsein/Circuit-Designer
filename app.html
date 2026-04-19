@@ -275,7 +275,10 @@
       <button id="btn-waveform-trigger" class="btn-waveform-ctrl" title="Arm/disarm trigger mode — only records once the condition fires">TRIG</button>
       <button id="btn-waveform-radix" class="btn-waveform-ctrl" title="Cycle bus value radix: DEC / HEX / BIN">DEC</button>
       <button id="btn-waveform-fit" class="btn-waveform-ctrl" title="Fit all cycles to window (F)">FIT</button>
-      <button id="btn-waveform-export" class="btn-waveform-ctrl" title="Export as PNG">EXPORT</button>
+      <button id="btn-waveform-vcd" class="btn-waveform-ctrl" title="Export as VCD (open in GTKWave, ModelSim, Vivado)">.VCD</button>
+      <button id="btn-waveform-import" class="btn-waveform-ctrl" title="Import an external .vcd file (from Verilator, ModelSim, GTKWave, etc.)">IMPORT</button>
+      <input type="file" id="waveform-import-input" accept=".vcd,text/plain" style="display:none" />
+      <button id="btn-waveform-export" class="btn-waveform-ctrl" title="Export as PNG">.PNG</button>
       <button id="btn-waveform-close" class="btn-waveform-ctrl">CLOSE</button>
     </div>
     <canvas id="waveform-canvas"></canvas>

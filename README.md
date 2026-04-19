@@ -344,9 +344,12 @@ Each phase is independently shippable — you can stop at the end of any phase a
   `B` prompts for a name and places a bookmark at the cursor; rendered as dashed soft-purple vertical line with name tag. Right-click also exposes "Add bookmark here" and "Clear all bookmarks".
 
 #### Phase 5 — Industry Integration *(~2–3 days)*
-- [ ] **VCD export** — standard Value Change Dump format, consumable by GTKWave / ModelSim / Vivado without modification
-- [ ] VCD import — load a `.vcd` from an external tool and render it
-- [ ] Save/restore waveform view state per project (selected signals, zoom level, markers, group expansion)
+- [x] **VCD export** — standard Value Change Dump format, consumable by GTKWave / ModelSim / Vivado without modification
+  Implemented in `js/waveform/WaveformVCD.js`. Header with `$date`, `$version`, `$timescale`, per-signal `$var`; timeline uses one transition per cycle (10 time units). Covered by `examples/tests/test-vcd-export.mjs` (11 checks).
+- [x] VCD import — load a `.vcd` from an external tool and render it
+  `IMPORT` button in the Waveform header opens a file picker. Parser handles $scope hierarchies (flattened), $var (any type), scalar and vector value changes, x/z coerced to 0/null, $dumpvars / $dumpon. Imported trace replaces the current signals + history and resets view state. Covered by `examples/tests/test-vcd-import.mjs` (round-trip: export → import → compare).
+- [x] Save/restore waveform view state per project (selected signals, zoom level, markers, group expansion)
+  `WaveformState.serializeView / deserializeView` capture zoom, pan, vScroll, panel height, radix + per-signal overrides, hidden signals, custom order, collapsed groups, bookmarks, markers A/B, and trigger state. Persisted into `localStorage` alongside the auto-saved design, and embedded in project save/load and JSON export. Covered by `examples/tests/test-view-state.mjs` (19 checks).
 
 #### Phase 6 — Polish *(~1–2 days)*
 - [ ] Full-screen mode for the waveform panel
@@ -362,9 +365,9 @@ Each phase is independently shippable — you can stop at the end of any phase a
 | Phase 2 | 4 / 4 tasks ✅ |
 | Phase 3 | 6 / 6 tasks ✅ |
 | Phase 4 | 5 / 5 tasks ✅ |
-| Phase 5 | 0 / 3 tasks |
+| Phase 5 | 3 / 3 tasks ✅ |
 | Phase 6 | 0 / 4 tasks |
-| **Total** | **20 / 27 tasks** |
+| **Total** | **23 / 27 tasks** |
 | Last updated | 2026-04-19 |
 
 ### How to update this section

@@ -680,6 +680,9 @@ function _scheduleDesignSave() {
     _designSaveTimer = null;
     if (scene.nodeCount > 0) {
       localStorage.setItem('circuit_designer_pro', JSON.stringify(scene.serialize()));
+      // Waveform view state — saved separately so the waveform module
+      // remains optional and doesn't pollute the core scene payload.
+      try { localStorage.setItem('circuit_designer_waveform_view', JSON.stringify(Waveform.saveViewState())); } catch (_) {}
     }
   }, 2000);
 }
@@ -1510,7 +1513,42 @@ document.getElementById('btn-gen-truthtable')?.addEventListener('click', () => {
   if (truthtableContainer) truthtableContainer.innerHTML = renderTruthTableHTML(table);
 });
 
-// Waveform export
+// Waveform — import an external .vcd file (from any HDL simulator).
+document.getElementById('btn-waveform-import')?.addEventListener('click', () => {
+  document.getElementById('waveform-import-input')?.click();
+});
+document.getElementById('waveform-import-input')?.addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const { signalCount, cycleCount } = Waveform.importVCD(reader.result);
+      alert('Imported ' + signalCount + ' signal' + (signalCount === 1 ? '' : 's') +
+            ' over ' + cycleCount + ' cycle' + (cycleCount === 1 ? '' : 's') + '.');
+    } catch (err) {
+      alert('Failed to parse VCD: ' + err.message);
+    }
+  };
+  reader.onerror = () => alert('Could not read the file.');
+  reader.readAsText(file);
+  e.target.value = ''; // allow re-importing the same file
+});
+
+// Waveform — export recorded history as a VCD file (industry standard).
+document.getElementById('btn-waveform-vcd')?.addEventListener('click', () => {
+  const vcd = Waveform.exportVCD();
+  if (!vcd) { alert('Nothing to export — run some STEP cycles first.'); return; }
+  const blob = new Blob([vcd], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'circuit-designer-' + Date.now() + '.vcd';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Waveform export — PNG
 document.getElementById('btn-waveform-export')?.addEventListener('click', () => {
   const wfCanvas = document.getElementById('waveform-canvas');
   if (!wfCanvas) return;
@@ -1966,6 +2004,7 @@ document.getElementById('btn-project-save')?.addEventListener('click', async () 
     name,
     circuit: scene.serialize(),
     annotations: annotations.serialize(),
+    waveformView: Waveform.saveViewState(),
     metadata: { stepCount: state.stepCount },
   };
 
@@ -1981,6 +2020,7 @@ document.getElementById('btn-project-load')?.addEventListener('click', () => {
     const project = projectStore.importJSON(json);
     scene.deserialize(project.circuit);
     annotations.deserialize(project.annotations);
+    if (project.waveformView) Waveform.loadViewState(project.waveformView);
     state.resetSequentialState(scene.nodes);
     simCtrl.reset();
     commands.clear();
@@ -2054,6 +2094,7 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
     name: 'Circuit Export',
     circuit: scene.serialize(),
     annotations: annotations.serialize(),
+    waveformView: Waveform.saveViewState(),
     exported: new Date().toISOString(),
   };
   const json = JSON.stringify(project, null, 2);
@@ -2899,6 +2940,12 @@ function start() {
       // ignore corrupt data
     }
   }
+
+  // Restore waveform view state if one was persisted alongside the design.
+  try {
+    const wfSaved = localStorage.getItem('circuit_designer_waveform_view');
+    if (wfSaved) Waveform.loadViewState(JSON.parse(wfSaved));
+  } catch (_) { /* ignore */ }
 
   // Initialize waveform signals
   Waveform.setSignals(scene.nodes);
