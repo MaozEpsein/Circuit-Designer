@@ -422,8 +422,6 @@ export function removeBookmarkAt(step) {
   state.bookmarks = state.bookmarks.filter(b => b.step !== step);
 }
 
-export function clearBookmarks() { state.bookmarks = []; }
-
 /**
  * Produce a JSON-safe snapshot of the current view settings (NOT the
  * recorded history — just how the user has the viewer configured).

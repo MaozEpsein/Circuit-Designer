@@ -332,7 +332,6 @@ ctxMenu?.addEventListener('click', (e) => {
 });
 
 // ── Block Internals Viewer ──────────────────────────────────
-const blockViewerOverlay = document.getElementById('block-viewer-overlay');
 
 function _showBlockViewer(node) {
   const sc = node.subCircuit;
