@@ -3,8 +3,19 @@
  * Reads from WaveformState; does not handle input or manage DOM state.
  */
 
-import { state, isBusSignal, signalBits, radixFor, formatValue } from './WaveformState.js';
+import { state, isBusSignal, signalBits, radixFor, formatValue, valueAtStep, visibleSignals } from './WaveformState.js';
 import { COLORS, METRICS, TYPE } from './WaveformTheme.js';
+
+/** Invert canvas x-coord → cycle index (fractional). */
+export function stepForX(x) {
+  const dataX = x - METRICS.LABEL_W + state.panOffset;
+  return dataX / stepWidth();
+}
+
+/** x-pixel at the center of cycle `step` (integer or fractional). */
+export function xForStepCenter(step) {
+  return xForStep(step) + stepWidth() / 2;
+}
 
 let _canvas, _ctx;
 
@@ -70,6 +81,172 @@ export function render() {
   _drawTimeAxis(w);
   _drawGrid(w, h);
   _drawSignals(w, h);
+  _drawMarkersAndCursor(w, h);
+  _drawReorderFeedback(w, h);
+}
+
+/**
+ * Visual feedback while the user drags a row in the label column:
+ *   • the source row is dimmed with a cyan outline
+ *   • a bold cyan line appears at the drop target
+ *   • a small "ghost" label follows the mouse cursor
+ */
+function _drawReorderFeedback(w, h) {
+  const drag = state.reorderDrag;
+  if (!drag) return;
+  const sigs = visibleSignals();
+  const src = sigs[drag.fromIdx];
+  if (!src) return;
+
+  // Compute source row y range in the viewport (accounting for scroll).
+  let y = METRICS.HEADER_H - state.vScroll;
+  let srcY = -1, srcH = 0;
+  let dstY = -1;
+  const rowTops = [];
+  for (let i = 0; i < sigs.length; i++) {
+    const rh = _rowHeight(sigs[i]);
+    rowTops.push(y);
+    if (i === drag.fromIdx) { srcY = y; srcH = rh; }
+    y += rh;
+  }
+  rowTops.push(y); // trailing edge of last row
+
+  // Drop indicator: thick cyan line between the target row and its neighbor.
+  const t = drag.targetIdx;
+  if (t >= 0 && t < sigs.length) {
+    // Snap to row boundary closest to mouse ghost Y.
+    const midOfTarget = rowTops[t] + _rowHeight(sigs[t]) / 2;
+    const isAboveMid = drag.ghostY < midOfTarget;
+    const lineY = isAboveMid ? rowTops[t] : rowTops[t] + _rowHeight(sigs[t]);
+    _ctx.save();
+    _ctx.strokeStyle = COLORS.accent;
+    _ctx.lineWidth = 3;
+    _ctx.beginPath();
+    _ctx.moveTo(0, lineY);
+    _ctx.lineTo(w, lineY);
+    _ctx.stroke();
+    _ctx.restore();
+  }
+
+  // Source row: dim overlay + cyan outline so the user knows what's moving.
+  if (srcY >= METRICS.HEADER_H && srcY < h) {
+    _ctx.save();
+    _ctx.fillStyle = 'rgba(10,14,20,0.55)';
+    _ctx.fillRect(0, srcY, w, srcH);
+    _ctx.strokeStyle = COLORS.accent;
+    _ctx.lineWidth = 1;
+    _ctx.setLineDash([4, 3]);
+    _ctx.strokeRect(0.5, srcY + 0.5, w - 1, srcH - 1);
+    _ctx.setLineDash([]);
+    _ctx.restore();
+  }
+
+  // Ghost label following the mouse.
+  _ctx.save();
+  const ghostText = src.label;
+  _ctx.font = TYPE.label;
+  const tw = _ctx.measureText(ghostText).width;
+  const gx = 12;
+  const gy = drag.ghostY;
+  const pad = 6;
+  _ctx.fillStyle = 'rgba(10,20,35,0.95)';
+  _ctx.strokeStyle = COLORS.accent;
+  _ctx.lineWidth = 1;
+  _ctx.beginPath();
+  _ctx.rect(gx - pad, gy - 10, tw + pad * 2, 20);
+  _ctx.fill();
+  _ctx.stroke();
+  _ctx.fillStyle = src.color;
+  _ctx.textAlign = 'left';
+  _ctx.textBaseline = 'middle';
+  _ctx.fillText(ghostText, gx, gy);
+  _ctx.restore();
+}
+
+/** Draw measurement markers A/B and the hover cursor on top of everything. */
+function _drawMarkersAndCursor(w, h) {
+  _ctx.save();
+  _ctx.beginPath();
+  _ctx.rect(METRICS.LABEL_W, 0, w - METRICS.LABEL_W, h);
+  _ctx.clip();
+
+  // Markers (drawn under cursor so cursor stays on top).
+  if (state.markerA !== null) _drawMarker(state.markerA, 'A', '#ff6b9d', w, h);
+  if (state.markerB !== null) _drawMarker(state.markerB, 'B', '#ffcc00', w, h);
+
+  // Hover cursor (thin cyan line, step number above).
+  if (state.cursorStep !== null) {
+    const x = xForStep(Math.floor(state.cursorStep));
+    if (x >= METRICS.LABEL_W - 1 && x <= w) {
+      _ctx.strokeStyle = COLORS.accent;
+      _ctx.lineWidth = 1;
+      _ctx.setLineDash([4, 3]);
+      _ctx.beginPath();
+      _ctx.moveTo(x, METRICS.HEADER_H);
+      _ctx.lineTo(x, h);
+      _ctx.stroke();
+      _ctx.setLineDash([]);
+    }
+  }
+  _ctx.restore();
+
+  // Footer strip: marker values + Δ (only when at least one marker is set).
+  if (state.markerA !== null || state.markerB !== null) _drawMarkerFooter(w, h);
+}
+
+function _drawMarker(step, label, color, w, h) {
+  const x = xForStep(Math.floor(step));
+  if (x < METRICS.LABEL_W - 1 || x > w) return;
+  _ctx.strokeStyle = color;
+  _ctx.lineWidth = 1.5;
+  _ctx.beginPath();
+  _ctx.moveTo(x, METRICS.HEADER_H);
+  _ctx.lineTo(x, h);
+  _ctx.stroke();
+
+  // Flag at top with label.
+  _ctx.fillStyle = color;
+  const flagW = 14, flagH = 12;
+  _ctx.fillRect(x, METRICS.HEADER_H - flagH, flagW, flagH);
+  _ctx.fillStyle = '#0a0e14';
+  _ctx.font = 'bold 9px "JetBrains Mono", monospace';
+  _ctx.textAlign = 'center';
+  _ctx.textBaseline = 'middle';
+  _ctx.fillText(label, x + flagW / 2, METRICS.HEADER_H - flagH / 2);
+}
+
+function _drawMarkerFooter(w, h) {
+  const footerH = 18;
+  const y = h - footerH;
+  _ctx.fillStyle = 'rgba(10,14,20,0.92)';
+  _ctx.fillRect(METRICS.LABEL_W, y, w - METRICS.LABEL_W, footerH);
+  _ctx.strokeStyle = COLORS.border;
+  _ctx.beginPath();
+  _ctx.moveTo(METRICS.LABEL_W, y);
+  _ctx.lineTo(w, y);
+  _ctx.stroke();
+
+  _ctx.font = TYPE.axis;
+  _ctx.textBaseline = 'middle';
+  _ctx.textAlign = 'left';
+  let x = METRICS.LABEL_W + 10;
+  const yMid = y + footerH / 2;
+
+  const drawTag = (label, val, color) => {
+    _ctx.fillStyle = color;
+    _ctx.fillText(`${label}:`, x, yMid);
+    x += _ctx.measureText(`${label}:`).width + 4;
+    _ctx.fillStyle = COLORS.text;
+    _ctx.fillText(String(val), x, yMid);
+    x += _ctx.measureText(String(val)).width + 18;
+  };
+
+  if (state.markerA !== null) drawTag('A', Math.floor(state.markerA), '#ff6b9d');
+  if (state.markerB !== null) drawTag('B', Math.floor(state.markerB), '#ffcc00');
+  if (state.markerA !== null && state.markerB !== null) {
+    const delta = Math.abs(Math.floor(state.markerB) - Math.floor(state.markerA));
+    drawTag('Δ', delta + ' cycles', COLORS.accent);
+  }
 }
 
 function _drawEmptyHint(w, h) {
@@ -167,17 +344,31 @@ function _rowHeight(sig) {
   return isBusSignal(sig.id) ? METRICS.ROW_H_BUS : METRICS.ROW_H;
 }
 
+/** Which visible signal row contains the given canvas Y (accounting for scroll)? */
+export function signalAtY(canvasY) {
+  if (canvasY < METRICS.HEADER_H) return -1;
+  const sigs = visibleSignals();
+  let y = METRICS.HEADER_H - state.vScroll;
+  for (let i = 0; i < sigs.length; i++) {
+    const h = _rowHeight(sigs[i]);
+    if (canvasY >= y && canvasY < y + h) return i;
+    y += h;
+  }
+  return -1;
+}
+
 function _rowY(idx) {
   // Cumulative y offsets so each row gets its own tailored height.
   let y = METRICS.HEADER_H;
-  for (let i = 0; i < idx; i++) y += _rowHeight(state.signals[i]);
+  const sigs = visibleSignals();
+  for (let i = 0; i < idx; i++) y += _rowHeight(sigs[i]);
   return y;
 }
 
 /** Total vertical height of all rows (for scroll clamping + scrollbar). */
 export function contentHeight() {
   let total = 0;
-  state.signals.forEach(sig => { total += _rowHeight(sig); });
+  visibleSignals().forEach(sig => { total += _rowHeight(sig); });
   return total;
 }
 
@@ -203,7 +394,7 @@ function _drawSignals(w, h) {
   _ctx.clip();
 
   let y0 = METRICS.HEADER_H - scrollY;
-  state.signals.forEach(sig => {
+  visibleSignals().forEach(sig => {
     const rowH = _rowHeight(sig);
     // Only draw rows that intersect the visible area.
     if (y0 + rowH >= METRICS.HEADER_H && y0 < h) {
@@ -225,21 +416,37 @@ function _drawSignals(w, h) {
 
   _ctx.restore();
 
-  // Signal labels — clipped to their own band so they don't invade the header
+  // Signal labels — clipped to their own band so they don't invade the header.
+  // When a cursor is active, each label also shows the signal's value at
+  // that cycle, right-aligned next to the name.
   _ctx.save();
   _ctx.beginPath();
   _ctx.rect(0, METRICS.HEADER_H, METRICS.LABEL_W, h - METRICS.HEADER_H);
   _ctx.clip();
+  const hasCursor = state.cursorStep !== null;
   let lblY = METRICS.HEADER_H - scrollY;
-  state.signals.forEach(sig => {
+  visibleSignals().forEach(sig => {
     const rowH = _rowHeight(sig);
     if (lblY + rowH >= METRICS.HEADER_H && lblY < h) {
       const yMid = lblY + rowH / 2;
-      _ctx.fillStyle = sig.color;
       _ctx.font = TYPE.label;
-      _ctx.textAlign = 'right';
       _ctx.textBaseline = 'middle';
-      _ctx.fillText(sig.label, METRICS.LABEL_W - 8, yMid);
+      if (hasCursor) {
+        // Name on the left, value on the right of the label column.
+        const val = valueAtStep(sig.id, state.cursorStep);
+        const bits = isBusSignal(sig.id) ? signalBits(sig.id) : 1;
+        const valStr = formatValue(val, bits, radixFor(sig.id));
+        _ctx.fillStyle = sig.color;
+        _ctx.textAlign = 'left';
+        _ctx.fillText(sig.label, 6, yMid);
+        _ctx.fillStyle = COLORS.text;
+        _ctx.textAlign = 'right';
+        _ctx.fillText(valStr, METRICS.LABEL_W - 8, yMid);
+      } else {
+        _ctx.fillStyle = sig.color;
+        _ctx.textAlign = 'right';
+        _ctx.fillText(sig.label, METRICS.LABEL_W - 8, yMid);
+      }
     }
     lblY += rowH;
   });

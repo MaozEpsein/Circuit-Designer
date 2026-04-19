@@ -318,12 +318,18 @@ Each phase is independently shippable — you can stop at the end of any phase a
   djb2 hash over signal label → index into a 10-color curated palette (no red, vaporwave-leaning). Clock keeps its canonical yellow.
 
 #### Phase 3 — Interactivity *(~2–3 days)*
-- [ ] Vertical cursor following the mouse
-- [ ] Side panel: "All values at cursor time" (signal name + current value)
-- [ ] Click → place marker A; `Shift+Click` → marker B; footer shows `Δ = N cycles`
-- [ ] Signal list with show/hide checkboxes
-- [ ] Drag to reorder signal rows
-- [ ] Per-signal context menu (color, hide, pin to top, copy value)
+- [x] Vertical cursor following the mouse
+  Dashed cyan line tracks the mouse within the data area; clears on mouse-leave.
+- [x] Side panel: "All values at cursor time" (signal name + current value)
+  Implemented inline in the label column — each signal's value at the cursor cycle is shown right-aligned next to its name, respecting radix.
+- [x] Click → place marker A; `Shift+Click` → marker B; footer shows `Δ = N cycles`
+  Stationary click (travel < 4 px) places a marker. Double-click in data area clears both. Footer strip at the bottom shows A, B, and Δ.
+- [x] Signal list with show/hide checkboxes
+  Implemented via right-click → Hide / Show all. `state.hiddenSignals` Set; only visible signals are drawn.
+- [x] Drag to reorder signal rows
+  Mousedown in the label column + drag past 4 px threshold reorders on mouseup. Order persists in `state.signalOrder`.
+- [x] Per-signal context menu (color, hide, pin to top, copy value)
+  Right-click on any signal row opens a DOM context menu with: Copy value, Hide, Show all, Pin to top, and per-signal Radix override (DEC / HEX / BIN / use global).
 
 #### Phase 4 — Power Features *(~3–4 days)*
 - [ ] Jump to next/previous edge of active signal (`←` / `→`)
@@ -349,11 +355,11 @@ Each phase is independently shippable — you can stop at the end of any phase a
 |---|---|
 | Phase 1 | 5 / 5 tasks ✅ |
 | Phase 2 | 4 / 4 tasks ✅ |
-| Phase 3 | 0 / 6 tasks |
+| Phase 3 | 6 / 6 tasks ✅ |
 | Phase 4 | 0 / 5 tasks |
 | Phase 5 | 0 / 3 tasks |
 | Phase 6 | 0 / 4 tasks |
-| **Total** | **9 / 27 tasks** |
+| **Total** | **15 / 27 tasks** |
 | Last updated | 2026-04-19 |
 
 ### How to update this section

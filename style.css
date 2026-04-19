@@ -806,6 +806,51 @@ html, body {
   width: 100%;
 }
 
+/* Per-signal context menu inside the Waveform panel. */
+#waveform-ctx-menu {
+  position: absolute;
+  min-width: 160px;
+  padding: 4px 0;
+  background: #0e1620;
+  border: 1px solid #1e3a50;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  font: 11px 'JetBrains Mono', monospace;
+  z-index: 210;
+}
+#waveform-ctx-menu .wf-menu-item {
+  padding: 5px 12px;
+  color: #c8d8f0;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+#waveform-ctx-menu .wf-menu-item:hover {
+  background: rgba(0,212,255,0.15);
+  color: #00d4ff;
+}
+#waveform-ctx-menu .wf-menu-item.wf-menu-header {
+  color: #4a6080;
+  cursor: default;
+  font-weight: bold;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+#waveform-ctx-menu .wf-menu-item.wf-menu-header:hover {
+  background: transparent;
+  color: #4a6080;
+}
+#waveform-ctx-menu .wf-menu-sep {
+  height: 1px;
+  background: #1e3a50;
+  margin: 3px 0;
+}
+#waveform-ctx-menu .wf-menu-hint {
+  color: #4a6080;
+  font-size: 9px;
+}
+
 #waveform-panel.hidden {
   transform: translateY(100%);
   opacity: 0;

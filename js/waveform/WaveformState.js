@@ -28,6 +28,21 @@ export const state = {
   radixOverrides: new Map(),
   // Maximum value seen for each signal (used to detect multi-bit buses).
   signalMax: new Map(),
+  // Cursor position as a fractional cycle index (null = not hovering).
+  // Renderer draws a vertical line at this position and the side panel shows
+  // each signal's value at this cycle.
+  cursorStep: null,
+  // Optional measurement markers (A/B). Each is a cycle index or null.
+  markerA: null,
+  markerB: null,
+  // Signals the user has explicitly hidden from the view.
+  hiddenSignals: new Set(),
+  // Optional custom ordering of signal IDs (null = use discovery order).
+  signalOrder: null,
+  // In-progress drag state for row reordering (null when not dragging).
+  // fromIdx is the source row index (visible-signals list); targetIdx is
+  // where it would land if released now; ghostY is the current mouse Y.
+  reorderDrag: null,
 };
 
 export function reset() {
@@ -38,9 +53,39 @@ export function reset() {
   state.signalMax = new Map();
 }
 
+/** Return signals that should actually be rendered, in their display order. */
+export function visibleSignals() {
+  const all = state.signalOrder
+    ? state.signalOrder.map(id => state.signals.find(s => s.id === id)).filter(Boolean)
+    : state.signals;
+  return all.filter(s => !state.hiddenSignals.has(s.id));
+}
+
+/** Move the signal at `fromIdx` to `toIdx` in the display order. */
+export function reorderSignal(fromIdx, toIdx) {
+  const base = state.signalOrder
+    ? [...state.signalOrder]
+    : state.signals.map(s => s.id);
+  if (fromIdx < 0 || fromIdx >= base.length) return;
+  if (toIdx < 0) toIdx = 0;
+  if (toIdx >= base.length) toIdx = base.length - 1;
+  const [moved] = base.splice(fromIdx, 1);
+  base.splice(toIdx, 0, moved);
+  state.signalOrder = base;
+}
+
+export function toggleHidden(sigId) {
+  if (state.hiddenSignals.has(sigId)) state.hiddenSignals.delete(sigId);
+  else state.hiddenSignals.add(sigId);
+}
+
+export function showAllSignals() { state.hiddenSignals.clear(); }
+
 export function setSignals(nodes) {
   if (!nodes) return;
   state.signals = [];
+  state.hiddenSignals = new Set();
+  state.signalOrder = null;
   // Clock keeps its canonical yellow color (always the CLK visual cue).
   nodes.forEach(n => {
     if (n.type === 'CLOCK') state.signals.push({ id: n.id, label: 'CLK', color: COLORS.clock, type: 'clock' });
@@ -96,6 +141,18 @@ export function radixFor(sigId) {
 
 export function setRadix(r) {
   if (r === 'hex' || r === 'dec' || r === 'bin') state.radix = r;
+}
+
+/**
+ * Return the recorded value of `sigId` at step index `stepIdx` (floor).
+ * Returns null if no entry or out of range.
+ */
+export function valueAtStep(sigId, stepIdx) {
+  const idx = Math.max(0, Math.min(state.history.length - 1, Math.floor(stepIdx)));
+  const entry = state.history[idx];
+  if (!entry) return null;
+  const v = entry.signals.get(sigId);
+  return v === undefined ? null : v;
 }
 
 /** Format a numeric value for display according to signal's radix + bits. */
