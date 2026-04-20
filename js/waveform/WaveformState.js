@@ -139,14 +139,14 @@ export function showAllSignals() { state.hiddenSignals.clear(); }
 
 // Which node types are shown by default ("recommended" view) — everything
 // else is discovered into state.signals but starts hidden.
-const DEFAULT_VISIBLE_TYPES = new Set(['CLOCK', 'INPUT', 'MUX_SELECT', 'OUTPUT']);
+const DEFAULT_VISIBLE_TYPES = new Set(['CLOCK', 'INPUT', 'MUX_SELECT', 'OUTPUT', 'PIPE_REG']);
 
 // All node types that produce an observable value worth putting in the picker.
 const PICKABLE_TYPES = new Set([
   'CLOCK', 'INPUT', 'MUX_SELECT', 'OUTPUT',
   'REGISTER', 'SHIFT_REG', 'COUNTER', 'PC', 'IR',
   'RAM', 'ROM', 'REG_FILE', 'REG_FILE_DP',
-  'FIFO', 'STACK',
+  'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU',
   'GATE_SLOT', 'FF_SLOT',
 ]);
@@ -155,7 +155,7 @@ const TYPE_TO_SIG_TYPE = {
   CLOCK: 'clock', INPUT: 'input', MUX_SELECT: 'mux', OUTPUT: 'output',
   REGISTER: 'memory', SHIFT_REG: 'memory', COUNTER: 'memory', PC: 'memory', IR: 'memory',
   RAM: 'memory', ROM: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
-  FIFO: 'memory', STACK: 'memory',
+  FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
   ALU: 'compute', CU: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff',
 };

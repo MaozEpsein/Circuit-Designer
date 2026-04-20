@@ -405,6 +405,24 @@ html, body {
   transition: background 0.15s;
 }
 
+.design-prop-action {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border: 1px solid #2a6a8a;
+  border-radius: 4px;
+  background: #0d2030;
+  color: #8fd4ff;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.15s;
+}
+.design-prop-action:hover { background: #163a5a; color: #ffffff; }
+.design-prop-action[disabled] {
+  opacity: 0.45; cursor: not-allowed; color: #678; border-color: #1a3040;
+}
+
 .design-prop-toggle:hover {
   background: rgba(42, 90, 144, 0.3);
 }

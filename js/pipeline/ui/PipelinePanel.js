@@ -92,10 +92,15 @@ export class PipelinePanel {
     this._body.innerHTML = r.stages.map(s => {
       const pct = maxDelay > 0 ? Math.max(2, Math.round(100 * s.delayPs / maxDelay)) : 0;
       const bn  = s.idx === r.bottleneck ? ' bottleneck' : '';
+      const badges = [
+        s.hasStall ? '<span class="pipe-badge pipe-badge-stall" title="Stall wired">S</span>' : '',
+        s.hasFlush ? '<span class="pipe-badge pipe-badge-flush" title="Flush wired">F</span>' : '',
+      ].join('');
       return `<div class="pipe-stage-row${bn}" data-stage="${s.idx}">
         <span class="pipe-stage-idx">S${s.idx}</span>
         <span class="pipe-stage-depth">${s.delayPs} ps</span>
         <span class="pipe-stage-count">d=${s.depth} · ${s.nodes.length}n</span>
+        <span class="pipe-stage-badges">${badges}</span>
         <span class="pipe-stage-bar"><div style="width:${pct}%"></div></span>
       </div>`;
     }).join('');

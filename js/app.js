@@ -9,8 +9,8 @@ import { SceneGraph } from './core/SceneGraph.js';
 import * as Renderer from './rendering/CanvasRenderer.js';
 import * as Waveform from './waveform/WaveformController.js';
 import * as Input from './interaction/InputHandler.js';
-import { MEMORY_TYPE_SET, COMPONENT_TYPES } from './components/Component.js';
-import { SetNodePropsCommand, RemoveNodeCommand } from './components/CircuitCommands.js';
+import { MEMORY_TYPE_SET, COMPONENT_TYPES, createComponent, createWire } from './components/Component.js';
+import { SetNodePropsCommand, RemoveNodeCommand, AddNodeCommand, AddWireCommand } from './components/CircuitCommands.js';
 import { assemble, disassemble, decompileRomToC, getOpcodeNames, getOpcodeFormat } from './cpu/Assembler.js';
 import { compileCToROM } from './cpu/compiler/CCompiler.js';
 import { SubCircuitRegistry } from './core/SubCircuitRegistry.js';
@@ -755,6 +755,21 @@ function _updatePropsPanel() {
   propTargetRow.style.display = node.type === 'OUTPUT' ? '' : 'none';
   propStepTargetsRow.style.display = node.type === 'OUTPUT' ? '' : 'none';
   propInitQRow.style.display = node.type === 'FF_SLOT' ? '' : 'none';
+
+  // PIPE control buttons — only shown when a PIPE_REG is selected.
+  const propPipeCtrlRow = document.getElementById('prop-pipe-ctrl-row');
+  if (node.type === 'PIPE_REG' && propPipeCtrlRow) {
+    propPipeCtrlRow.style.display = '';
+    const ch = node.channels || 4;
+    const stallWired = scene.wires.some(w => w.targetId === node.id && w.targetInputIndex === ch);
+    const flushWired = scene.wires.some(w => w.targetId === node.id && w.targetInputIndex === ch + 1);
+    const stallBtn = document.getElementById('btn-prop-add-stall');
+    const flushBtn = document.getElementById('btn-prop-add-flush');
+    if (stallBtn) { stallBtn.disabled = stallWired; stallBtn.textContent = stallWired ? 'STALL ✓' : '+ STALL'; }
+    if (flushBtn) { flushBtn.disabled = flushWired; flushBtn.textContent = flushWired ? 'FLUSH ✓' : '+ FLUSH'; }
+  } else if (propPipeCtrlRow) {
+    propPipeCtrlRow.style.display = 'none';
+  }
 
   // MUX/DEMUX/DECODER/ENCODER size config
   const isMux = node.type === 'MUX';
@@ -2073,6 +2088,8 @@ bus.on('palette:action', (action) => {
       break;
     }
     case 'toggle-pipeline-panel': pipelinePanel.toggle(); break;
+    case 'insert-stall': _insertPipeControl('stall'); break;
+    case 'insert-flush': _insertPipeControl('flush'); break;
   }
 });
 bus.on('palette:select-node', (nodeId) => {
@@ -2395,6 +2412,40 @@ bus.on('pipeline:jump-to-wire', ({ srcId, dstId }) => {
   const s = scene.getNode(srcId), d = scene.getNode(dstId);
   if (s && d) Renderer.zoomToFit([s, d]);
 });
+bus.on('pipeline:auto-wired-clk', ({ nodeId }) => {
+  const n = scene.getNode(nodeId);
+  const label = n ? (n.label || n.type) : 'component';
+  _showRomNotification(`Auto-wired CLK → ${label}`);
+});
+
+// Insert an INPUT node wired to the STALL (kind='stall') or FLUSH (kind='flush')
+// pin of the currently selected PIPE_REG. No-op with a toast if selection is
+// missing or not a PIPE.
+function _insertPipeControl(kind) {
+  const pipe = scene.getNode(state.selectedNodeId);
+  if (!pipe || pipe.type !== 'PIPE_REG') {
+    _showRomNotification('Select a PIPE register first');
+    return;
+  }
+  const ch = pipe.channels || 4;
+  const pinIdx = kind === 'stall' ? ch : ch + 1;
+  // Reject if already wired
+  const already = scene.wires.some(w => w.targetId === pipe.id && w.targetInputIndex === pinIdx);
+  if (already) { _showRomNotification(`${kind.toUpperCase()} already wired`); return; }
+  // Place the new input to the left of the PIPE, vertically offset for visibility.
+  const offsetY = kind === 'stall' ? -12 : 12;
+  const inputNode = createComponent(COMPONENT_TYPES.INPUT, pipe.x - 140, pipe.y + offsetY);
+  inputNode.label = kind === 'stall' ? 'STALL' : 'FLUSH';
+  inputNode.fixedValue = 0;
+  const addCmd = new AddNodeCommand(scene, inputNode);
+  commands.execute(addCmd);
+  const wire = createWire(addCmd.nodeId, pipe.id, pinIdx, 0);
+  commands.execute(new AddWireCommand(scene, wire));
+  _showRomNotification(`${kind.toUpperCase()} wired to ${pipe.label || pipe.id}`);
+  _updatePropsPanel();
+}
+document.getElementById('btn-prop-add-stall')?.addEventListener('click', () => _insertPipeControl('stall'));
+document.getElementById('btn-prop-add-flush')?.addEventListener('click', () => _insertPipeControl('flush'));
 bus.on('nav:meminspector', _toggleMemInspector);
 
 // Bind shortcut from Command Palette (Ctrl+Enter)

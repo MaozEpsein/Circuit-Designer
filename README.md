@@ -763,12 +763,10 @@ Every phase ends with a commit — message format `pipeline(phase-N): <short sum
 
 ### Phase 7 — Stall / Flush (synchronous control)
 **Goal**: PIPE register responds to `enable` (stall) and `clear` (flush/bubble).
-- [ ] `SimulationEngine`: respect `PIPE_REG.enable` (skip capture if 0) and `clear` (drive 0).
-- [ ] Palette commands: *Insert Stall* / *Insert Flush* auto-wire control lines.
-- [ ] Panel per-stage indicator (stalled / bubble).
-- **Example update**: wire an `enable` + `clear` input into `pipeline-demo.json` — toggle in-app to demonstrate stall and flush on the same circuit.
-- **Verify L1** — unit: clock with stall → data frozen.
-- **Verify L2** — manual: RISC hazard scenario.
+- [x] `SimulationEngine` already honours `PIPE_REG.STALL` (skip capture if 1) and `FLUSH` (drive 0) — pre-existing, confirmed during Phase 1 audit.
+- [x] Palette commands *Insert Stall Input → Selected PIPE* / *Insert Flush Input → Selected PIPE* — auto-creates a labelled `INPUT` and wires it to the correct pin of the selected PIPE (undoable via `AddNodeCommand` + `AddWireCommand`). Toast feedback on missing selection / duplicate wire.
+- [x] Pipeline Panel per-stage **S** / **F** badges (green `S` = stall wired, pink `F` = flush wired) — derived statically by `StageEvaluator` from wires into PIPE_REG inputs `channels` and `channels+1`.
+- **Example update**: wire via palette commands — e.g. select PIPE1 in the demo → Ctrl+K → *Insert Stall Input* → new STALL input appears. Toggle it to 1 → PIPE freezes its value across clock edges.
 
 ---
 

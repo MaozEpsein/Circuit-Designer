@@ -102,6 +102,66 @@ const TOOL_LATCH_MAP = {
   'place-srlatch': 'SR_LATCH',
 };
 
+// Clock-pin index per synchronous component type.
+// Latch types are intentionally excluded — latches are level-triggered,
+// not edge-triggered, so an auto-wire would be misleading.
+function _clkPinIndex(node) {
+  switch (node.type) {
+    case 'PIPE_REG':    return (node.channels || 4) + 2;
+    case 'REGISTER':    return 3;
+    case 'SHIFT_REG':   return 4;
+    case 'COUNTER':     return 4;
+    case 'PC':          return 4;
+    case 'FIFO':        return 4;
+    case 'STACK':       return 4;
+    case 'RAM':         return 4;
+    case 'ROM':         return 2;
+    case 'REG_FILE':    return 4;
+    case 'REG_FILE_DP': return 5;
+    case 'IR':          return 2;
+    case 'FF_SLOT': {
+      const t = node.ffType;
+      if (t === 'D' || t === 'T') return 1;
+      if (t === 'SR' || t === 'JK') return 2;
+      return null;
+    }
+    default: return null;
+  }
+}
+
+/**
+ * Auto-wire a CLK into the freshly placed synchronous component.
+ * Reuses the lone CLOCK in the scene, or creates a fresh one when none exists.
+ * No-op for combinational types or when the clock pin is already connected.
+ */
+function _autoWireClock(nodeId) {
+  const node = _scene.getNode(nodeId);
+  if (!node) return;
+  const pinIdx = _clkPinIndex(node);
+  if (pinIdx == null) return;
+  // Don't overwrite an existing wire on the CLK pin.
+  if (_scene.wires.some(w => w.targetId === nodeId && w.targetInputIndex === pinIdx)) return;
+
+  // Reuse a single clock if the scene has exactly one; otherwise leave it to
+  // the designer to pick (or create a new CLOCK if none exists).
+  const clocks = _scene.nodes.filter(n => n.type === 'CLOCK');
+  let clkId;
+  if (clocks.length === 1) {
+    clkId = clocks[0].id;
+  } else if (clocks.length === 0) {
+    const newClk = createComponent(COMPONENT_TYPES.CLOCK, node.x - 60, node.y + 140);
+    const addCmd = new AddNodeCommand(_scene, newClk);
+    _commands.execute(addCmd);
+    clkId = addCmd.nodeId;
+  } else {
+    return;   // multiple clocks — ambiguous, stay out of the way
+  }
+
+  const wire = createWire(clkId, nodeId, pinIdx, 0, { isClockWire: true });
+  _commands.execute(new AddWireCommand(_scene, wire));
+  bus.emit('pipeline:auto-wired-clk', { nodeId, clkId });
+}
+
 export function init(canvasEl, scene, stateManager, commandManager, selectionManager) {
   _canvas   = canvasEl;
   _scene    = scene;
@@ -338,6 +398,7 @@ function _onCanvasClick(e) {
     const cmd = new AddNodeCommand(_scene, newNode);
     _commands.execute(cmd);
     _state.selectedNodeId = cmd.nodeId;
+    _autoWireClock(cmd.nodeId);
     return;
   }
 
@@ -364,6 +425,7 @@ function _onCanvasClick(e) {
     _state.selectedNodeId = cmd.nodeId;
     // Initialize FF state
     _state.ensureFfState(cmd.nodeId, newNode.initialQ ?? 0);
+    _autoWireClock(cmd.nodeId);
     return;
   }
 
@@ -625,6 +687,7 @@ function _onCanvasDrop(e) {
     const cmd = new AddNodeCommand(_scene, newNode);
     _commands.execute(cmd);
     _state.selectedNodeId = cmd.nodeId;
+    _autoWireClock(cmd.nodeId);
   }
 
   const gateType = TOOL_GATE_MAP[toolName];
@@ -646,6 +709,7 @@ function _onCanvasDrop(e) {
     _commands.execute(cmd);
     _state.selectedNodeId = cmd.nodeId;
     _state.ensureFfState(cmd.nodeId, newNode.initialQ ?? 0);
+    _autoWireClock(cmd.nodeId);
   }
 
   const latchType = TOOL_LATCH_MAP[toolName];
