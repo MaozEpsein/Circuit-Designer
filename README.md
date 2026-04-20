@@ -870,6 +870,56 @@ Plus minor hooks in: `components/Component.js`, `core/SceneGraph.js`, `engine/Si
 
 ---
 
+## Adding a New Component — Checklist
+
+Every time a new component type is introduced, walk through this list **in order**. Skipping a step usually produces a partial-looking component that breaks in non-obvious ways (renders fine but doesn't simulate; simulates but doesn't export; etc).
+
+### 1. Type + factory — [js/components/Component.js](js/components/Component.js)
+- [ ] Add the type constant to `COMPONENT_TYPES` (e.g. `HANDSHAKE: 'HANDSHAKE'`).
+- [ ] Add a `case COMPONENT_TYPES.XYZ:` in `createComponent()` returning the default shape (`{ ...base, <fields>, label: 'XYZ' }`).
+- [ ] If the component is sequential/clocked, add it to `FF_TYPE_SET` or `MEMORY_TYPE_SET`.
+
+### 2. Palette chip — [app.html](app.html)
+- [ ] Add `<span class="palette-chip ..." data-tool="place-xyz" draggable="true">LBL</span>` inside the right tab (`logic`, `cpu`, `memory`, `blocks`, `pipeline`, `other`).
+- [ ] Pick the closest visual class (`palette-gate`, `palette-ff`, `palette-block`, `palette-io`).
+
+### 3. Tool → type mapping — [js/interaction/InputHandler.js](js/interaction/InputHandler.js)
+- [ ] Add `'place-xyz': COMPONENT_TYPES.XYZ` to the `TOOL_TO_TYPE` / `toolToType` map.
+- [ ] If resizable (user can change `inputCount`/`channels`/`bitWidth` via scroll/handle), add the type to **both** `RESIZABLE` sets (there are two near lines 137 and 690).
+
+### 4. Command Palette — [js/ui/CommandPalette.js](js/ui/CommandPalette.js)
+- [ ] Add `{ id: 'place-xyz', label: 'Place XYZ', category: 'Logic|CPU|Memory|Pipeline', action: () => bus.emit('palette:tool', 'place-xyz') }` to the components array.
+
+### 5. Rendering — [js/rendering/CanvasRenderer.js](js/rendering/CanvasRenderer.js)
+- [ ] Write `_drawXyzNode(node, val, hovered, ffStates)` — shape, pin positions, value text.
+- [ ] Add the `else if (node.type === 'XYZ')` branch in the main draw switch (~line 858).
+- [ ] If the component has a non-standard pin count, update the pin-count helper (~line 3077) **and** pin-position helper (~line 3141).
+
+### 6. Simulation — [js/engine/SimulationEngine.js](js/engine/SimulationEngine.js)
+- [ ] Add the logic. Combinational component → Phase 1 block; sequential clocked → Phase 2b (rising-edge capture) and Phase 3 (output re-propagation).
+- [ ] Confirm the clock detection (`isClockWire` flag or highest-input-index heuristic) picks up the intended pin.
+
+### 7. Properties panel — [js/app.js](js/app.js) `_updatePropsPanel`
+- [ ] If the user edits custom fields (size, value, bit width, etc.), toggle the matching `prop-*-row` and wire its input/change handler.
+
+### 8. Memory Inspector filter — [js/app.js](js/app.js) `_refreshMemInspector`
+- [ ] If the component holds state worth inspecting (register, memory, PIPE, etc.), add its type to the `memNodes` filter **and** to `typeLabels`.
+
+### 9. Pipeline delay — [js/pipeline/DelayModel.js](js/pipeline/DelayModel.js)
+- [ ] Add an entry to `DEFAULT_DELAY_PS` in picoseconds (0 for clocked/boundary, 50–800 for combinational). Unknown types fall back to 100 ps and produce a Pipeline-panel warning.
+
+### 10. HDL export (when the HDL Toolchain phase touches it)
+- [ ] Add a translator in `js/hdl/translators/` emitting Verilog for the new type.
+- [ ] Update the HDL round-trip fuzz corpus so the component is exercised.
+
+### 11. Example circuit
+- [ ] If relevant, add a small example demonstrating the component under `examples/circuits/` and register it in the `EXAMPLES` array in [js/app.js](js/app.js).
+
+### 12. Smoke test
+- [ ] Drop the new chip onto an empty canvas → confirm it renders, accepts wires, simulates, appears in the Pipeline panel, Memory Inspector, and exports/imports cleanly via JSON.
+
+---
+
 ## License
 
 MIT
