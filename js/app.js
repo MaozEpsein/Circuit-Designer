@@ -28,6 +28,7 @@ import { AnnotationLayer } from './ui/AnnotationLayer.js';
 import { ProjectStorage } from './ui/ProjectStorage.js';
 import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
+import { PipelinePanel } from './pipeline/ui/PipelinePanel.js';
 
 // ── Singletons ──────────────────────────────────────────────
 const scene    = new SceneGraph();
@@ -37,6 +38,7 @@ const state    = new StateManager();
 const commands = new CommandManager(100);
 const simCtrl  = new SimulationController();
 const pipelineAnalyzer = new PipelineAnalyzer(scene);
+const pipelinePanel    = new PipelinePanel(pipelineAnalyzer);
 const probes     = new ProbeManager();
 const watchList  = new WatchList();
 const tracer     = new SignalTracer();
@@ -1818,6 +1820,59 @@ document.getElementById('btn-mem-close')?.addEventListener('click', _toggleMemIn
   });
 })();
 
+// Pipeline panel resize grip (top-left corner, bottom-right panel).
+//   drag left  → widen (right pinned)
+//   drag up    → grow up (bottom pinned)
+//   drag right → narrower
+//   drag down  → shrink from the top
+(function initPipelineResize() {
+  const grip  = document.getElementById('pipeline-resize-grip');
+  const panel = document.getElementById('pipeline-panel');
+  if (!grip || !panel) return;
+
+  function _applyPipelineFontTier(height) {
+    let base;
+    if (height < 300)       base = 10;
+    else if (height < 550)  base = 12;
+    else                    base = 14;
+    panel.style.fontSize = base + 'px';
+  }
+  _applyPipelineFontTier(panel.getBoundingClientRect().height);
+
+  let dragging = false, startX = 0, startY = 0, startW = 0, startH = 0, startTop = 0;
+  grip.addEventListener('mousedown', (e) => {
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    startX = e.clientX; startY = e.clientY;
+    startW = r.width;   startH = r.height;
+    startTop = r.top;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'nwse-resize';
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;      // drag left → dx negative → widen
+    const dy = e.clientY - startY;      // drag up   → dy negative → grow
+    const bottom = startTop + startH;   // pinned edge
+    const newW = Math.max(220, Math.min(window.innerWidth  * 0.95, startW - dx));
+    let   newH = Math.max(150, Math.min(window.innerHeight * 0.95, startH - dy));
+    let   newTop = bottom - newH;
+    if (newTop < 0) { newTop = 0; newH = bottom; }
+    panel.style.width  = newW + 'px';
+    panel.style.height = newH + 'px';
+    panel.style.top    = newTop + 'px';
+    _applyPipelineFontTier(newH);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  });
+})();
+
 document.getElementById('btn-mem-format')?.addEventListener('click', () => {
   const btn = document.getElementById('btn-mem-format');
   if (_memFormat === 'hex') { _memFormat = 'bin'; btn.textContent = 'BIN'; }
@@ -2003,9 +2058,10 @@ bus.on('palette:action', (action) => {
       if (r.hasCycle) console.warn('feedback loop detected — stages may be incomplete');
       console.table(r.stages.map(s => ({ stage: s.idx, depth: s.depth, nodes: s.nodes.length, ids: s.nodes.join(',') })));
       console.groupEnd();
-      _showRomNotification(`Pipeline: ${r.cycles} stage${r.cycles===1?'':'s'}, bottleneck #${r.bottleneck} (depth ${r.stages[r.bottleneck]?.depth ?? 0})`);
+      pipelinePanel.show();
       break;
     }
+    case 'toggle-pipeline-panel': pipelinePanel.toggle(); break;
   }
 });
 bus.on('palette:select-node', (nodeId) => {

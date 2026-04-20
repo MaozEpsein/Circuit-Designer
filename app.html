@@ -30,6 +30,7 @@
           <button id="btn-reset" class="btn-secondary" title="Reset simulation to step 0 (registers, memory, PC all cleared to initial values)" style="padding:4px 10px;font-size:9px"><span style="font-size:14px;vertical-align:-1px;margin-right:3px">&#8634;</span>RESET</button>
           <button id="btn-waveform" title="Toggle waveform display (W)">WAVEFORM</button>
           <button id="btn-mem-toggle" class="btn-secondary" title="Toggle Memory Inspector" style="background:#1a1430;border-color:#5a3d8a;color:#c0a0f0">MEM</button>
+          <button id="btn-pipeline-toggle" class="btn-secondary" title="Toggle Pipeline Panel" style="background:#0d2030;border-color:#2a6a8a;color:#8fd4ff">PIPE</button>
           <div id="step-count">STEP: 0</div>
         </div>
         <div id="sim-controls-row">
@@ -358,6 +359,20 @@
       </div>
     </div>
     <div id="mem-inspector-body"></div>
+  </div>
+
+  <!-- Pipeline Panel (bottom-right) -->
+  <div id="pipeline-panel" class="hidden">
+    <div id="pipeline-resize-grip" title="Drag to resize"></div>
+    <div id="pipeline-panel-header">
+      <span>PIPELINE</span>
+      <div>
+        <button id="btn-pipeline-refresh" class="btn-secondary" style="font-size:9px" title="Re-analyze now">REFRESH</button>
+        <button id="btn-pipeline-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
+      </div>
+    </div>
+    <div id="pipeline-panel-summary"></div>
+    <div id="pipeline-panel-body"></div>
   </div>
 
   <!-- Debug toggle button (fixed) -->
