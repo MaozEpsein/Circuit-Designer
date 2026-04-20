@@ -16,6 +16,7 @@ export const DEFAULT_DELAY_PS = {
   SIGN_EXT:    80,
   SPLIT:       30,
   MERGE:       30,
+  HANDSHAKE:   60,
   ALU:         800,
   // Boundaries / memory — do not add combinational delay
   PIPE_REG:    0,

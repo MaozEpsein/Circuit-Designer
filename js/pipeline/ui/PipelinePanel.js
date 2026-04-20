@@ -95,6 +95,7 @@ export class PipelinePanel {
       const badges = [
         s.hasStall ? '<span class="pipe-badge pipe-badge-stall" title="Stall wired">S</span>' : '',
         s.hasFlush ? '<span class="pipe-badge pipe-badge-flush" title="Flush wired">F</span>' : '',
+        s.elastic  ? '<span class="pipe-badge pipe-badge-elastic" title="Elastic (valid/ready handshake)">E</span>' : '',
       ].join('');
       return `<div class="pipe-stage-row${bn}" data-stage="${s.idx}">
         <span class="pipe-stage-idx">S${s.idx}</span>

@@ -986,6 +986,7 @@ function _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId) 
     else if (node.type === 'BUS')        _drawBusNode(node, val, hovered);
     else if (node.type === 'IMM')        _drawImmNode(node, val, hovered);
     else if (node.type === 'PIPE_REG')  _drawPipeRegNode(node, val, hovered, ffStates);
+    else if (node.type === 'HANDSHAKE') _drawHandshakeNode(node, val, hovered, nodeValues);
     else if (node.type === 'SIGN_EXT')  _drawSignExtNode(node, val, hovered);
     else if (node.type === 'BUS_MUX')   _drawBusMuxNode(node, val, hovered);
     else if (node.type === 'SPLIT')     _drawSplitNode(node, val, hovered);
@@ -1795,6 +1796,55 @@ function _drawPipeRegNode(node, val, hovered, ffStates) {
   ctx.lineTo(node.x, y + h - 8);
   ctx.lineTo(node.x + 5, y + h - 2);
   ctx.stroke();
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── HANDSHAKE node ──────────────────────────────────────────
+// Small controller that combines valid+ready into a STALL/FIRE pair.
+// Inputs:  V (valid, from producer), R (ready, from consumer).
+// Outputs: S (stall = NOT(V AND R)), F (fire = V AND R).
+function _drawHandshakeNode(node, val, hovered, nodeValues) {
+  const w = 70, h = 50;
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(255,160,64,0.5)'; ctx.shadowBlur = 18; }
+  ctx.fillStyle = 'rgba(28,18,10,0.96)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hovered ? '#ffc070' : '#a06420';
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = '#ffb060';
+  ctx.font = 'bold 10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HS', node.x, node.y - 4);
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.fillStyle = '#a07030';
+  ctx.fillText('v/r→s/f', node.x, node.y + 8);
+
+  // Pin labels
+  ctx.fillStyle = '#8a6028';
+  ctx.textAlign = 'right';
+  ctx.fillText('V', x + 10, node.y - 10);
+  ctx.fillText('R', x + 10, node.y + 10);
+  ctx.textAlign = 'left';
+  ctx.fillText('S', x + w - 10, node.y - 10);
+  ctx.fillText('F', x + w - 10, node.y + 10);
 
   // Node label above
   ctx.fillStyle = C.textDim;
@@ -3207,6 +3257,7 @@ function _getNodeInputCount(node) {
   if (node.type === 'SUB_CIRCUIT') return (node.subInputs || []).length;
   if (node.type === 'REG_FILE_DP') return 6; // RD1_ADDR, RD2_ADDR, WR_ADDR, WR_DATA, WE, CLK
   if (node.type === 'PIPE_REG') return (node.channels || 4) + 3; // D0..Dn-1, STALL, FLUSH, CLK
+  if (node.type === 'HANDSHAKE') return 2; // V, R
   if (node.type === 'SIGN_EXT') return 1;      // IN
   if (node.type === 'BUS_MUX') return (node.inputCount || 2) + 1; // D0..Dn-1, SEL
   if (node.type === 'SPLIT')   return 1;       // one bus in
@@ -3290,6 +3341,8 @@ export function getInputAnchors(node) {
       label = ['OP', 'Z', 'C'][i] || '';
     } else if (node.type === 'ALU') {
       label = ['A', 'B', 'OP'][i] || '';
+    } else if (node.type === 'HANDSHAKE') {
+      label = i === 0 ? 'V' : 'R';
     } else if (node.type === 'HALF_ADDER' || node.type === 'COMPARATOR') {
       label = i === 0 ? 'A' : 'B';
     } else if (node.type === 'FULL_ADDER') {
@@ -3345,6 +3398,9 @@ export function getOutputAnchors(node) {
     for (let i = 0; i < ch; i++) {
       anchors.push({ ..._nodeOutputAnchor(node, i), index: i, label: 'Q' + i });
     }
+  } else if (node.type === 'HANDSHAKE') {
+    anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'S' });
+    anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'F' });
   } else if (node.type === 'SIGN_EXT') {
     anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'OUT' });
   } else if (node.type === 'SPLIT') {

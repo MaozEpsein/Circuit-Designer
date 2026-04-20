@@ -317,6 +317,23 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       nodeValues.set(id + '__valid', activeIdx >= 0 ? 1 : 0);
       value = nodeValues.get(id + '__out0') ?? 0;
 
+    } else if (node.type === 'HANDSHAKE') {
+      // Inputs: V (valid), R (ready) → Outputs: S (stall = NOT(V AND R)), F (fire = V AND R)
+      const inputSlots = inputs.get(id);
+      const v = inputSlots[0] ? (nodeValues.get(inputSlots[0].sourceId) ?? null) : null;
+      const r = inputSlots[1] ? (nodeValues.get(inputSlots[1].sourceId) ?? null) : null;
+      if (v === null || r === null) {
+        value = null;
+        nodeValues.set(id + '__out0', null);
+        nodeValues.set(id + '__out1', null);
+      } else {
+        const fire  = (v & r) & 1;
+        const stall = fire ^ 1;
+        nodeValues.set(id + '__out0', stall);
+        nodeValues.set(id + '__out1', fire);
+        value = stall;
+      }
+
     } else if (node.type === 'HALF_ADDER') {
       // HA: inputs A, B → outputs Sum (out0), Carry (out1)
       const inputSlots = inputs.get(id);
@@ -638,7 +655,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       } else if (node.type === 'DEMUX' || node.type === 'DECODER' || node.type === 'ENCODER' ||
                  node.type === 'HALF_ADDER' || node.type === 'FULL_ADDER' || node.type === 'COMPARATOR' ||
                  node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS' ||
-                 node.type === 'SUB_CIRCUIT' || node.type === 'SPLIT') {
+                 node.type === 'SUB_CIRCUIT' || node.type === 'SPLIT' || node.type === 'HANDSHAKE') {
         wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? null);
       } else if (node.type === 'REG_FILE_DP') {
         // Dual port: out0=RD1_DATA, out1=RD2_DATA

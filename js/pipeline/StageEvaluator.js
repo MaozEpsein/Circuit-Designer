@@ -93,13 +93,18 @@ export function evaluate(scene) {
 
   // Detect stall/flush wires attached to each PIPE_REG.
   // Inputs: D0..Dch-1 (0..ch-1), STALL (ch), FLUSH (ch+1), CLK (ch+2).
-  const pipeHasStall = new Map();   // nodeId → bool
-  const pipeHasFlush = new Map();
+  const pipeHasStall   = new Map();   // nodeId → bool
+  const pipeHasFlush   = new Map();
+  const pipeHasElastic = new Map();   // stall signal sourced by a HANDSHAKE
   for (const w of (scene.wires || [])) {
     const dst = nodeMap.get(w.targetId);
     if (!dst || dst.type !== 'PIPE_REG') continue;
     const ch = dst.channels || 4;
-    if (w.targetInputIndex === ch)     pipeHasStall.set(dst.id, true);
+    if (w.targetInputIndex === ch) {
+      pipeHasStall.set(dst.id, true);
+      const src = nodeMap.get(w.sourceId);
+      if (src && src.type === 'HANDSHAKE') pipeHasElastic.set(dst.id, true);
+    }
     if (w.targetInputIndex === ch + 1) pipeHasFlush.set(dst.id, true);
   }
 
@@ -107,7 +112,7 @@ export function evaluate(scene) {
   const stageCount = nodes.length ? Math.max(0, ...stage.values()) + 1 : 0;
   const stages = [];
   for (let i = 0; i < stageCount; i++) {
-    stages.push({ idx: i, nodes: [], depth: 0, delayPs: 0, criticalPath: [], hasStall: false, hasFlush: false });
+    stages.push({ idx: i, nodes: [], depth: 0, delayPs: 0, criticalPath: [], hasStall: false, hasFlush: false, elastic: false });
   }
   // For each stage, find the node with the greatest accumulated delay — the
   // tail of the stage's critical path. Walk back via critPred to recover it.
@@ -123,8 +128,9 @@ export function evaluate(scene) {
     if (de > stages[s].delayPs) stages[s].delayPs = de;
     if (de > stageTailDelay[s]) { stageTailDelay[s] = de; stageTailByDelay[s] = n.id; }
     if (n.type === 'PIPE_REG') {
-      if (pipeHasStall.get(n.id)) stages[s].hasStall = true;
-      if (pipeHasFlush.get(n.id)) stages[s].hasFlush = true;
+      if (pipeHasStall.get(n.id))   stages[s].hasStall = true;
+      if (pipeHasFlush.get(n.id))   stages[s].hasFlush = true;
+      if (pipeHasElastic.get(n.id)) stages[s].elastic  = true;
     }
   }
   // Walk back critPred chain for each stage tail to recover its critical path.

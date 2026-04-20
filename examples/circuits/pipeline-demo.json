@@ -4,10 +4,14 @@
     { "type": "INPUT",  "x": -420, "y":  -20, "fixedValue": 1, "label": "B",    "id": "in_b" },
     { "type": "INPUT",  "x": -420, "y":  140, "fixedValue": 0, "label": "C",    "id": "in_c" },
 
-    { "type": "INPUT",  "x":  -60, "y": -200, "fixedValue": 0, "label": "STALL", "id": "in_stall" },
-    { "type": "INPUT",  "x":  300, "y": -220, "fixedValue": 0, "label": "FLUSH", "id": "in_flush" },
+    { "type": "INPUT",  "x":  -60, "y": -200, "fixedValue": 0, "label": "FLUSH", "id": "in_flush" },
+
+    { "type": "INPUT",  "x":  -60, "y":  -240, "fixedValue": 1, "label": "VALID", "id": "in_valid" },
+    { "type": "INPUT",  "x":  160, "y":  -240, "fixedValue": 1, "label": "READY", "id": "in_ready" },
 
     { "type": "GATE_SLOT", "x": -240, "y": -60, "gate": "AND", "label": "AND", "id": "and_1" },
+
+    { "type": "HANDSHAKE", "x":   40, "y": -170, "label": "HS", "pipelineRole": "control", "id": "hs_1" },
 
     { "type": "PIPE_REG", "x": -60, "y": -40, "channels": 1, "label": "PIPE1", "pipelineRole": "register", "stage": null, "id": "pipe_1" },
 
@@ -29,7 +33,10 @@
 
     { "sourceId": "and_1", "targetId": "pipe_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_3" },
     { "sourceId": "clk_1", "targetId": "pipe_1", "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true,  "id": "w_4" },
-    { "sourceId": "in_stall", "targetId": "pipe_1", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_stall" },
+
+    { "sourceId": "in_valid", "targetId": "hs_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_hs_v" },
+    { "sourceId": "in_ready", "targetId": "hs_1", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_hs_r" },
+    { "sourceId": "hs_1", "targetId": "pipe_1", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_hs_s" },
 
     { "sourceId": "pipe_1", "targetId": "not_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_5" },
     { "sourceId": "pipe_1", "targetId": "or_1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w_6" },

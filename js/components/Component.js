@@ -42,6 +42,7 @@ export const COMPONENT_TYPES = {
   REG_FILE_DP:  'REG_FILE_DP',
   SPLIT:        'SPLIT',
   MERGE:        'MERGE',
+  HANDSHAKE:    'HANDSHAKE',
 };
 
 /**
@@ -166,6 +167,8 @@ export function createComponent(type, x, y) {
       return { ...base, inBits: 8, slicesSpec: '7:4, 3:0', label: 'SPLIT' };
     case COMPONENT_TYPES.MERGE:
       return { ...base, outBits: 8, slicesSpec: '7:4, 3:0', label: 'MERGE' };
+    case COMPONENT_TYPES.HANDSHAKE:
+      return { ...base, label: 'HS', pipelineRole: 'control' };
     default:
       return base;
   }

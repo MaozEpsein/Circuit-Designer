@@ -847,6 +847,7 @@
 }
 .pipe-badge-stall { background: #2a3a10; color: #c0ff50; border: 1px solid #5a7a20; }
 .pipe-badge-flush { background: #2a1020; color: #ff80c0; border: 1px solid #7a2060; }
+.pipe-badge-elastic { background: #2a2010; color: #ffc070; border: 1px solid #7a6020; }
 .pipe-stage-bar {
   flex: 1 1 auto;
   height: 0.8em;

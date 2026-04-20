@@ -776,13 +776,11 @@ Every phase ends with a commit — message format `pipeline(phase-N): <short sum
 
 ### Phase 8 — Valid / Ready Handshake (elastic pipeline)
 **Goal**: proper back-pressure between stages.
-- [ ] `HANDSHAKE` component bundles `valid` / `ready`.
-- [ ] Convention: `ready` backward, `valid` forward; auto-stall upstream when downstream not ready.
-- [ ] Analyzer identifies elastic segments; panel marks them.
-- [ ] Example templates: FIFO-separated stages.
-- **Example update**: promote `pipeline-demo.json` to elastic — insert HANDSHAKE between stages; toggling downstream `ready=0` freezes the whole chain visibly.
-- **Verify L1** — unit: 3-stage elastic, downstream stall → upstream freezes.
-- **Verify L2** — manual: elastic pipeline, observe correct behavior in waveform.
+- [x] New `HANDSHAKE` component — 2 inputs (**V** valid, **R** ready), 2 outputs (**S** stall = NOT(V AND R), **F** fire = V AND R). Combinational, 60 ps delay.
+- [x] Convention: wire **S** directly into a PIPE's STALL pin — auto-stall whenever downstream isn't ready or producer hasn't asserted valid.
+- [x] Analyzer flags a stage as **elastic** when its PIPE's STALL source is a HANDSHAKE. Panel shows a yellow **E** badge on the stage row.
+- [x] Palette chip under PIPELINE tab + Command Palette entry.
+- **Example update**: promote the demo later — for now, the user can drop a HS manually between two PIPEs, wire V/R, observe E badge.
 
 ### Phase 9 — Hazard Detection
 **Goal**: detect RAW / WAR / WAW across stages with feedback.
@@ -905,6 +903,12 @@ Every time a new component type is introduced, walk through this list **in order
 
 ### 9. Pipeline delay — [js/pipeline/DelayModel.js](js/pipeline/DelayModel.js)
 - [ ] Add an entry to `DEFAULT_DELAY_PS` in picoseconds (0 for clocked/boundary, 50–800 for combinational). Unknown types fall back to 100 ps and produce a Pipeline-panel warning.
+
+### 9b. Waveform visibility — [js/waveform/WaveformState.js](js/waveform/WaveformState.js)
+- [ ] Add the type to `PICKABLE_TYPES` (else it won't appear in the signal picker).
+- [ ] Add a `TYPE_TO_SIG_TYPE` entry (`'memory'`, `'compute'`, `'gate'`, `'ff'`).
+- [ ] If the component has multiple named outputs, add it to `PINS_BY_TYPE` with `[['NAME', idx], …]`.
+- [ ] If the component has multiple named inputs worth picking, add it to `INPUT_PINS_BY_TYPE`.
 
 ### 10. HDL export (when the HDL Toolchain phase touches it)
 - [ ] Add a translator in `js/hdl/translators/` emitting Verilog for the new type.

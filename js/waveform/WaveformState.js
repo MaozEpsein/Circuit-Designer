@@ -147,7 +147,7 @@ const PICKABLE_TYPES = new Set([
   'REGISTER', 'SHIFT_REG', 'COUNTER', 'PC', 'IR',
   'RAM', 'ROM', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
-  'ALU', 'CU',
+  'ALU', 'CU', 'HANDSHAKE',
   'GATE_SLOT', 'FF_SLOT',
 ]);
 
@@ -156,7 +156,7 @@ const TYPE_TO_SIG_TYPE = {
   REGISTER: 'memory', SHIFT_REG: 'memory', COUNTER: 'memory', PC: 'memory', IR: 'memory',
   RAM: 'memory', ROM: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
-  ALU: 'compute', CU: 'compute',
+  ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff',
 };
 
@@ -173,6 +173,7 @@ const PINS_BY_TYPE = {
   FIFO:        [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   STACK:       [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   COUNTER:     [['Q', 0], ['TC', 1]],
+  HANDSHAKE:   [['S', 0], ['F', 1]],
 };
 
 // ── Input pins (matches SimulationEngine inputSlots[i].inputIndex order) ──
@@ -193,6 +194,7 @@ const INPUT_PINS_BY_TYPE = {
   HALF_ADDER:  [['A', 0], ['B', 1]],
   FULL_ADDER:  [['A', 0], ['B', 1], ['Cin', 2]],
   COMPARATOR:  [['A', 0], ['B', 1]],
+  HANDSHAKE:   [['V', 0], ['R', 1]],
 };
 
 function _outPinsFor(type) { return PINS_BY_TYPE[type] || [['Q', 0]]; }

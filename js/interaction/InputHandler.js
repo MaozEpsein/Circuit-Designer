@@ -70,6 +70,7 @@ const TOOL_TYPE_MAP = {
   'place-busmux':        COMPONENT_TYPES.BUS_MUX,
   'place-signext':       COMPONENT_TYPES.SIGN_EXT,
   'place-pipereg':       COMPONENT_TYPES.PIPE_REG,
+  'place-handshake':     COMPONENT_TYPES.HANDSHAKE,
   'place-regfiledp':     COMPONENT_TYPES.REG_FILE_DP,
   'place-split':         COMPONENT_TYPES.SPLIT,
   'place-merge':         COMPONENT_TYPES.MERGE,
