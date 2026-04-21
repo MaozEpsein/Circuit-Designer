@@ -899,6 +899,53 @@
 .pvi-names { color: #cfe6f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pvi-missing { color: #ff5050; font-size: 0.85em; }
 
+.pipe-hazards-header {
+  margin-top: 0.6em;
+  padding: 0.5em 1.2em;
+  font-weight: bold;
+  color: #ffc080;
+  border-top: 1px solid #2a1a08;
+  border-bottom: 1px solid #2a1a08;
+  background: #1a1008;
+  font-size: 0.95em;
+  letter-spacing: 1px;
+}
+.pipe-hazard-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.6em;
+  padding: 0.5em 1.2em 0.2em 1.2em;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #ffd8a0;
+  transition: background 0.15s;
+}
+.pipe-hazard-row:hover { background: #2a1a08; }
+.pipe-hazard-fix {
+  padding: 0 1.2em 0.5em 2.6em;
+  border-bottom: 1px solid #1a1208;
+  color: #9b8a66;
+  font-size: 0.82em;
+  font-style: italic;
+}
+.pipe-hz-type {
+  display: inline-block;
+  min-width: 2.4em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-size: 0.78em;
+  letter-spacing: 0.5px;
+  text-align: center;
+  background: #2a1a08;
+  color: #ffd8a0;
+  border: 1px solid #4a3010;
+}
+.pipe-hz-type.hz-raw  { background: #2a1a08; color: #ff9028; border-color: #5a3010; }
+.pipe-hz-type.hz-war  { background: #2a2008; color: #ffc840; border-color: #5a4010; }
+.pipe-hz-type.hz-waw  { background: #2a0a20; color: #ff5fb0; border-color: #5a1060; }
+.pipe-hz-type.hz-loop { background: #2a0808; color: #ff5050; border-color: #5a1010; }
+
 .mem-row {
   display: flex;
   align-items: center;

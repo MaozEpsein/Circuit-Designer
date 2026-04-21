@@ -126,6 +126,9 @@ export function render(nodes, wires, nodeValues, wireValues, ffStates, hoveredNo
   _drawPulses(nodes, wires, wireValues);
   // Pipeline violation strokes (on top of wires, under nodes).
   if (_pipelineViolations?.length) _drawPipelineViolations(nodes, wires);
+  // Pipeline hazard strokes (orange, drawn above violations so a wire
+  // flagged as both still reads as a hazard).
+  if (_pipelineHazards?.length) _drawPipelineHazards(nodes, wires);
   // Pipeline critical path (yellow dashed, sits above wires).
   if (_pipelineCriticalPath?.length) _drawCriticalPath(nodes);
   _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId);
@@ -199,6 +202,13 @@ let _pipelineCriticalPath = null;   // Array<nodeId> — ordered critical path
 /** Highlight a single stage's critical path (or null to clear). */
 export function setPipelineCriticalPath(nodeIds) { _pipelineCriticalPath = nodeIds; }
 
+let _pipelineHazards = null;
+/**
+ * Set the list of pipeline hazards (or null to clear).
+ * @param {Array<{wireId,srcId,dstId,type}>|null} list
+ */
+export function setPipelineHazards(list) { _pipelineHazards = list; }
+
 function _drawCriticalPath(nodes) {
   const ids = _pipelineCriticalPath;
   if (!ids || ids.length < 2) return;
@@ -217,6 +227,39 @@ function _drawCriticalPath(nodes) {
     else       ctx.lineTo(n.x, n.y);
   }
   ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+const _HAZARD_COLOR = {
+  RAW:  '#ff9028',
+  WAR:  '#ffc840',
+  WAW:  '#ff5fb0',
+  LOOP: '#ff3030',
+};
+
+function _drawPipelineHazards(nodes, wires) {
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+  const wireById = new Map(wires.map(w => [w.id, w]));
+  ctx.save();
+  const t = (Date.now() / 400) % 2;
+  const alpha = 0.55 + 0.35 * Math.abs(1 - t);
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 5]);
+  for (const h of _pipelineHazards) {
+    const w = wireById.get(h.wireId);
+    if (!w) continue;
+    const s = nodeById.get(w.sourceId);
+    const d = nodeById.get(w.targetId);
+    if (!s || !d) continue;
+    ctx.strokeStyle = _HAZARD_COLOR[h.type] || '#ff9028';
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    for (const wp of (w.waypoints || [])) ctx.lineTo(wp.x, wp.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.stroke();
+  }
   ctx.setLineDash([]);
   ctx.restore();
 }

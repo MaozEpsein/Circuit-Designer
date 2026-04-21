@@ -3186,6 +3186,13 @@ const EXAMPLES = [
     file: 'examples/circuits/pipeline-demo-bad.json',
   },
   {
+    id: 'pipeline-demo-hazard',
+    title: 'Pipeline Demo — RAW Hazard (feedback)',
+    desc: 'Two-PIPE pipeline with a feedback arc from PIPE2 back to XOR. The Hazards section flags it as a RAW data hazard and suggests a forwarding mux or latching PIPE.',
+    tags: ['pipeline', 'hazard', 'RAW', 'feedback'],
+    file: 'examples/circuits/pipeline-demo-hazard.json',
+  },
+  {
     id: 'mips-gcd',
     title: 'MIPS Datapath — Euclid GCD',
     desc: 'Single-cycle CPU laid out in 5 MIPS stages (Fetch/Decode/Execute/Memory/WB). Runs Euclid\u2019s GCD algorithm: gcd(12,8). Watch R1 converge to 4, then HALT.',

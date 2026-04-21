@@ -1,0 +1,21 @@
+{
+  "nodes": [
+    { "type": "INPUT",     "x": -320, "y":    0, "fixedValue": 1, "label": "A",    "id": "in_a" },
+    { "type": "GATE_SLOT", "x": -120, "y":    0, "gate": "XOR",   "label": "XOR",  "id": "xor_1" },
+    { "type": "PIPE_REG",  "x":   80, "y":    0, "channels": 1,   "label": "PIPE1", "pipelineRole": "register", "stage": null, "id": "pipe_1" },
+    { "type": "GATE_SLOT", "x":  280, "y":    0, "gate": "NOT",   "label": "NOT",  "id": "not_1" },
+    { "type": "PIPE_REG",  "x":  480, "y":    0, "channels": 1,   "label": "PIPE2", "pipelineRole": "register", "stage": null, "id": "pipe_2" },
+    { "type": "OUTPUT",    "x":  680, "y":    0, "targetValue": 0, "label": "Q",   "sandbox": true, "id": "out_q" },
+    { "type": "CLOCK",     "x":   80, "y":  220, "value": 0, "id": "clk_1" }
+  ],
+  "wires": [
+    { "sourceId": "in_a",   "targetId": "xor_1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": false, "id": "w_1" },
+    { "sourceId": "xor_1",  "targetId": "pipe_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": false, "id": "w_2" },
+    { "sourceId": "clk_1",  "targetId": "pipe_1", "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": true,  "id": "w_3" },
+    { "sourceId": "pipe_1", "targetId": "not_1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": false, "id": "w_4" },
+    { "sourceId": "not_1",  "targetId": "pipe_2", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": false, "id": "w_5" },
+    { "sourceId": "clk_1",  "targetId": "pipe_2", "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": true,  "id": "w_6" },
+    { "sourceId": "pipe_2", "targetId": "out_q",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",         "colorGroup": null, "isClockWire": false, "id": "w_7" },
+    { "sourceId": "pipe_2", "targetId": "xor_1",  "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [{ "x": 480, "y": -120 }, { "x": -120, "y": -120 }], "netName": "feedback", "colorGroup": null, "isClockWire": false, "id": "w_raw" }
+  ]
+}

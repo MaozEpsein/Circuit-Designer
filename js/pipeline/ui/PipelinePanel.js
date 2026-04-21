@@ -4,7 +4,20 @@
  * Updates on 'pipeline:analyzed' events and debounced scene mutations.
  */
 import { bus } from '../../core/EventBus.js';
-import { setPipelineViolations, setPipelineCriticalPath } from '../../rendering/CanvasRenderer.js';
+import { setPipelineViolations, setPipelineCriticalPath, setPipelineHazards } from '../../rendering/CanvasRenderer.js';
+
+function _hazardSummary(hazards) {
+  const counts = { RAW: 0, WAR: 0, WAW: 0, LOOP: 0 };
+  for (const h of hazards) counts[h.type] = (counts[h.type] || 0) + 1;
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${n} ${t}`)
+    .join(', ');
+}
+
+function _esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 export class PipelinePanel {
   constructor(analyzer) {
@@ -52,13 +65,15 @@ export class PipelinePanel {
     this._el?.classList.add('hidden');
     document.getElementById('btn-pipeline-toggle')?.classList.remove('active');
     setPipelineCriticalPath(null);
+    setPipelineHazards(null);
   }
   toggle() { this._visible ? this.hide() : this.show(); }
 
   _render(r) {
     if (!this._body || !this._summary) return;
-    // Always push violations to the renderer (null when no data).
+    // Always push violations + hazards to the renderer (null when no data).
     setPipelineViolations(r?.violations?.length ? r.violations : null);
+    setPipelineHazards(r?.hazards?.length ? r.hazards : null);
     if (!r || r.cycles === 0) {
       this._summary.innerHTML = '';
       this._body.innerHTML = '<div class="pipe-empty">No pipeline detected.<br>Drop a PIPE register and wire it up.</div>';
@@ -75,6 +90,10 @@ export class PipelinePanel {
     const vioLine  = vioCount > 0
       ? `<span class="k">Violations</span><span class="v warn">⚠ ${vioCount} cross-stage wire${vioCount===1?'':'s'}</span>`
       : '';
+    const hzCount = r.hazards?.length ?? 0;
+    const hzLine  = hzCount > 0
+      ? `<span class="k">Hazards</span><span class="v warn">⚠ ${hzCount} (${_hazardSummary(r.hazards)})</span>`
+      : '';
     const unknown = r.unknownTypes ?? [];
     const unknownLine = unknown.length > 0
       ? `<span class="k">Unknown</span><span class="v warn" title="Types missing from DelayModel.js — add an entry or they'll use the 100 ps fallback">⚠ ${unknown.join(', ')}</span>`
@@ -86,6 +105,7 @@ export class PipelinePanel {
       <span class="k">Balance</span><span class="v">${(balance*100).toFixed(0)}%</span>
       ${warn ? `<span class="k">Warn</span><span class="v">${warn}</span>` : ''}
       ${vioLine}
+      ${hzLine}
       ${unknownLine}
     `;
 
@@ -122,6 +142,37 @@ export class PipelinePanel {
         `<div class="pipe-violations-header">VIOLATIONS (${r.violations.length})</div>${items}`);
 
       this._body.querySelectorAll('.pipe-violation-row').forEach(row => {
+        row.addEventListener('click', () => {
+          bus.emit('pipeline:jump-to-wire', {
+            srcId: row.dataset.src, dstId: row.dataset.dst, wireId: row.dataset.wire,
+          });
+        });
+      });
+    }
+
+    // Hazards section (after violations).
+    if (r.hazards && r.hazards.length) {
+      const labelOf = (id) => {
+        const n = this._analyzer._scene.getNode?.(id);
+        return n ? (n.label || n.id) : id;
+      };
+      const typeClass = { RAW: 'hz-raw', WAR: 'hz-war', WAW: 'hz-waw', LOOP: 'hz-loop' };
+      const items = r.hazards.map(h => {
+        const stages = (h.srcStage != null && h.dstStage != null)
+          ? `S${h.srcStage} \u2192 S${h.dstStage}`
+          : 'feedback';
+        return `
+          <div class="pipe-hazard-row" data-wire="${h.wireId}" data-src="${h.srcId}" data-dst="${h.dstId}" title="${_esc(h.suggestion)}">
+            <span class="pipe-hz-type ${typeClass[h.type] || ''}">${h.type}</span>
+            <span class="pvi-stages">${stages}</span>
+            <span class="pvi-names">${_esc(labelOf(h.srcId))} \u2192 ${_esc(labelOf(h.dstId))}</span>
+          </div>
+          <div class="pipe-hazard-fix">\u2937 ${_esc(h.suggestion)}</div>`;
+      }).join('');
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-hazards-header">HAZARDS (${r.hazards.length})</div>${items}`);
+
+      this._body.querySelectorAll('.pipe-hazard-row').forEach(row => {
         row.addEventListener('click', () => {
           bus.emit('pipeline:jump-to-wire', {
             srcId: row.dataset.src, dstId: row.dataset.dst, wireId: row.dataset.wire,

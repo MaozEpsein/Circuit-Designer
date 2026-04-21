@@ -5,6 +5,7 @@
  */
 import { bus } from '../core/EventBus.js';
 import { evaluate } from './StageEvaluator.js';
+import { detectHazards } from './HazardDetector.js';
 
 export class PipelineAnalyzer {
   constructor(scene) {
@@ -25,6 +26,7 @@ export class PipelineAnalyzer {
   analyze({ force = false } = {}) {
     if (!force && !this._dirty && this._cache) return this._cache;
     this._cache = evaluate(this._scene);
+    this._cache.hazards = detectHazards(this._scene);
     this._dirty = false;
     // Warn once per unknown type — prompts the designer to update DelayModel.js.
     for (const t of (this._cache.unknownTypes || [])) {

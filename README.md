@@ -784,13 +784,12 @@ Every phase ends with a commit — message format `pipeline(phase-N): <short sum
 
 ### Phase 9 — Hazard Detection
 **Goal**: detect RAW / WAR / WAW across stages with feedback.
-- [ ] Analyze back-edges where a later stage writes a node read earlier.
-- [ ] Report: hazard type, source stage, sink stage, offending signal.
-- [ ] Suggestion engine: *"insert forwarding mux here"* or *"insert PIPE to match stages."*
-- [ ] Panel tab **"Hazards"**.
-- **Example update**: add a feedback arc to `pipeline-demo.json` that creates a RAW hazard; panel flags it and proposes a forwarding mux — screenshot saved.
-- **Verify L1** — unit: classic 5-stage RISC hazards.
-- **Verify L2** — manual: construct hazard, confirm report + placement suggestion.
+- [x] Analyze back-edges where a later stage writes a node read earlier. (`js/pipeline/HazardDetector.js` — iterative DFS with gray/black coloring; back-edge = data-wire `u → v` where `v` is already on the ancestor stack. Also WAW pass on the forward DAG: two stateful writers into the same `(target, inputIndex)`.)
+- [x] Report: hazard type, source stage, sink stage, offending signal. (Each hazard record carries `type ∈ {RAW, WAR, WAW, LOOP}`, `wireId`, `srcId/dstId`, `srcStage/dstStage`, `cyclePath`.)
+- [x] Suggestion engine: *"insert forwarding mux here"* or *"insert PIPE to match stages."* (Per-type suggestion strings attached to each hazard and shown under the row in the panel.)
+- [x] Panel tab **"Hazards"**. (Summary line in the header + dedicated `HAZARDS (N)` section below Violations, with colored RAW/WAR/WAW/LOOP badges, stage arrow, clickable rows that `pipeline:jump-to-wire`, and inline fix suggestion. Hazard wires drawn on canvas as pulsing orange/magenta dashes, color-keyed by hazard type.)
+- **Example update**: `examples/circuits/pipeline-demo-hazard.json` — 2-PIPE forward path + feedback arc from PIPE2 back to XOR (stage-0 reader) → classic RAW flagged on load. Registered in the Examples menu as *Pipeline Demo — RAW Hazard*.
+- **Tests**: `examples/tests/test-pipeline-phase9.mjs` — 14 checks across the hazard demo (RAW on `w_raw`), a synthetic 2-NOT combinational loop (LOOP), a WAW collision (two PIPEs → same XOR pin), and the clean demos (no false positives).
 
 ### Phase 10 — Auto-Retime (Leiserson–Saxe)
 **Goal**: optionally move `PIPE_REG`s to balance stages while preserving semantics.
