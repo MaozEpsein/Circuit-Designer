@@ -1684,6 +1684,122 @@
   border-radius: 2px;
 }
 
+/* ── Retime Suggestion Banner (top, prominent) ────────────── */
+#retime-banner {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #0d1820 0%, #0a0e14 100%);
+  border: 2px solid #5a8a3d;
+  border-radius: 10px;
+  padding: 18px 26px;
+  min-width: 560px;
+  max-width: 860px;
+  z-index: 400;
+  font-family: 'JetBrains Mono', monospace;
+  color: #c0f0a0;
+  box-shadow: 0 6px 28px rgba(0,255,120,0.22), 0 0 0 4px rgba(90,138,61,0.12);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: 'title actions' 'body actions';
+  gap: 8px 24px;
+}
+#retime-banner.hidden { display: none; }
+#retime-banner-title {
+  grid-area: title;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #8ad44a;
+}
+#retime-banner-body {
+  grid-area: body;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #cfe6f0;
+}
+#retime-banner-body .r-desc   { color: #fff; font-weight: bold; font-size: 18px; margin-bottom: 6px; letter-spacing: 0.3px; }
+#retime-banner-body .r-metric { color: #8ad44a; font-weight: bold; }
+#retime-banner-body .r-before { color: #ff8080; text-decoration: line-through; }
+#retime-banner-body .r-arrow  { color: #8fd4ff; margin: 0 6px; font-weight: bold; }
+#retime-banner-actions {
+  grid-area: actions;
+  align-self: center;
+  display: flex;
+  gap: 10px;
+}
+#retime-banner-actions button {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 10px 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  letter-spacing: 0.8px;
+}
+#btn-retime-accept {
+  background: #1a3a10;
+  border: 1px solid #5a8a3d;
+  color: #c0f0a0;
+}
+#btn-retime-accept:hover { background: #2a5a20; box-shadow: 0 0 10px rgba(90,138,61,0.5); }
+#btn-retime-reject {
+  background: #2a1010;
+  border: 1px solid #5a3030;
+  color: #f0a0a0;
+}
+#btn-retime-reject:hover { background: #3a1818; }
+
+/* ── Retime Applied Banner (bottom, success) ───────────────── */
+#retime-applied-banner {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: linear-gradient(180deg, #1a3a10 0%, #122a08 100%);
+  border: 2px solid #8ad44a;
+  border-radius: 10px;
+  padding: 18px 32px;
+  min-width: 480px;
+  z-index: 600;
+  font-family: 'JetBrains Mono', monospace;
+  box-shadow: 0 6px 30px rgba(138,212,74,0.35), 0 0 0 5px rgba(138,212,74,0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+#retime-applied-banner.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#retime-applied-banner .r-text {
+  font-size: 17px;
+  color: #e8ffd0;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+}
+#retime-applied-banner .r-text .r-hint {
+  display: block;
+  font-size: 13px;
+  color: #8ad44a;
+  font-weight: normal;
+  margin-top: 3px;
+  letter-spacing: 0.5px;
+}
+#retime-applied-banner.failed {
+  background: linear-gradient(180deg, #3a1010 0%, #2a0808 100%);
+  border-color: #d47070;
+  box-shadow: 0 6px 30px rgba(212,80,80,0.35), 0 0 0 5px rgba(212,80,80,0.1);
+}
+#retime-applied-banner.failed .r-text   { color: #ffd0d0; }
+#retime-applied-banner.failed .r-hint   { color: #ff8080; }
+
 /* ── Examples Modal ──────────────────────────────────────── */
 #examples-overlay {
   position: fixed;

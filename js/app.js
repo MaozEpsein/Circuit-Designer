@@ -30,6 +30,10 @@ import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
 import { PipelinePanel } from './pipeline/ui/PipelinePanel.js';
 import { StageOverlay } from './pipeline/ui/StageOverlay.js';
+import { suggestRetime } from './pipeline/Retimer.js';
+import { RetimeCommand } from './pipeline/commands/RetimeCommand.js';
+import { verifyRetiming } from './pipeline/RetimeVerifier.js';
+import { setRetimePreview } from './rendering/CanvasRenderer.js';
 
 // ── Singletons ──────────────────────────────────────────────
 const scene    = new SceneGraph();
@@ -2093,6 +2097,7 @@ bus.on('palette:action', (action) => {
     case 'toggle-pipeline-panel': pipelinePanel.toggle(); break;
     case 'insert-stall': _insertPipeControl('stall'); break;
     case 'insert-flush': _insertPipeControl('flush'); break;
+    case 'suggest-retime': _showRetimeSuggestion(); break;
   }
 });
 bus.on('palette:select-node', (nodeId) => {
@@ -2450,6 +2455,122 @@ function _insertPipeControl(kind) {
 document.getElementById('btn-prop-add-stall')?.addEventListener('click', () => _insertPipeControl('stall'));
 document.getElementById('btn-prop-add-flush')?.addEventListener('click', () => _insertPipeControl('flush'));
 bus.on('nav:meminspector', _toggleMemInspector);
+
+// ── Retime Suggestion (Phase 10b) ───────────────────────────
+// The palette command fires this. We pull a single best move from the
+// greedy retimer, render a preview on the canvas (red dashed = wires to
+// remove, green dashed = wires to add), and show a banner with the
+// metric delta + Accept / Reject. Accept applies a `RetimeCommand` so
+// the change is one atomic undo step.
+let _pendingRetime = null;
+const _retimeBanner     = () => document.getElementById('retime-banner');
+const _retimeBannerBody = () => document.getElementById('retime-banner-body');
+
+function _showRetimeSuggestion() {
+  _clearRetimePreview();
+  const proposal = suggestRetime({ nodes: scene.nodes, wires: scene.wires });
+  if (!proposal) {
+    _showRomNotification('Pipeline already balanced — no retime suggestion.');
+    return;
+  }
+  _pendingRetime = proposal;
+  setRetimePreview({
+    removeWireIds: new Set(proposal.wireEdits.remove),
+    addWires:      proposal.wireEdits.add,
+    nodeEdits:     proposal.nodeEdits || [],
+  });
+  const body = _retimeBannerBody();
+  if (body) {
+    body.innerHTML = `
+      <div class="r-desc">${proposal.description}</div>
+      <div>
+        Max stage delay:
+        <span class="r-before">${proposal.before.maxDelayPs} ps</span>
+        <span class="r-arrow">\u2192</span>
+        <span class="r-metric">${proposal.after.maxDelayPs} ps</span>
+        &nbsp;(\u2212${proposal.improvementPs} ps)
+      </div>`;
+  }
+  _retimeBanner()?.classList.remove('hidden');
+}
+
+function _clearRetimePreview() {
+  _pendingRetime = null;
+  setRetimePreview(null);
+  _retimeBanner()?.classList.add('hidden');
+}
+
+document.getElementById('btn-retime-accept')?.addEventListener('click', () => {
+  if (!_pendingRetime) return;
+  const proposal = _pendingRetime;
+
+  // Differential simulation: drive both (pre-move) and (post-move) scenes with
+  // identical random inputs for a handful of vectors and confirm every OUTPUT
+  // matches cycle-by-cycle. If the retime secretly broke semantics, we refuse
+  // to commit and surface the divergence.
+  const beforeSnap = {
+    nodes: scene.nodes.map(n => ({ ...n })),
+    wires: scene.wires.map(w => ({ ...w })),
+  };
+  const removed = new Set(proposal.wireEdits.remove);
+  const posMap  = new Map((proposal.nodeEdits || []).map(e => [e.nodeId, e]));
+  const afterSnap = {
+    nodes: scene.nodes.map(n => {
+      const e = posMap.get(n.id);
+      return e ? { ...n, x: e.newX, y: e.newY } : { ...n };
+    }),
+    wires: scene.wires.filter(w => !removed.has(w.id))
+      .map(w => ({ ...w }))
+      .concat(proposal.wireEdits.add.map(w => ({ ...w }))),
+  };
+
+  const check = verifyRetiming(beforeSnap, afterSnap);
+  if (!check.ok) {
+    _clearRetimePreview();
+    _showRetimeFailed(check.reason || 'simulation diff failed');
+    return;
+  }
+
+  commands.execute(new RetimeCommand(scene, proposal));
+  const imp   = proposal.improvementPs;
+  const after = proposal.after.maxDelayPs;
+  const b     = check.budget || {};
+  const vMsg  = b.runCycles
+    ? `${b.vectorCount}\u00A0vectors \u00D7 ${b.runCycles}\u00A0cycles`
+    : '6 random vectors';
+  _clearRetimePreview();
+  _showRetimeApplied(`Pipeline balanced — every stage now ${after} ps (\u2212${imp} ps). Verified on ${vMsg}.`);
+});
+
+// Prominent success banner shown bottom-center after a retime is applied.
+// Auto-fades after 4 seconds; click-through is disabled so it never blocks
+// the canvas.
+let _retimeAppliedTimer = null;
+function _showRetimeApplied(msg) {
+  const el  = document.getElementById('retime-applied-banner');
+  const txt = document.getElementById('retime-applied-msg');
+  if (!el || !txt) return;
+  txt.classList.remove('failed');
+  txt.textContent = msg;
+  el.classList.remove('failed');
+  el.classList.add('visible');
+  if (_retimeAppliedTimer) clearTimeout(_retimeAppliedTimer);
+  _retimeAppliedTimer = setTimeout(() => el.classList.remove('visible'), 4000);
+}
+
+/** Fail variant — reused DOM, red styling, no commit landed. */
+function _showRetimeFailed(reason) {
+  const el  = document.getElementById('retime-applied-banner');
+  const txt = document.getElementById('retime-applied-msg');
+  if (!el || !txt) return;
+  txt.textContent = `Retime reverted \u2014 ${reason}`;
+  el.classList.add('failed');
+  el.classList.add('visible');
+  if (_retimeAppliedTimer) clearTimeout(_retimeAppliedTimer);
+  _retimeAppliedTimer = setTimeout(() => el.classList.remove('visible'), 6000);
+}
+document.getElementById('btn-retime-reject')?.addEventListener('click', _clearRetimePreview);
+document.getElementById('btn-pipeline-retime')?.addEventListener('click', _showRetimeSuggestion);
 
 // Bind shortcut from Command Palette (Ctrl+Enter)
 bus.on('shortcut:bind', ({ actionId, keyStr, label }) => {
@@ -3215,6 +3336,13 @@ const EXAMPLES = [
     desc: 'Textbook 9-instruction sequence producing 8 distinct hazards: fan-out of ADD R1 feeding SUB/AND/OR/XOR (4 RAW on R1 with decreasing bubble counts), a chained RAW on R4, then a LOAD followed by two consumers (LOAD-USE + RAW on R11), and a final RAW on R13 between ADD and SUB. Open the Pipeline panel to see every dependency labeled with the exact instruction and required bubble count.',
     tags: ['pipeline', 'program', 'RAW', 'load-use', 'chain', 'fan-out'],
     file: 'examples/circuits/pipeline-demo-program-rich.json',
+  },
+  {
+    id: 'pipeline-demo-retime',
+    title: 'Pipeline Demo — Imbalanced 3-stage (for retiming)',
+    desc: '3-stage pipeline with 6 inverters arranged as 3 / 1 / 2 across two PIPE_REGs. Pipeline panel reports stage delays of 150 / 50 / 100 ps — Balance 33%, Bottleneck S0. The Phase 10a engine pinpoints the right move (pull PIPE1 backward across INV3) that rebalances every stage to exactly 100 ps, raising f_max by 50%. The UI button for applying the suggestion lands in Phase 10b.',
+    tags: ['pipeline', 'retime', 'imbalanced', 'PIPE'],
+    file: 'examples/circuits/pipeline-demo-retime.json',
   },
   {
     id: 'pipeline-demo-program-all',

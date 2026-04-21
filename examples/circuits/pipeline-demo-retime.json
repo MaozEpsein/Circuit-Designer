@@ -1,0 +1,28 @@
+{
+  "nodes": [
+    { "type": "INPUT",     "x": -600, "y": 0, "fixedValue": 1, "label": "A",     "id": "a"    },
+    { "type": "GATE_SLOT", "x": -480, "y": 0, "gate": "NOT",   "label": "INV1",  "id": "n1"   },
+    { "type": "GATE_SLOT", "x": -360, "y": 0, "gate": "NOT",   "label": "INV2",  "id": "n2"   },
+    { "type": "GATE_SLOT", "x": -240, "y": 0, "gate": "NOT",   "label": "INV3",  "id": "n3"   },
+    { "type": "PIPE_REG",  "x": -120, "y": 0, "channels": 1, "pipelineRole": "register", "stage": null, "label": "PIPE1", "id": "p1"   },
+    { "type": "GATE_SLOT", "x":    0, "y": 0, "gate": "NOT",   "label": "INV4",  "id": "n4"   },
+    { "type": "PIPE_REG",  "x":  120, "y": 0, "channels": 1, "pipelineRole": "register", "stage": null, "label": "PIPE2", "id": "p2"   },
+    { "type": "GATE_SLOT", "x":  240, "y": 0, "gate": "NOT",   "label": "INV5",  "id": "n5"   },
+    { "type": "GATE_SLOT", "x":  360, "y": 0, "gate": "NOT",   "label": "INV6",  "id": "n6"   },
+    { "type": "OUTPUT",    "x":  480, "y": 0, "targetValue": 0, "sandbox": true, "label": "Q", "id": "q"    },
+    { "type": "CLOCK",     "x":    0, "y": 200, "value": 0, "id": "clk" }
+  ],
+  "wires": [
+    { "id": "w1",  "sourceId": "a",   "targetId": "n1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w2",  "sourceId": "n1",  "targetId": "n2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w3",  "sourceId": "n2",  "targetId": "n3",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w4",  "sourceId": "n3",  "targetId": "p1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w5",  "sourceId": "clk", "targetId": "p1",  "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true  },
+    { "id": "w6",  "sourceId": "p1",  "targetId": "n4",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w7",  "sourceId": "n4",  "targetId": "p2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w8",  "sourceId": "clk", "targetId": "p2",  "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true  },
+    { "id": "w9",  "sourceId": "p2",  "targetId": "n5",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w10", "sourceId": "n5",  "targetId": "n6",  "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "w11", "sourceId": "n6",  "targetId": "q",   "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false }
+  ]
+}

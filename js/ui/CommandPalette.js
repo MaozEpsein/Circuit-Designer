@@ -155,6 +155,7 @@ export class CommandPalette {
       { id: 'action-pipeline-panel', label: 'Toggle Pipeline Panel', category: 'Pipeline', action: () => bus.emit('palette:action', 'toggle-pipeline-panel') },
       { id: 'action-insert-stall', label: 'Insert Stall Input → Selected PIPE', category: 'Pipeline', action: () => bus.emit('palette:action', 'insert-stall') },
       { id: 'action-insert-flush', label: 'Insert Flush Input → Selected PIPE', category: 'Pipeline', action: () => bus.emit('palette:action', 'insert-flush') },
+      { id: 'action-suggest-retime', label: 'Suggest Retiming', category: 'Pipeline', action: () => bus.emit('palette:action', 'suggest-retime') },
     ];
 
     this._items = [...tools, ...components, ...actions];

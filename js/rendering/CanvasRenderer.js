@@ -129,6 +129,8 @@ export function render(nodes, wires, nodeValues, wireValues, ffStates, hoveredNo
   // Pipeline hazard strokes (orange, drawn above violations so a wire
   // flagged as both still reads as a hazard).
   if (_pipelineHazards?.length) _drawPipelineHazards(nodes, wires);
+  // Retime preview — ghost overlay for a proposed PIPE relocation.
+  if (_retimePreview) _drawRetimePreview(nodes, wires);
   // Pipeline critical path (yellow dashed, sits above wires).
   if (_pipelineCriticalPath?.length) _drawCriticalPath(nodes);
   _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId);
@@ -209,6 +211,14 @@ let _pipelineHazards = null;
  */
 export function setPipelineHazards(list) { _pipelineHazards = list; }
 
+let _retimePreview = null;     // { removeWireIds:Set<string>, addWires:Array<Wire> } | null
+/**
+ * Show a retime-proposal preview overlay. Removed wires are drawn in red
+ * dashed, added wires in green dashed. Pass null to clear.
+ * @param {object|null} preview
+ */
+export function setRetimePreview(preview) { _retimePreview = preview; }
+
 function _drawCriticalPath(nodes) {
   const ids = _pipelineCriticalPath;
   if (!ids || ids.length < 2) return;
@@ -259,6 +269,80 @@ function _drawPipelineHazards(nodes, wires) {
     for (const wp of (w.waypoints || [])) ctx.lineTo(wp.x, wp.y);
     ctx.lineTo(d.x, d.y);
     ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function _drawRetimePreview(nodes, wires) {
+  const p = _retimePreview;
+  const wireById = new Map(wires.map(w => [w.id, w]));
+  // Project positions: for the preview, nodes in `nodeEdits` get shown at
+  // their post-move location so the user sees the final layout.
+  const currentPos = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+  const projectedPos = new Map(currentPos);
+  for (const e of (p.nodeEdits || [])) {
+    projectedPos.set(e.nodeId, { x: e.newX, y: e.newY });
+  }
+
+  ctx.save();
+  const t = (Date.now() / 350) % 2;
+  const alpha = 0.55 + 0.3 * Math.abs(1 - t);
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 6]);
+
+  // Wires being removed — red. Drawn between CURRENT positions so the user
+  // sees where those wires are right now.
+  ctx.strokeStyle = '#ff5050';
+  for (const wid of (p.removeWireIds || [])) {
+    const w = wireById.get(wid);
+    if (!w) continue;
+    const s = currentPos.get(w.sourceId);
+    const d = currentPos.get(w.targetId);
+    if (!s || !d) continue;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    for (const wp of (w.waypoints || [])) ctx.lineTo(wp.x, wp.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.stroke();
+  }
+
+  // Wires being added — green. Drawn between PROJECTED positions so the
+  // ghost wires match how the schematic will look after the move lands.
+  ctx.strokeStyle = '#50ff80';
+  for (const w of (p.addWires || [])) {
+    const s = projectedPos.get(w.sourceId);
+    const d = projectedPos.get(w.targetId);
+    if (!s || !d) continue;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Arrow markers from each node's CURRENT spot to its PROJECTED spot.
+  // Cyan dashed arrow — shows "this node moves from here to there".
+  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = '#8fd4ff';
+  ctx.fillStyle   = '#8fd4ff';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  for (const e of (p.nodeEdits || [])) {
+    const from = currentPos.get(e.nodeId);
+    if (!from) continue;
+    if (from.x === e.newX && from.y === e.newY) continue;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(e.newX, e.newY);
+    ctx.stroke();
+    // Destination marker: small filled ring at the target.
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(e.newX, e.newY, 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([5, 4]);
   }
   ctx.setLineDash([]);
   ctx.restore();

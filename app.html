@@ -376,6 +376,7 @@
       <span>PIPELINE</span>
       <div>
         <button id="btn-stageview-toggle" class="btn-secondary" style="font-size:9px" title="Toggle Stage View — colour nodes by pipeline stage">STAGES</button>
+        <button id="btn-pipeline-retime" class="btn-secondary" style="font-size:9px" title="Suggest Retiming — balance pipeline stages by moving a PIPE_REG">RETIME</button>
         <button id="btn-pipeline-refresh" class="btn-secondary" style="font-size:9px" title="Re-analyze now">REFRESH</button>
         <button id="btn-pipeline-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
       </div>
@@ -528,6 +529,24 @@
         <select id="rom-builder-rs2"></select>
         <button id="btn-rom-insert" style="font-size:9px;padding:2px 8px;background:#1a1430;border:1px solid #5a3d8a;color:#c0a0f0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">INSERT</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Retime Suggestion Banner -->
+  <div id="retime-banner" class="hidden">
+    <div id="retime-banner-title">RETIME SUGGESTION</div>
+    <div id="retime-banner-body"></div>
+    <div id="retime-banner-actions">
+      <button id="btn-retime-reject" class="btn-secondary">Reject</button>
+      <button id="btn-retime-accept">Accept</button>
+    </div>
+  </div>
+
+  <!-- Retime Applied Success Banner -->
+  <div id="retime-applied-banner">
+    <div class="r-text">
+      <span id="retime-applied-msg">Pipeline balanced.</span>
+      <span class="r-hint">Press Ctrl+Z to undo</span>
     </div>
   </div>
 
