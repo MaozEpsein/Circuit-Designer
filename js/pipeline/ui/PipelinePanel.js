@@ -40,6 +40,15 @@ export class PipelinePanel {
     this._summary  = document.getElementById('pipeline-panel-summary');
     this._visible  = false;
     this._refreshTimer = null;
+    // Session-only preference (Phase 14c): when true, Program-Hazard rows
+    // that the analyzer already marked `resolvedByForwarding` are filtered
+    // out. Toggled via the Command Palette — intentionally not persisted
+    // across sessions to keep the change scope small.
+    this._hideResolved = false;
+    bus.on('pipeline:toggle-hide-resolved', () => {
+      this._hideResolved = !this._hideResolved;
+      if (this._visible) this._render(this._analyzer.analyze());
+    });
 
     document.getElementById('btn-pipeline-toggle')?.addEventListener('click', () => this.toggle());
     document.getElementById('btn-pipeline-close')?.addEventListener('click', () => this.hide());
@@ -208,10 +217,19 @@ export class PipelinePanel {
       const pcHex   = (pc) => '0x' + pc.toString(16).toUpperCase().padStart(2, '0');
       const byPc    = new Map((r.instructions || []).map(ins => [ins.pc, ins]));
       const typeCls = { RAW: 'hz-raw', WAR: 'hz-war', WAW: 'hz-waw' };
-      const items = r.programHazards.map(h => {
+      const fwdById = new Map((r.forwardingPaths || []).map(p => [p.id, p]));
+      const visible = this._hideResolved
+        ? r.programHazards.filter(h => !h.resolvedByForwarding)
+        : r.programHazards;
+      const resolvedCount = r.programHazards.filter(h => h.resolvedByForwarding).length;
+      const items = visible.map(h => {
         const loadUseTag = h.loadUse ? '<span class="pipe-hz-type hz-loaduse">LOAD-USE</span>' : '';
         let bubbleTxt;
-        if (h.type === 'RAW') {
+        if (h.resolvedByForwarding) {
+          const fwd = fwdById.get(h.forwardingPathId);
+          const lbl = fwd?.fromStage || 'forwarding';
+          bubbleTxt = `<span class="pipe-prog-bubbles ok pipe-prog-resolved" title="Resolved by ${_esc(lbl)} forwarding (${_esc(h.forwardingPathId || '')})">✓ ${_esc(lbl)}</span>`;
+        } else if (h.type === 'RAW') {
           bubbleTxt = h.bubbles > 0
             ? `<span class="pipe-prog-bubbles">${h.bubbles} bubble${h.bubbles===1?'':'s'}</span>`
             : '<span class="pipe-prog-bubbles ok">0 bubbles</span>';
@@ -220,8 +238,9 @@ export class PipelinePanel {
         }
         const srcTxt = _esc(disassemble(byPc.get(h.instI)) || h.nameI);
         const dstTxt = _esc(disassemble(byPc.get(h.instJ)) || h.nameJ);
+        const rowCls = h.resolvedByForwarding ? 'pipe-prog-row resolved' : 'pipe-prog-row';
         return `
-          <div class="pipe-prog-row">
+          <div class="${rowCls}">
             <span class="pipe-hz-type ${typeCls[h.type] || ''}">${h.type}</span>${loadUseTag}
             <span class="pipe-prog-names">
               <span class="pipe-prog-pc">${pcHex(h.instI)}</span> ${srcTxt}
@@ -232,11 +251,32 @@ export class PipelinePanel {
             ${bubbleTxt}
           </div>`;
       }).join('');
+      const hiddenNote = (this._hideResolved && resolvedCount > 0)
+        ? ` <span class="pipe-prog-hidden" title="Toggle Hide Resolved Hazards via Command Palette">${resolvedCount} hidden</span>`
+        : (resolvedCount > 0
+            ? ` <span class="pipe-prog-resolved-note">${resolvedCount} ✓ resolved</span>`
+            : '');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-prog-header">PROGRAM HAZARDS (${r.programHazards.length} \u2014 ${_progTypeSummary(r.programHazards)})</div>${items}`);
+        `<div class="pipe-prog-header">PROGRAM HAZARDS (${r.programHazards.length} \u2014 ${_progTypeSummary(r.programHazards)})${hiddenNote}</div>${items}`);
     } else if (r.hasProgram) {
       this._body.insertAdjacentHTML('beforeend',
         `<div class="pipe-prog-header">PROGRAM HAZARDS (0)</div><div class="pipe-prog-clean">No inter-instruction hazards detected over ${r.instructions.length} instruction${r.instructions.length===1?'':'s'}.</div>`);
+    }
+
+    // Forwarding Paths section (Phase 14c) — one row per detected bypass.
+    if (r.forwardingPaths && r.forwardingPaths.length) {
+      const labelOf = (id) => {
+        const n = this._analyzer._scene.getNode?.(id);
+        return n ? (n.label || n.id) : id;
+      };
+      const items = r.forwardingPaths.map(p => `
+        <div class="pipe-forward-row" data-mux="${_esc(p.muxId)}">
+          <span class="pipe-forward-path">${_esc(p.fromStage || 'FWD')}</span>
+          <span class="pipe-forward-reg">${_esc(p.register)}</span>
+          <span class="pipe-forward-names">${_esc(labelOf(p.srcNodeId))} → ${_esc(labelOf(p.muxId))} → ${_esc(labelOf(p.aluNodeId))}</span>
+        </div>`).join('');
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-forwards-header">FORWARDING PATHS (${r.forwardingPaths.length})</div>${items}`);
     }
 
     // Row clicks emit a highlight event — the StageOverlay controller listens,

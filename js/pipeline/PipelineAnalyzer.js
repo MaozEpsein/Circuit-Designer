@@ -8,6 +8,9 @@ import { evaluate } from './StageEvaluator.js';
 import { detectHazards } from './HazardDetector.js';
 import { decodeROM, findRomNode } from './InstructionDecoder.js';
 import { detectProgramHazards } from './ProgramHazardDetector.js';
+import { inferIsa } from './isa/IsaInference.js';
+import { DEFAULT_ISA } from './isa/default.js';
+import { detectForwardingPaths } from './ForwardingDetector.js';
 
 export class PipelineAnalyzer {
   constructor(scene) {
@@ -36,10 +39,24 @@ export class PipelineAnalyzer {
     this._cache.hazards = detectHazards(this._scene);
     // Program-level hazards — only meaningful if the scene has a ROM carrying
     // a decoded instruction stream. Absent ROM → empty list, no UI section.
+    // Phase 14a: ISA is inferred from the scene's CU+IR rather than hard-coded,
+    // falling back to DEFAULT_ISA for SUB_CIRCUIT CUs or scenes missing CU/IR.
     const rom = findRomNode(this._scene);
-    this._cache.instructions    = rom ? decodeROM(rom) : [];
-    this._cache.programHazards  = detectProgramHazards(this._cache.instructions);
+    const isa = inferIsa(this._scene) || DEFAULT_ISA;
+    this._cache.isa             = isa;
+    this._cache.instructions    = rom ? decodeROM(rom, isa) : [];
+    this._cache.programHazards  = detectProgramHazards(this._cache.instructions, isa);
     this._cache.hasProgram      = this._cache.instructions.length > 0;
+
+    // Phase 14b: forwarding detection runs on the same scene. When a RAW
+    // program hazard has a matching forwarding path, we mark it resolved and
+    // zero its bubble count — load-use is specifically never resolvable by
+    // forwarding alone (the loaded value doesn't exist at EX time).
+    const fwd = detectForwardingPaths(this._scene);
+    this._cache.forwardingPaths    = fwd.paths;
+    this._cache.forwardingWarnings = fwd.warnings;
+    _annotateHazardsWithForwarding(this._cache.programHazards, fwd.paths);
+
     this._dirty = false;
     // Warn once per unknown type — prompts the designer to update DelayModel.js.
     for (const t of (this._cache.unknownTypes || [])) {
@@ -53,4 +70,33 @@ export class PipelineAnalyzer {
   }
 
   invalidate() { this._dirty = true; }
+}
+
+/**
+ * Stamp `resolvedByForwarding` + `forwardingPathId` on each RAW hazard. The
+ * MVP rule: *any* detected forwarding path that targets EX resolves *any*
+ * non-load-use RAW. This is deliberately coarse — validating that the
+ * specific path covers the exact (instI, instJ, register) triple is Tier 14d.
+ * Load-use (producer is a LOAD at j-i=1) is never flipped: the loaded value
+ * doesn't exist at EX time, so forwarding from the MEM stage is too late.
+ */
+function _annotateHazardsWithForwarding(hazards, paths) {
+  if (!Array.isArray(hazards)) return;
+  const hasExForwarding = paths.some(p => p.toStage === 'EX');
+  for (const h of hazards) {
+    if (h.type !== 'RAW' || h.loadUse) {
+      h.resolvedByForwarding = false;
+      h.forwardingPathId     = null;
+      continue;
+    }
+    if (hasExForwarding) {
+      const match = paths.find(p => p.toStage === 'EX');
+      h.resolvedByForwarding = true;
+      h.forwardingPathId     = match.id;
+      h.bubbles              = 0;
+    } else {
+      h.resolvedByForwarding = false;
+      h.forwardingPathId     = null;
+    }
+  }
 }

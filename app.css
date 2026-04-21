@@ -979,6 +979,39 @@
 .pipe-prog-bubbles.info { color: #7088a0; font-style: normal; font-size: 0.82em; }
 .pipe-prog-clean   { padding: 0.8em 1.2em; color: #6a9a70; font-size: 0.92em; font-style: italic; }
 
+/* Phase 14c: resolved-by-forwarding styling. */
+.pipe-prog-row.resolved { opacity: 0.62; }
+.pipe-prog-row.resolved .pipe-prog-reg { background: #081a10; color: #6a9a70; border-color: #103020; }
+.pipe-prog-bubbles.pipe-prog-resolved { color: #6adf9a; font-weight: 500; font-style: normal; background: #081a12; border-radius: 3px; padding: 1px 6px; }
+.pipe-prog-resolved-note { color: #6adf9a; font-size: 0.78em; font-weight: normal; letter-spacing: 0; margin-left: 6px; }
+.pipe-prog-hidden { color: #b090ff; font-size: 0.78em; font-weight: normal; letter-spacing: 0; margin-left: 6px; font-style: italic; }
+
+/* Phase 14c: Forwarding Paths section, styled like the hazards/program-hazards sections. */
+.pipe-forwards-header {
+  margin-top: 0.6em;
+  padding: 0.5em 1.2em;
+  font-weight: bold;
+  color: #6adf9a;
+  border-top: 1px solid #0a2018;
+  border-bottom: 1px solid #0a2018;
+  background: #06120e;
+  font-size: 0.95em;
+  letter-spacing: 1px;
+}
+.pipe-forward-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.5em 1.2em;
+  border-bottom: 1px solid #081a12;
+  font-size: 0.92em;
+  color: #c0e8cc;
+}
+.pipe-forward-path { color: #6adf9a; font-weight: bold; font-size: 0.88em; padding: 1px 8px; border-radius: 3px; background: #081a12; border: 1px solid #103020; letter-spacing: 0.5px; }
+.pipe-forward-reg  { color: #ffa028; font-weight: bold; font-size: 0.88em; padding: 1px 6px; border-radius: 3px; background: #2a1a08; border: 1px solid #4a3010; }
+.pipe-forward-names { color: #cfe6f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 0.90em; }
+
 .mem-row {
   display: flex;
   align-items: center;

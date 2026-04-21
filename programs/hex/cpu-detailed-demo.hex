@@ -1,22 +1,22 @@
-; 20-instruction demo for cpu-detailed.json (see ../asm/cpu-detailed-demo.asm)
-; Layout: [op:4 | rd:3 | rs1:3 | rs2:6]  (engine IR decoding, MSB-first)
+; 20-instruction demo for cpu-detailed.json (see ../asm/cpu-detailed-demo.asm).
+; Encoded per CIRCUIT_DETAILS.md bit layout.
 7205  ; 00: ADDI R1, R0, 5
 7801  ; 01: ADDI R4, R0, 1
 7600  ; 02: ADDI R3, R0, 0
 7400  ; 03: ADDI R2, R0, 0
-16C4  ; 04: ADD  R3, R3, R4
-1483  ; 05: ADD  R2, R2, R3
-90C2  ; 06: SW   R2, R3, 2
-68C1  ; 07: BNE  R3, R1, 4
-8805  ; 08: LW   R5, R0, 5
-8C07  ; 09: LW   R6, R0, 7
+16E0  ; 04: ADD  R3, R3, R4
+1498  ; 05: ADD  R2, R2, R3
+94C0  ; 06: SW   R2, R3, 0      (rs2=R2 at [11:9], rs1=R3 at [8:6], imm=0)
+667C  ; 07: BNE  R3, R1, -4     (rs1=R3 at [11:9], rs2=R1 at [8:6], offset=111100)
+8A40  ; 08: LW   R5, R1, 0
+8D00  ; 09: LW   R6, R4, 0
 8E03  ; 0A: LW   R7, R0, 3
-2B87  ; 0B: SUB  R5, R6, R7
-2B44  ; 0C: SUB  R5, R5, R4
-7D83  ; 0D: ADDI R6, R6, 3
-9006  ; 0E: SW   R6, R0, 6
-8E06  ; 0F: LW   R7, R0, 6
-2FC4  ; 10: SUB  R7, R7, R4
-1B87  ; 11: ADD  R5, R6, R7
-9005  ; 12: SW   R5, R0, 5
+2B70  ; 0B: SUB  R5, R5, R6
+2B78  ; 0C: SUB  R5, R5, R7
+9A06  ; 0D: SW   R5, R0, 6
+7D87  ; 0E: ADDI R6, R6, 7
+9C07  ; 0F: SW   R6, R0, 7
+8E06  ; 10: LW   R7, R0, 6
+2FF0  ; 11: SUB  R7, R7, R6
+1BB8  ; 12: ADD  R5, R6, R7
 0000  ; 13: HALT

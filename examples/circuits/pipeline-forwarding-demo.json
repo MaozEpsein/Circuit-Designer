@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    { "type": "CLOCK", "id": "clk", "label": "CLK", "value": 0, "x": -600, "y": -260 },
+
+    { "type": "PC", "id": "pc", "label": "PC", "bitWidth": 8, "x": -460, "y": -260 },
+
+    { "type": "ROM", "id": "rom", "label": "IMEM", "addrBits": 8, "dataBits": 16,
+      "x": -300, "y": -260,
+      "memory": {
+        "0": 33034,
+        "1":   531,
+        "2":  1059,
+        "3":  5479,
+        "4": 61440
+      }
+    },
+
+    { "type": "IR", "id": "ir", "label": "IR",
+      "instrWidth": 16, "opBits": 4, "rdBits": 4, "rs1Bits": 4, "rs2Bits": 4,
+      "x": -140, "y": -260 },
+
+    { "type": "CU", "id": "cu", "label": "CU", "controlTable": null, "x":  20, "y": -360 },
+
+    { "type": "REG_FILE_DP", "id": "rf", "label": "RF",
+      "regCount": 16, "dataBits": 16, "protectR0": true, "initialRegs": null,
+      "x": 140, "y": -140 },
+
+    { "type": "MUX", "id": "mux_a", "label": "FWD-A", "inputCount": 2, "x": 340, "y": -220 },
+    { "type": "MUX", "id": "mux_b", "label": "FWD-B", "inputCount": 2, "x": 340, "y":  -60 },
+
+    { "type": "COMPARATOR", "id": "eq_a", "label": "=rs1", "x": 200, "y": -340 },
+    { "type": "COMPARATOR", "id": "eq_b", "label": "=rs2", "x": 200, "y":  120 },
+
+    { "type": "ALU", "id": "alu", "label": "ALU", "bitWidth": 16, "x": 520, "y": -140 },
+
+    { "type": "PIPE_REG", "id": "pipe_exwb", "label": "EX/WB",
+      "channels": 2, "pipelineRole": "register", "stage": null,
+      "x": 700, "y": -140 },
+
+    { "type": "OUTPUT", "id": "out_result", "label": "RES", "x": 860, "y": -180 }
+  ],
+  "wires": [
+    { "sourceId": "clk", "targetId": "pc",        "targetInputIndex": 0, "sourceOutputIndex": 0, "isClockWire": true,  "id": "w_clk_pc" },
+    { "sourceId": "clk", "targetId": "pipe_exwb", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true,  "id": "w_clk_pipe" },
+    { "sourceId": "clk", "targetId": "rf",        "targetInputIndex": 5, "sourceOutputIndex": 0, "isClockWire": true,  "id": "w_clk_rf" },
+    { "sourceId": "clk", "targetId": "rom",       "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true,  "id": "w_clk_rom" },
+    { "sourceId": "clk", "targetId": "ir",        "targetInputIndex": 1, "sourceOutputIndex": 0, "isClockWire": true,  "id": "w_clk_ir" },
+
+    { "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_pc_rom" },
+    { "sourceId": "rom", "targetId": "ir",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_rom_ir" },
+
+    { "sourceId": "ir", "targetId": "cu",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_ir_cu" },
+    { "sourceId": "ir", "targetId": "rf",  "targetInputIndex": 0, "sourceOutputIndex": 2, "id": "w_ir_rf_rs1" },
+    { "sourceId": "ir", "targetId": "rf",  "targetInputIndex": 1, "sourceOutputIndex": 3, "id": "w_ir_rf_rs2" },
+    { "sourceId": "ir", "targetId": "rf",  "targetInputIndex": 2, "sourceOutputIndex": 1, "id": "w_ir_rf_rd" },
+
+    { "sourceId": "ir", "targetId": "eq_a", "targetInputIndex": 0, "sourceOutputIndex": 2, "id": "w_ir_eq_a" },
+    { "sourceId": "ir", "targetId": "eq_b", "targetInputIndex": 0, "sourceOutputIndex": 3, "id": "w_ir_eq_b" },
+
+    { "sourceId": "cu", "targetId": "alu", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_cu_alu" },
+    { "sourceId": "cu", "targetId": "rf",  "targetInputIndex": 4, "sourceOutputIndex": 1, "id": "w_cu_rfwe" },
+
+    { "sourceId": "rf", "targetId": "mux_a", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_rf_muxa" },
+    { "sourceId": "rf", "targetId": "mux_b", "targetInputIndex": 0, "sourceOutputIndex": 1, "id": "w_rf_muxb" },
+
+    { "sourceId": "pipe_exwb", "targetId": "mux_a", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_pipe_muxa" },
+    { "sourceId": "pipe_exwb", "targetId": "mux_b", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_pipe_muxb" },
+
+    { "sourceId": "pipe_exwb", "targetId": "eq_a", "targetInputIndex": 1, "sourceOutputIndex": 1, "id": "w_pipe_eqa" },
+    { "sourceId": "pipe_exwb", "targetId": "eq_b", "targetInputIndex": 1, "sourceOutputIndex": 1, "id": "w_pipe_eqb" },
+
+    { "sourceId": "eq_a", "targetId": "mux_a", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_eqa_muxa_sel" },
+    { "sourceId": "eq_b", "targetId": "mux_b", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_eqb_muxb_sel" },
+
+    { "sourceId": "mux_a", "targetId": "alu", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_muxa_alu" },
+    { "sourceId": "mux_b", "targetId": "alu", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_muxb_alu" },
+
+    { "sourceId": "alu", "targetId": "pipe_exwb", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_alu_pipe" },
+    { "sourceId": "ir",  "targetId": "pipe_exwb", "targetInputIndex": 1, "sourceOutputIndex": 1, "id": "w_irRd_pipe" },
+
+    { "sourceId": "pipe_exwb", "targetId": "rf", "targetInputIndex": 3, "sourceOutputIndex": 0, "id": "w_pipe_rf_wd" },
+
+    { "sourceId": "pipe_exwb", "targetId": "out_result", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_pipe_out" }
+  ]
+}

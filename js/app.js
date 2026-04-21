@@ -3363,6 +3363,13 @@ const EXAMPLES = [
     file: 'examples/circuits/pipeline-demo-program-all.json',
   },
   {
+    id: 'pipeline-forwarding-demo',
+    title: 'Pipeline Demo — Forwarding (EX→EX bypass)',
+    desc: '2-stage datapath: REG_FILE_DP → 2× forwarding MUX → ALU → PIPE_REG(EX/WB) → back to MUX.in1 + RF write-data. Two COMPARATORs drive the MUX select, comparing IR.rs1/rs2 against the latched destination register. The ROM runs a textbook load-use sequence: LOAD R1, ADD R2 = R1+R3, ADD R4 = R2+R3, SUB, HALT. The Pipeline panel flags both RAWs; only the LOAD→ADD one requires a bubble — the ADD→ADD RAW is marked ✓ resolved by forwarding.',
+    tags: ['pipeline', 'forwarding', 'bypass', 'hazard', 'load-use'],
+    file: 'examples/circuits/pipeline-forwarding-demo.json',
+  },
+  {
     id: 'mips-gcd',
     title: 'MIPS Datapath — Euclid GCD',
     desc: 'Single-cycle CPU laid out in 5 MIPS stages (Fetch/Decode/Execute/Memory/WB). Runs Euclid\u2019s GCD algorithm: gcd(12,8). Watch R1 converge to 4, then HALT.',

@@ -412,6 +412,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const maxVal = _mask(node.bitWidth || 4);
         nodeValues.set(id + '__out1', ms.count === maxVal ? 1 : 0);
       }
+      // ROM combinational (asynchronous) read — CIRCUIT_DETAILS-style IMEM
+      if (node.type === 'ROM' && node.asyncRead) {
+        const inputSlotsAsync = inputs.get(id);
+        const addrSlot = inputSlotsAsync.find(s => s.inputIndex === 0);
+        const reSlot   = inputSlotsAsync.find(s => s.inputIndex === 1);
+        const addr = addrSlot ? (nodeValues.get(addrSlot.sourceId) ?? 0) : 0;
+        const re   = reSlot   ? (nodeValues.get(reSlot.sourceId)   ?? 1) : 1;
+        const dMaskAsync = _mask(node.dataBits || 4);
+        if (re) ms.q = ((node.memory && node.memory[addr]) ?? 0) & dMaskAsync;
+        value = ms.q ?? 0;
+      }
       // IR: decode stored instruction into fields
       if (node.type === 'IR') {
         const instr = ms.q ?? 0;
@@ -451,8 +462,9 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const rd2Addr = inputSlots[1] ? (nodeValues.get(inputSlots[1].sourceId) ?? 0) : 0;
         const regIdx1 = rd1Addr % (node.regCount || 8);
         const regIdx2 = rd2Addr % (node.regCount || 8);
-        value = (ms.regs[regIdx1] ?? 0);
-        nodeValues.set(id + '__out1', (ms.regs[regIdx2] ?? 0));
+        const readR0 = (idx) => (node.protectR0 && idx === 0) ? 0 : (ms.regs[idx] ?? 0);
+        value = readR0(regIdx1);
+        nodeValues.set(id + '__out1', readR0(regIdx2));
         ms.q = value;
       }
       // REG_FILE: async read — read address comes from input 0
@@ -625,7 +637,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         case 4: r = (a ^ b) & mask; break;                                                     // XOR
         case 5: { const s = a << (b & 0xF); r = s & mask; carry = (s >> bits) & 1; break; }   // SHL
         case 6: r = (a >>> (b & 0xF)) & mask; break;                                           // SHR
-        case 7: r = a === b ? 0 : (a - b) & mask; carry = a > b ? 1 : 0; break;                  // CMP
+        case 7: {
+          if (node.sraMode) {                                                                    // SRA
+            const k = b & 0x7;
+            const signBit = (a >> (bits - 1)) & 1;
+            r = (a >>> k) & mask;
+            if (signBit && k > 0) r = (r | (((_mask(bits)) << (bits - k)) & mask)) & mask;
+          } else {
+            r = a === b ? 0 : (a - b) & mask; carry = a > b ? 1 : 0;                             // CMP
+          }
+          break;
+        }
       }
       value = r;
       nodeValues.set(id + '__out1', r === 0 ? 1 : 0);  // Z flag
@@ -815,10 +837,13 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
 
       } else if (node.type === 'ROM') {
         // Inputs: ADDR(0), RE(1), CLK
-        const addr = _w(dataSlots[0]);
-        const re   = _w(dataSlots[1]) ?? 1;
-        const dMask = _mask(node.dataBits || 4);
-        if (re) ms.q = ((node.memory && node.memory[addr]) ?? 0) & dMask;
+        // Skip clocked load when asyncRead is on — Phase 1 already refreshed ms.q.
+        if (!node.asyncRead) {
+          const addr = _w(dataSlots[0]);
+          const re   = _w(dataSlots[1]) ?? 1;
+          const dMask = _mask(node.dataBits || 4);
+          if (re) ms.q = ((node.memory && node.memory[addr]) ?? 0) & dMask;
+        }
 
       } else if (node.type === 'REG_FILE_DP') {
         // Dual-port RF: read only in Phase 2b, write deferred to Phase 4
@@ -827,8 +852,9 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (!ms.regs) ms.regs = node.initialRegs ? [...node.initialRegs] : new Array(regCnt).fill(0);
         const rd1Addr = _w(dataSlots[0]);
         const rd2Addr = _w(dataSlots[1]);
-        ms.q = (ms.regs[rd1Addr % regCnt] ?? 0) & dMask;
-        nodeValues.set(node.id + '__out1', (ms.regs[rd2Addr % regCnt] ?? 0) & dMask);
+        const readR0 = (idx) => (node.protectR0 && (idx % regCnt) === 0) ? 0 : (ms.regs[idx % regCnt] ?? 0);
+        ms.q = readR0(rd1Addr) & dMask;
+        nodeValues.set(node.id + '__out1', readR0(rd2Addr) & dMask);
 
       } else if (node.type === 'REG_FILE') {
         // REG_FILE write is deferred to Phase 4 (after combinational re-eval)
@@ -1044,7 +1070,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const op = inputSlots[2] ? (nodeValues.get(inputSlots[2].sourceId) ?? 0) : 0;
         const bits = node.bitWidth || 8; const mask = (1<<bits)-1;
         let r=0, carry=0;
-        switch(op&7){case 0:{const s=a+b;r=s&mask;carry=(s>>bits)&1;break;}case 1:{const s=a-b;r=s&mask;carry=s<0?1:0;break;}case 2:r=(a&b)&mask;break;case 3:r=(a|b)&mask;break;case 4:r=(a^b)&mask;break;case 5:{const s=a<<(b&0xF);r=s&mask;carry=(s>>bits)&1;break;}case 6:r=(a>>>(b&0xF))&mask;break;case 7:r=a===b?0:(a-b)&mask;carry=a>b?1:0;break;}
+        switch(op&7){case 0:{const s=a+b;r=s&mask;carry=(s>>bits)&1;break;}case 1:{const s=a-b;r=s&mask;carry=s<0?1:0;break;}case 2:r=(a&b)&mask;break;case 3:r=(a|b)&mask;break;case 4:r=(a^b)&mask;break;case 5:{const s=a<<(b&0xF);r=s&mask;carry=(s>>bits)&1;break;}case 6:r=(a>>>(b&0xF))&mask;break;case 7:{if(node.sraMode){const k=b&0x7;const sb=(a>>(bits-1))&1;r=(a>>>k)&mask;if(sb&&k>0)r=(r|(((_mask(bits))<<(bits-k))&mask))&mask;}else{r=a===b?0:(a-b)&mask;carry=a>b?1:0;}break;}}
         value = r;
         nodeValues.set(id+'__out1',r===0?1:0);nodeValues.set(id+'__out2',carry);
       } else {
@@ -1106,11 +1132,12 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const dMask = _mask(node.dataBits || 8);
       const regCnt = node.regCount || 8;
       const rd1Addr = dataSlots[0] ? _wv(dataSlots[0].wire.id) : 0;
-      ms.q = (ms.regs[rd1Addr % regCnt] ?? 0) & dMask;
+      const readR0P4b = (idx) => (node.protectR0 && (idx % regCnt) === 0) ? 0 : (ms.regs[idx % regCnt] ?? 0);
+      ms.q = readR0P4b(rd1Addr) & dMask;
       nodeValues.set(node.id, ms.q);
       if (node.type === 'REG_FILE_DP') {
         const rd2Addr = dataSlots[1] ? _wv(dataSlots[1].wire.id) : 0;
-        nodeValues.set(node.id + '__out1', (ms.regs[rd2Addr % regCnt] ?? 0) & dMask);
+        nodeValues.set(node.id + '__out1', readR0P4b(rd2Addr) & dMask);
       }
       propagate(node.id);
     }
@@ -1151,7 +1178,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         case 4: r = (a ^ b) & mask; break;
         case 5: { const s = a << (b & 0xF); r = s & mask; carry = (s >> bits) & 1; break; }
         case 6: r = (a >>> (b & 0xF)) & mask; break;
-        case 7: r = a === b ? 0 : (a - b) & mask; carry = a > b ? 1 : 0; break;
+        case 7: {
+          if (node.sraMode) {
+            const k = b & 0x7;
+            const sb = (a >> (bits - 1)) & 1;
+            r = (a >>> k) & mask;
+            if (sb && k > 0) r = (r | (((_mask(bits)) << (bits - k)) & mask)) & mask;
+          } else {
+            r = a === b ? 0 : (a - b) & mask; carry = a > b ? 1 : 0;
+          }
+          break;
+        }
       }
       nodeValues.set(id, r);
       const zFlag = r === 0 ? 1 : 0;
@@ -1260,11 +1297,13 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           const dMask  = _mask(node.dataBits || 8);
           const regCnt = node.regCount || 8;
           if (!ms.regs) ms.regs = node.initialRegs ? [...node.initialRegs] : new Array(regCnt).fill(0);
-          if (we && !_jmpActive) ms.regs[wrAddr % regCnt] = wrData & dMask;
+          const wrIdx = wrAddr % regCnt;
+          if (we && !_jmpActive && !(node.protectR0 && wrIdx === 0)) ms.regs[wrIdx] = wrData & dMask;
           const rd1Addr = _w2(dataSlots[0]);
           const rd2Addr = _w2(dataSlots[1]);
-          ms.q = (ms.regs[rd1Addr % regCnt] ?? 0) & dMask;
-          nodeValues.set(node.id + '__out1', (ms.regs[rd2Addr % regCnt] ?? 0) & dMask);
+          const readR0 = (idx) => (node.protectR0 && (idx % regCnt) === 0) ? 0 : (ms.regs[idx % regCnt] ?? 0);
+          ms.q = readR0(rd1Addr) & dMask;
+          nodeValues.set(node.id + '__out1', readR0(rd2Addr) & dMask);
         } else if (node.type === 'PC') {
           const allSlots = inputSlots.filter(s => s !== clkSlot);
           const getByIdx = (idx) => {
@@ -1275,8 +1314,16 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           const jump     = getByIdx(1);
           const en       = getByIdx(2) || (!allSlots.find(sl => sl.inputIndex === 2) ? 1 : 0);
           const clr      = getByIdx(3);
-          const mask     = _mask(node.bitWidth || 8);
+          const bitsPC   = node.bitWidth || 8;
+          const mask     = _mask(bitsPC);
           if (clr)       ms.q = 0;
+          else if (jump && node.pcRelative) {
+            // CIRCUIT_DETAILS: PC = PC + 1 + sign_ext(offset). Input 0 is interpreted
+            // as a signed bitsPC-bit two's-complement value (SIGN_EXT supplies that).
+            const signBitPC = (jumpAddr >> (bitsPC - 1)) & 1;
+            const signedOff = signBitPC ? ((jumpAddr & mask) - (1 << bitsPC)) : (jumpAddr & mask);
+            ms.q = ((ms.q + 1 + signedOff) & mask) >>> 0;
+          }
           else if (jump) ms.q = jumpAddr & mask;
           else if (en)   ms.q = (ms.q + 1) & mask;
         }
