@@ -3369,6 +3369,13 @@ const EXAMPLES = [
     tags: ['advanced', 'MIPS', 'GCD', 'Branch', 'Jump'],
     file: 'examples/circuits/mips-gcd.json',
   },
+  {
+    id: 'cpu-detailed',
+    title: 'Harvard CPU — Detailed (CIRCUIT_DETAILS.md)',
+    desc: '8-bit Harvard single-cycle CPU with PC, IMEM (256x16), IR, CU (14-op controlTable), RegFile 8x8, ALU, DMEM (256x8), 6→8 sign-extend, ALU-B MUX, 3-way Write-back MUX (ALU/DMEM/SLTI), opcode decoder driving USE_IMM / MEM_TO_REG / IS_SLTI, and a halt-gated cycle counter. Pre-loaded with a 20-instruction demo (init + loop with SW + post-loop LW/ADD/SUB/SW).',
+    tags: ['advanced', 'CPU', 'Harvard', 'SLTI', 'Loop', 'Store', 'Load'],
+    file: 'examples/circuits/cpu-detailed.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');
