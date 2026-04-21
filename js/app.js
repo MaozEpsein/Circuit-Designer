@@ -1865,15 +1865,17 @@ document.getElementById('btn-mem-close')?.addEventListener('click', _toggleMemIn
     else                    base = 16;
     panel.style.fontSize = base + 'px';
   }
+  // Clear any stale inline `top` from older sessions — it would fight the
+  // CSS `bottom: 0` and leave a gap at the viewport's bottom.
+  panel.style.top = '';
   _applyPipelineFontTier(panel.getBoundingClientRect().height);
 
-  let dragging = false, startX = 0, startY = 0, startW = 0, startH = 0, startTop = 0;
+  let dragging = false, startX = 0, startY = 0, startW = 0, startH = 0;
   grip.addEventListener('mousedown', (e) => {
     dragging = true;
     const r = panel.getBoundingClientRect();
     startX = e.clientX; startY = e.clientY;
     startW = r.width;   startH = r.height;
-    startTop = r.top;
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'nwse-resize';
     e.preventDefault();
@@ -1883,14 +1885,13 @@ document.getElementById('btn-mem-close')?.addEventListener('click', _toggleMemIn
     if (!dragging) return;
     const dx = e.clientX - startX;      // drag left → dx negative → widen
     const dy = e.clientY - startY;      // drag up   → dy negative → grow
-    const bottom = startTop + startH;   // pinned edge
     const newW = Math.max(220, Math.min(window.innerWidth  * 0.95, startW - dx));
-    let   newH = Math.max(150, Math.min(window.innerHeight * 0.95, startH - dy));
-    let   newTop = bottom - newH;
-    if (newTop < 0) { newTop = 0; newH = bottom; }
+    const newH = Math.max(150, Math.min(window.innerHeight * 0.95, startH - dy));
     panel.style.width  = newW + 'px';
     panel.style.height = newH + 'px';
-    panel.style.top    = newTop + 'px';
+    // Do NOT set `top` — the CSS `bottom: 0` anchors the panel to the
+    // viewport's bottom. The browser computes top from (innerHeight - height),
+    // which auto-tracks the viewport on window resize.
     _applyPipelineFontTier(newH);
   });
   window.addEventListener('mouseup', () => {
@@ -3200,6 +3201,27 @@ const EXAMPLES = [
     desc: 'Four isolated lanes, one hazard per lane: (top) RAW feedback through two PIPEs, (upper-mid) a pure combinational NAND loop, (lower-mid) a WAR feedback into a 2-channel PIPE, (bottom) a WAW collision with two PIPEs writing the same XOR pin. Open the Pipeline panel to see all four classified.',
     tags: ['pipeline', 'hazard', 'RAW', 'WAR', 'WAW', 'LOOP'],
     file: 'examples/circuits/pipeline-demo-hazard-all.json',
+  },
+  {
+    id: 'pipeline-demo-program',
+    title: 'Pipeline Demo — Program Hazards (RAW + load-use)',
+    desc: 'Minimal MIPS-style datapath with a 6-instruction ROM. Program sequence: ADD R2,R1,R2 / SUB R3,R2,R3 / LOAD R4,[R4] / ADD R5,R4,R4 / CMP R1,R5 / HALT. Open the Pipeline panel to see RAW on R2 (1→2), a classic load-use between LOAD and the next ADD, and a RAW on R5 between ADD and CMP.',
+    tags: ['pipeline', 'program', 'RAW', 'load-use'],
+    file: 'examples/circuits/pipeline-demo-program.json',
+  },
+  {
+    id: 'pipeline-demo-program-rich',
+    title: 'Pipeline Demo — Program Hazards (rich, 8 dependencies)',
+    desc: 'Textbook 9-instruction sequence producing 8 distinct hazards: fan-out of ADD R1 feeding SUB/AND/OR/XOR (4 RAW on R1 with decreasing bubble counts), a chained RAW on R4, then a LOAD followed by two consumers (LOAD-USE + RAW on R11), and a final RAW on R13 between ADD and SUB. Open the Pipeline panel to see every dependency labeled with the exact instruction and required bubble count.',
+    tags: ['pipeline', 'program', 'RAW', 'load-use', 'chain', 'fan-out'],
+    file: 'examples/circuits/pipeline-demo-program-rich.json',
+  },
+  {
+    id: 'pipeline-demo-program-all',
+    title: 'Pipeline Demo — Program Hazards (all types: RAW/WAR/WAW/load-use)',
+    desc: '7-instruction sequence that exercises every program-hazard classification: RAW (ADD→SUB on R1), WAR (ADD reads R2 → AND writes R2), WAW (ADD writes R1 → OR writes R1 again), a second WAR (SUB reads R1 → OR writes R1), and a LOAD-USE RAW (LOAD R10 → ADD reads R10). In-order 5-stage pipelines handle WAR/WAW for free; they are reported for OOO/register-renaming awareness.',
+    tags: ['pipeline', 'program', 'RAW', 'WAR', 'WAW', 'load-use'],
+    file: 'examples/circuits/pipeline-demo-program-all.json',
   },
   {
     id: 'mips-gcd',

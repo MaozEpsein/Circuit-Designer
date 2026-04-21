@@ -5,6 +5,7 @@
  */
 import { bus } from '../../core/EventBus.js';
 import { setPipelineViolations, setPipelineCriticalPath, setPipelineHazards } from '../../rendering/CanvasRenderer.js';
+import { disassemble } from '../InstructionDecoder.js';
 
 function _hazardSummary(hazards) {
   const counts = { RAW: 0, WAR: 0, WAW: 0, LOOP: 0 };
@@ -13,6 +14,18 @@ function _hazardSummary(hazards) {
     .filter(([, n]) => n > 0)
     .map(([t, n]) => `${n} ${t}`)
     .join(', ');
+}
+
+function _progTypeSummary(hazards) {
+  const counts = { RAW: 0, WAR: 0, WAW: 0 };
+  let lu = 0;
+  for (const h of hazards) {
+    counts[h.type] = (counts[h.type] || 0) + 1;
+    if (h.loadUse) lu++;
+  }
+  const parts = Object.entries(counts).filter(([, n]) => n > 0).map(([t, n]) => `${n} ${t}`);
+  if (lu) parts.push(`${lu} load-use`);
+  return parts.join(', ');
 }
 
 function _esc(s) {
@@ -45,22 +58,16 @@ export class PipelinePanel {
         this._render(r);
       }, 200);
     };
-    bus.on('node:added',   schedule);
-    bus.on('node:removed', schedule);
-    bus.on('wire:added',   schedule);
-    bus.on('wire:removed', schedule);
-    bus.on('scene:loaded', schedule);
-    bus.on('scene:cleared', schedule);
-
-    // Label renames (or other property edits) don't change the hazard graph,
-    // so we re-render from the cached analyzer result instead of re-analyzing.
-    // This keeps the displayed node names in the Violations / Hazards rows
-    // in sync with live edits.
-    bus.on('node:props-changed', () => {
-      if (!this._visible) return;
-      const cached = this._analyzer.analyze();   // cache-hit, no recompute
-      this._render(cached);
-    });
+    bus.on('node:added',         schedule);
+    bus.on('node:removed',       schedule);
+    bus.on('wire:added',         schedule);
+    bus.on('wire:removed',       schedule);
+    bus.on('scene:loaded',       schedule);
+    bus.on('scene:cleared',      schedule);
+    // Property edits (ROM memory edits, PIPE channel changes, label renames)
+    // route through the same debounced re-analysis path. The analyzer owns
+    // cache invalidation on this event; we just trigger the recompute here.
+    bus.on('node:props-changed', schedule);
   }
 
   show() {
@@ -104,6 +111,10 @@ export class PipelinePanel {
     const hzLine  = hzCount > 0
       ? `<span class="k">Hazards</span><span class="v warn">⚠ ${hzCount} (${_hazardSummary(r.hazards)})</span>`
       : '';
+    const pgCount = r.programHazards?.length ?? 0;
+    const pgLine  = pgCount > 0
+      ? `<span class="k">Program</span><span class="v warn">⚠ ${pgCount} (${_progTypeSummary(r.programHazards)})</span>`
+      : (r.hasProgram ? `<span class="k">Program</span><span class="v">${r.instructions.length} instr · 0 hazards</span>` : '');
     const unknown = r.unknownTypes ?? [];
     const unknownLine = unknown.length > 0
       ? `<span class="k">Unknown</span><span class="v warn" title="Types missing from DelayModel.js — add an entry or they'll use the 100 ps fallback">⚠ ${unknown.join(', ')}</span>`
@@ -116,6 +127,7 @@ export class PipelinePanel {
       ${warn ? `<span class="k">Warn</span><span class="v">${warn}</span>` : ''}
       ${vioLine}
       ${hzLine}
+      ${pgLine}
       ${unknownLine}
     `;
 
@@ -189,6 +201,42 @@ export class PipelinePanel {
           });
         });
       });
+    }
+
+    // Program Hazards section (ISA-level, one row per inter-instruction hazard).
+    if (r.programHazards && r.programHazards.length) {
+      const pcHex   = (pc) => '0x' + pc.toString(16).toUpperCase().padStart(2, '0');
+      const byPc    = new Map((r.instructions || []).map(ins => [ins.pc, ins]));
+      const typeCls = { RAW: 'hz-raw', WAR: 'hz-war', WAW: 'hz-waw' };
+      const items = r.programHazards.map(h => {
+        const loadUseTag = h.loadUse ? '<span class="pipe-hz-type hz-loaduse">LOAD-USE</span>' : '';
+        let bubbleTxt;
+        if (h.type === 'RAW') {
+          bubbleTxt = h.bubbles > 0
+            ? `<span class="pipe-prog-bubbles">${h.bubbles} bubble${h.bubbles===1?'':'s'}</span>`
+            : '<span class="pipe-prog-bubbles ok">0 bubbles</span>';
+        } else {
+          bubbleTxt = '<span class="pipe-prog-bubbles info">in-order: ok</span>';
+        }
+        const srcTxt = _esc(disassemble(byPc.get(h.instI)) || h.nameI);
+        const dstTxt = _esc(disassemble(byPc.get(h.instJ)) || h.nameJ);
+        return `
+          <div class="pipe-prog-row">
+            <span class="pipe-hz-type ${typeCls[h.type] || ''}">${h.type}</span>${loadUseTag}
+            <span class="pipe-prog-names">
+              <span class="pipe-prog-pc">${pcHex(h.instI)}</span> ${srcTxt}
+              <span class="pipe-prog-arrow">\u2192</span>
+              <span class="pipe-prog-pc">${pcHex(h.instJ)}</span> ${dstTxt}
+            </span>
+            <span class="pipe-prog-reg">R${h.register}</span>
+            ${bubbleTxt}
+          </div>`;
+      }).join('');
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-prog-header">PROGRAM HAZARDS (${r.programHazards.length} \u2014 ${_progTypeSummary(r.programHazards)})</div>${items}`);
+    } else if (r.hasProgram) {
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-prog-header">PROGRAM HAZARDS (0)</div><div class="pipe-prog-clean">No inter-instruction hazards detected over ${r.instructions.length} instruction${r.instructions.length===1?'':'s'}.</div>`);
     }
 
     // Row clicks emit a highlight event — the StageOverlay controller listens,
