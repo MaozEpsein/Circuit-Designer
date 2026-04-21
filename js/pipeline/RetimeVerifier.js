@@ -60,13 +60,18 @@ function _computeAutoBudget(sceneBefore, opts) {
   // Correctness floors:
   //   warmup ≥ depth + 1   → fill every register with real data before
   //                          measuring, flushing any initial-state bias.
-  //   runCycles ≥ estimate → run long enough to exercise the program's
-  //                          natural length (HALT offset, ROM end, loop
-  //                          body, or the pipeline-default). The estimator
-  //                          already enforces a 12-cycle floor internally.
-  const warmupCycles = Math.max(3, pipelineDepth + 1);
-  const minRun       = Math.max(opts.minRunCycles, estimate.cycles);
-  const vectorCount  = opts.minVectors;
+  //   runCycles ≥ estimate × 1.2 → run the estimator's predicted length
+  //                          plus a 20 % safety margin, so any bug that
+  //                          surfaces a few cycles past the expected
+  //                          termination point is still caught. The
+  //                          estimator itself already enforces a floor
+  //                          of ~6 cycles, so short demos still get
+  //                          enough coverage.
+  const warmupCycles  = Math.max(3, pipelineDepth + 1);
+  const VERIFY_MARGIN = 1.2;
+  const estWithMargin = Math.ceil(estimate.cycles * VERIFY_MARGIN);
+  const minRun        = Math.max(opts.minRunCycles, estWithMargin);
+  const vectorCount   = opts.minVectors;
 
   // 2. Sample — five back-to-back evaluate() calls, take the median to damp
   // JIT warm-up. These calls mutate a local ffStates Map, same as the real
