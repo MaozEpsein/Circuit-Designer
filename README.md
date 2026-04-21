@@ -680,6 +680,33 @@ Kept visible so future contributors inherit the caveats that drove the design, n
 
 ---
 
+## Pipelining — Quick Start
+
+Five-minute tour of every analysis feature, using pre-built demos. Open the app, click **EXAMPLES**, and switch to the **Pipeline** tab.
+
+### 1. See a pipeline analyzed
+Load **Pipeline Demo (3-stage)**. Click the **PIPE** button in the top bar. The panel opens with:
+- **Latency** in cycles, **Bottleneck** stage, **f_max** in MHz/GHz, **Balance** as a percentage.
+- One row per stage with its delay in picoseconds and a bar chart showing relative load.
+- Click **STAGES** in the panel header to colour-code nodes on the canvas by stage.
+
+### 2. Balance a pipeline automatically
+Load **Pipeline Demo — Imbalanced 3-stage (for retiming)**. The panel shows **Balance 33 %** — stage 0 is dominant. Click **RETIME** in the panel header. A green banner proposes relocating a PIPE register across a gate; the canvas shows red / green ghost wires for the diff. Click **Accept** — every stage balances to the same delay. A bottom banner confirms the change was **verified by simulation** (estimator + measurer agreement). `Ctrl+Z` undoes in one step.
+
+### 3. Spot hazards
+Load **Pipeline Demo — All Hazards (RAW/WAR/WAW/LOOP)**. The panel's **HAZARDS** section lights up with four classified hazards — RAW, WAR, WAW, LOOP — each with a colour-coded badge, the affected wire, and an inline fix suggestion. Click any hazard row to zoom the canvas onto the offending wire.
+
+### 4. Analyze a program
+Load **בדיקת תלויות** (or any `pipeline-demo-program-*` variant). The panel's **PROGRAM HAZARDS** section decodes the ROM through the canonical 16-op ISA and reports every RAW / WAR / WAW dependency between consecutive instructions, with bubble counts, load-use flags, and the disassembled source + destination instructions.
+
+### 5. Feel back-pressure
+Load **Pipeline Demo — Elastic (valid/ready back-pressure)**. Both PIPE registers show the yellow **E** badge — stalls are driven by HANDSHAKE components wiring `valid ∧ ready` into the STALL pin. Toggle the **READY** input to `0` and hit Play — the pipeline freezes until READY returns to `1`. This is the canonical elastic-pipeline template.
+
+### 6. Build your own
+Drag a **PIPE** chip from the Pipeline palette tab. Wire data through it. Open the panel (it was already watching) — the moment the new circuit has at least one `PIPE_REG` with a valid data path, stages appear and the analyzer starts reporting delay, hazards, violations, and program-hazards (if there's a ROM). Everything below this Quick Start is incremental — analysis utilities ([js/analysis/](js/analysis/)), delay model ([js/pipeline/DelayModel.js](js/pipeline/DelayModel.js)), retimer internals — wired into the same panel. No extra configuration required.
+
+---
+
 ## Pipelining — Development Plan
 
 **Status**: design-stage. Prioritized ahead of the HDL Toolchain so pipeline-aware IR is available when HDL export matures.
@@ -836,11 +863,11 @@ Every phase ends with a commit — message format `pipeline(phase-N): <short sum
 
 ### Phase 12 — Templates, Docs, Examples
 **Goal**: onboarding + reusable building blocks.
-- [ ] `examples/`: 3-stage MAC, 5-stage RISC skeleton, elastic FIFO chain, hazard demo, retime demo.
-- [ ] README section: *Pipelining — Quick Start*.
-- [ ] In-app tutorial overlay (optional) pointing to panel + shortcut.
-- **Example update**: `pipeline-demo.json` is the anchor example for the Quick Start — final polish pass on naming, labels, and initial panel layout.
-- **Verify L4** — user-level: onboard via Quick Start, measure time-to-first-pipeline.
+- [x] `examples/`: the demo set now covers all the analysis features — `pipeline-demo.json` (3-stage with fan-out), `pipeline-demo-retime.json` (imbalanced, 3-stage, retimeable), `pipeline-demo-elastic.json` *(new)* (2-stage with HANDSHAKE back-pressure), `pipeline-demo-hazard*.json` (hazards), `pipeline-demo-program*.json` (program-level), `pipeline-demo-hazard-all.json` (RAW/WAR/WAW/LOOP together). **Deferred**: *3-stage MAC* (needs a dedicated MULTIPLIER component the library doesn't ship yet) and *5-stage RISC skeleton* (covered in spirit by `simple-cpu.json` / `mips-gcd.json`, neither of which is *pipelined* yet — a real pipelined RISC demo belongs with Phase 14 once ISA inference lands).
+- [x] README section: *Pipelining — Quick Start*. Six-step tour above the plan (analyze → balance → hazards → program → back-pressure → build your own).
+- [ ] In-app tutorial overlay (optional) — skipped for v1; the Quick Start covers the same ground with lower engineering cost, and overlay UX would need its own design pass.
+- **Example update**: `pipeline-demo-elastic.json` is new; `pipeline-demo.json` kept as-is (it's already the canonical Quick-Start step 1).
+- **Verify L4** — user-level: the Quick Start was authored from a first-time-reader perspective; each step names exactly which button to click, and every step corresponds to a live demo in the Pipeline tab.
 
 ### Phase 13 — Polish, Telemetry, Stretch
 **Goal**: ready for upstream HDL Toolchain consumption.

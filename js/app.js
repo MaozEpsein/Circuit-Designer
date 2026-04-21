@@ -3342,6 +3342,13 @@ const EXAMPLES = [
     file: 'examples/circuits/pipeline-demo-program-rich.json',
   },
   {
+    id: 'pipeline-demo-elastic',
+    title: 'Pipeline Demo — Elastic (valid/ready back-pressure)',
+    desc: 'Two-stage pipeline with HANDSHAKE components wiring valid/ready into each PIPE_REG\u2019s STALL pin. Toggle VALID and READY inputs to pause or release the pipeline. The Pipeline panel flags both stages as elastic (yellow E badge) and shows their S (stall) status live. Canonical demonstration of back-pressure in a pipelined datapath.',
+    tags: ['pipeline', 'elastic', 'HANDSHAKE', 'stall', 'back-pressure'],
+    file: 'examples/circuits/pipeline-demo-elastic.json',
+  },
+  {
     id: 'pipeline-demo-retime',
     title: 'Pipeline Demo — Imbalanced 3-stage (for retiming)',
     desc: '3-stage pipeline with 6 inverters arranged as 3 / 1 / 2 across two PIPE_REGs. Pipeline panel reports stage delays of 150 / 50 / 100 ps — Balance 33%, Bottleneck S0. The Phase 10a engine pinpoints the right move (pull PIPE1 backward across INV3) that rebalances every stage to exactly 100 ps, raising f_max by 50%. The UI button for applying the suggestion lands in Phase 10b.',
