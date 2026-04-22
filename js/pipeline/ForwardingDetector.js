@@ -166,6 +166,11 @@ export function detectForwardingPaths(scene, opts = {}) {
       const aluStage = nodeMap.get(consumer.targetId)?.stage ?? null;
       for (const src of forwardedPipe) {
         const srcStage = src.stage ?? null;
+        // Distance in PIPE_REGs on the forward pipeline path from the ALU
+        // to the source PIPE_REG. 1 = EX→EX, 2 = MEM→EX, 3 = WB→EX, etc.
+        // This bypasses StageEvaluator's stage indices — which collapse on
+        // forwarding loops — and relies only on local graph structure.
+        const distance = _stageDistance(consumer.targetId, src.nodeId, succs, nodeMap);
         paths.push({
           id:        `fwd_${paths.length}`,
           muxId:     mux.id,
@@ -175,7 +180,7 @@ export function detectForwardingPaths(scene, opts = {}) {
           register,
           srcStage,
           dstStage:  aluStage,
-          fromStage: _labelFromStage(srcStage, aluStage),
+          fromStage: _labelFromDistance(distance),
           toStage:   'EX',
         });
       }
@@ -185,12 +190,38 @@ export function detectForwardingPaths(scene, opts = {}) {
   return { paths, warnings };
 }
 
-function _labelFromStage(srcStage, dstStage) {
-  if (srcStage == null || dstStage == null) return 'FWD';
-  const diff = srcStage - dstStage;
-  if (diff === 1) return 'EX→EX';
-  if (diff === 2) return 'MEM→EX';
-  if (diff === 3) return 'WB→EX';
-  if (diff > 0)   return `S${srcStage}→S${dstStage}`;
-  return 'FWD';
+/**
+ * Count PIPE_REGs on the shortest forward path from `fromId` (typically the
+ * ALU consumer) to `toId` (the source PIPE_REG of a forwarding path). The
+ * count includes the destination PIPE_REG itself — so the immediate next
+ * PIPE_REG downstream of the ALU gives 1, two PIPE_REGs downstream gives 2.
+ *
+ * Standalone BFS; doesn't trust StageEvaluator's stage labels because those
+ * collapse to 0 under forwarding cycles. Returns null if unreachable.
+ */
+function _stageDistance(fromId, toId, succs, nodeMap) {
+  if (fromId === toId) return 0;
+  const visited = new Set([fromId]);
+  const queue = [{ id: fromId, count: 0 }];
+  while (queue.length) {
+    const { id, count } = queue.shift();
+    const outs = succs.get(id) || [];
+    for (const s of outs) {
+      if (visited.has(s.targetId)) continue;
+      visited.add(s.targetId);
+      const sn = nodeMap.get(s.targetId);
+      const nextCount = sn?.type === 'PIPE_REG' ? count + 1 : count;
+      if (s.targetId === toId) return nextCount;
+      queue.push({ id: s.targetId, count: nextCount });
+    }
+  }
+  return null;
+}
+
+function _labelFromDistance(distance) {
+  if (distance == null || distance <= 0) return 'FWD';
+  if (distance === 1) return 'EX→EX';
+  if (distance === 2) return 'MEM→EX';
+  if (distance === 3) return 'WB→EX';
+  return `+${distance}→EX`;
 }

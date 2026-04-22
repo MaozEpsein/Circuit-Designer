@@ -36,6 +36,11 @@ console.log('\n-- ForwardingDetector --');
   check('both sourced from EX/MEM',        paths.every(p => p.srcNodeId === 'pipe_ex_mem'));
   check('both target EX (ALU)',            paths.every(p => p.toStage === 'EX'));
   check('ALU node is the consumer',        paths.every(p => p.aluNodeId === 'alu'));
+  // Label must read "EX→EX" — produced by the graph-distance fallback when
+  // StageEvaluator can't provide usable stage indices (forwarding cycle).
+  check('fromStage label = EX→EX on both paths',
+        paths.every(p => p.fromStage === 'EX→EX'),
+        `got [${paths.map(p => p.fromStage).join(', ')}]`);
 }
 
 // ── 2. Regression: the normal-path PIPE_REG isn't itself reported ────

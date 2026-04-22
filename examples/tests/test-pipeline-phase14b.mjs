@@ -60,6 +60,9 @@ console.log('\n-- pipeline-forwarding-demo.json: detector --');
   check('muxId is populated',            paths.every(p => typeof p.muxId === 'string' && p.muxId.length > 0));
   check('srcNodeId points at PIPE_REG',  paths.every(p => p.srcNodeId === 'pipe_exwb'));
   check('aluNodeId points at ALU',       paths.every(p => p.aluNodeId === 'alu'));
+  check('fromStage label = EX→EX',
+        paths.every(p => p.fromStage === 'EX→EX'),
+        `got [${paths.map(p => p.fromStage).join(', ')}]`);
 }
 
 // ── 2. detector returns nothing on non-pipelined scenes ──────────────
