@@ -29,11 +29,12 @@ import { ProjectStorage } from './ui/ProjectStorage.js';
 import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
 import { PipelinePanel } from './pipeline/ui/PipelinePanel.js';
+import * as PipelineTelemetry from './pipeline/Telemetry.js';
 import { StageOverlay } from './pipeline/ui/StageOverlay.js';
 import { suggestRetime } from './pipeline/Retimer.js';
 import { RetimeCommand } from './pipeline/commands/RetimeCommand.js';
 import { verifyRetiming } from './pipeline/RetimeVerifier.js';
-import { setRetimePreview } from './rendering/CanvasRenderer.js';
+import { setRetimePreview, setStagePalette, getStagePalette } from './rendering/CanvasRenderer.js';
 
 // ── Singletons ──────────────────────────────────────────────
 const scene    = new SceneGraph();
@@ -2249,6 +2250,21 @@ window.addEventListener('keydown', (e) => {
     const node = state.selectedNodeId ? scene.getNode(state.selectedNodeId) : null;
     if (node) Renderer.zoomToNode(node);
   }
+  if (match === 'pipe-panel-toggle') {
+    e.preventDefault();
+    bus.emit('palette:action', 'toggle-pipeline-panel');
+    return;
+  }
+  if (match === 'pipe-stageview-toggle') {
+    e.preventDefault();
+    bus.emit('palette:action', 'toggle-stageview');
+    return;
+  }
+  if (match === 'pipe-retime-suggest') {
+    e.preventDefault();
+    bus.emit('palette:action', 'suggest-retime');
+    return;
+  }
   if (match === 'edit-delete' || match === 'edit-delete2') {
     // Multi-select delete
     if (selection.count > 0) {
@@ -2424,6 +2440,15 @@ bus.on('pipeline:auto-wired-clk', ({ nodeId }) => {
   const n = scene.getNode(nodeId);
   const label = n ? (n.label || n.type) : 'component';
   _showRomNotification(`Auto-wired CLK → ${label}`);
+});
+
+// Phase 13: colorblind-palette toggle for the Stage Overlay. Persists
+// across sessions via localStorage (handled inside CanvasRenderer).
+bus.on('pipeline:toggle-palette', () => {
+  const next = getStagePalette() === 'colorblind' ? 'default' : 'colorblind';
+  setStagePalette(next);
+  PipelineTelemetry.bump({ paletteToggles: 1 });
+  _showRomNotification(`Stage palette: ${next === 'colorblind' ? 'colorblind-friendly' : 'default'}`);
 });
 
 // Insert an INPUT node wired to the STALL (kind='stall') or FLUSH (kind='flush')
@@ -3539,7 +3564,14 @@ function start() {
   _rafId = requestAnimationFrame(tick);
 
   // Expose handles for pipeline debugging via DevTools console.
-  window.pipeline = { analyzer: pipelineAnalyzer, analyze: () => pipelineAnalyzer.analyze({ force: true }), scene };
+  window.pipeline = {
+    analyzer: pipelineAnalyzer,
+    analyze:   () => pipelineAnalyzer.analyze({ force: true }),
+    scene,
+    // Phase 13 — local telemetry inspection from DevTools.
+    telemetry: () => PipelineTelemetry.snapshot(),
+    resetTelemetry: () => PipelineTelemetry.reset(),
+  };
 
   console.log('[Circuit Designer Pro] initialized');
 }

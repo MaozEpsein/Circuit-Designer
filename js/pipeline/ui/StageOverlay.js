@@ -4,6 +4,7 @@
  */
 import { bus } from '../../core/EventBus.js';
 import { setStageOverlay } from '../../rendering/CanvasRenderer.js';
+import * as Telemetry from '../Telemetry.js';
 
 export class StageOverlay {
   constructor(analyzer) {
@@ -24,6 +25,7 @@ export class StageOverlay {
 
   enable() {
     this._enabled = true;
+    Telemetry.bump({ stageViewOpens: 1 });
     const r = this._analyzer.analyze();        // ensures node.stage is up-to-date
     this._bottleneck = r?.bottleneck ?? -1;
     this._push();

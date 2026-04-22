@@ -5,6 +5,16 @@
  */
 export const DEFAULT_DELAY_PS = {
   GATE_SLOT:   50,
+  // Concrete primitive gates — the palette in Component.js lists these as
+  // user-placeable types (GATE_TYPES), so they need their own entries
+  // otherwise DelayModel falls back to the 100 ps "unknown" path and
+  // StageEvaluator emits a warning for each.
+  AND:         50,
+  OR:          50,
+  NOT:         30,
+  NAND:        40,
+  NOR:         40,
+  XOR:         80,
   HALF_ADDER:  150,
   FULL_ADDER:  150,
   COMPARATOR:  300,

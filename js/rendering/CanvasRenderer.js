@@ -181,11 +181,42 @@ export function render(nodes, wires, nodeValues, wireValues, ffStates, hoveredNo
 }
 
 // ── Pipeline Stage Overlay ──────────────────────────────────
-// Rotating palette of distinct hues. Bottleneck always overridden to red.
-const _STAGE_COLOURS = [
-  '#00d4ff', '#39ff14', '#ffd028', '#ff28a0',
-  '#a878ff', '#28ffe0', '#ff8028', '#88ff88',
-];
+// Two palettes: the default (saturated neon hues, chosen for contrast on
+// the dark canvas) and a colorblind-friendly variant based on Wong's 2011
+// "safe for deuteranopia/protanopia/tritanopia" palette. Bottleneck is
+// always overridden to red in both modes.
+const _STAGE_PALETTES = {
+  default: [
+    '#00d4ff', '#39ff14', '#ffd028', '#ff28a0',
+    '#a878ff', '#28ffe0', '#ff8028', '#88ff88',
+  ],
+  colorblind: [
+    // Wong 2011 — ordered so adjacent pipeline stages are also maximally
+    // distinguishable under common color-vision deficiencies.
+    '#56B4E9', '#E69F00', '#009E73', '#F0E442',
+    '#0072B2', '#D55E00', '#CC79A7', '#BBBBBB',
+  ],
+};
+const _PALETTE_STORAGE_KEY = 'circuit_designer_stage_palette';
+let _stagePaletteName = (() => {
+  try { return localStorage.getItem(_PALETTE_STORAGE_KEY) || 'default'; }
+  catch (_) { return 'default'; }
+})();
+let _STAGE_COLOURS = _STAGE_PALETTES[_stagePaletteName] || _STAGE_PALETTES.default;
+
+/**
+ * Switch the stage-overlay palette. Persists to localStorage so the
+ * user's choice survives reloads. `name` must be 'default' or 'colorblind'.
+ */
+export function setStagePalette(name) {
+  if (!_STAGE_PALETTES[name]) return _stagePaletteName;
+  _stagePaletteName = name;
+  _STAGE_COLOURS = _STAGE_PALETTES[name];
+  try { localStorage.setItem(_PALETTE_STORAGE_KEY, name); } catch (_) {}
+  return _stagePaletteName;
+}
+export function getStagePalette() { return _stagePaletteName; }
+
 let _stageOverlayState = null;
 /**
  * Configure the stage overlay.

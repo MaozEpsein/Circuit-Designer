@@ -11,6 +11,7 @@ import { detectProgramHazards } from './ProgramHazardDetector.js';
 import { inferIsa } from './isa/IsaInference.js';
 import { DEFAULT_ISA } from './isa/default.js';
 import { detectForwardingPaths } from './ForwardingDetector.js';
+import * as Telemetry from './Telemetry.js';
 
 export class PipelineAnalyzer {
   constructor(scene) {
@@ -35,6 +36,7 @@ export class PipelineAnalyzer {
 
   analyze({ force = false } = {}) {
     if (!force && !this._dirty && this._cache) return this._cache;
+    Telemetry.bump({ analyses: 1, ...(force ? { analysesForced: 1 } : {}) });
     this._cache = evaluate(this._scene);
     this._cache.hazards = detectHazards(this._scene);
     // Program-level hazards — only meaningful if the scene has a ROM carrying

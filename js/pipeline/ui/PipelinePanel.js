@@ -6,6 +6,7 @@
 import { bus } from '../../core/EventBus.js';
 import { setPipelineViolations, setPipelineCriticalPath, setPipelineHazards } from '../../rendering/CanvasRenderer.js';
 import { disassemble } from '../InstructionDecoder.js';
+import * as Telemetry from '../Telemetry.js';
 
 function _hazardSummary(hazards) {
   const counts = { RAW: 0, WAR: 0, WAW: 0, LOOP: 0 };
@@ -83,6 +84,7 @@ export class PipelinePanel {
     this._visible = true;
     this._el?.classList.remove('hidden');
     document.getElementById('btn-pipeline-toggle')?.classList.add('active');
+    Telemetry.bump({ panelOpens: 1 });
     const r = this._analyzer.analyze({ force: true });
     this._render(r);
   }

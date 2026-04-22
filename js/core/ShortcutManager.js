@@ -35,6 +35,10 @@ const DEFAULT_SHORTCUTS = {
   // Editing
   'edit-delete':      { key: 'Delete',            label: 'Delete Selected',   group: 'Editing' },
   'edit-delete2':     { key: 'Backspace',         label: 'Delete Selected',   group: 'Editing' },
+  // Pipeline (Phase 13)
+  'pipe-panel-toggle':     { key: 'KeyP',             label: 'Toggle Pipeline Panel',  group: 'Pipeline' },
+  'pipe-stageview-toggle': { key: 'shift+KeyP',       label: 'Toggle Stage Overlay',   group: 'Pipeline' },
+  'pipe-retime-suggest':   { key: 'ctrl+shift+KeyR',  label: 'Suggest Retiming',       group: 'Pipeline' },
   // System
   'sys-reset':        { key: 'ctrl+shift+KeyX',   label: 'Reset Everything',  group: 'System' },
   'sys-debug':        { key: 'ctrl+KeyD',         label: 'Toggle Debug',      group: 'System' },

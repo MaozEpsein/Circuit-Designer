@@ -157,6 +157,7 @@ export class CommandPalette {
       { id: 'action-insert-flush', label: 'Insert Flush Input → Selected PIPE', category: 'Pipeline', action: () => bus.emit('palette:action', 'insert-flush') },
       { id: 'action-suggest-retime', label: 'Suggest Retiming', category: 'Pipeline', action: () => bus.emit('palette:action', 'suggest-retime') },
       { id: 'action-hide-resolved-hazards', label: 'Toggle Hide Resolved Hazards', category: 'Pipeline', action: () => bus.emit('pipeline:toggle-hide-resolved') },
+      { id: 'action-stage-palette',         label: 'Toggle Colorblind Stage Palette', category: 'Pipeline', action: () => bus.emit('pipeline:toggle-palette') },
     ];
 
     this._items = [...tools, ...components, ...actions];
