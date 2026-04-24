@@ -15,6 +15,7 @@ import { detectForwardingPaths } from './ForwardingDetector.js';
 import { detectCdc } from './CdcDetector.js';
 import { checkLip } from './LipChecker.js';
 import { computeMetrics } from './PerformanceMetrics.js';
+import { scheduleProgram } from './PipelineScheduler.js';
 import * as Telemetry from './Telemetry.js';
 
 export class PipelineAnalyzer {
@@ -71,6 +72,13 @@ export class PipelineAnalyzer {
 
     // Phase-extension: performance metrics aggregated from everything above.
     this._cache.metrics = computeMetrics(this._cache);
+
+    // Gantt-style pipeline schedule (instruction × cycle) for the DIAGRAM
+    // panel. Built from the already-annotated program hazards so stall
+    // counts match the PERFORMANCE numbers exactly. Null when no ROM.
+    this._cache.schedule = this._cache.hasProgram
+      ? scheduleProgram(this._cache.instructions, this._cache.programHazards, isa)
+      : null;
 
     this._dirty = false;
     // Warn once per unknown type — prompts the designer to update DelayModel.js.

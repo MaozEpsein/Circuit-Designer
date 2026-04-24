@@ -729,6 +729,9 @@ A pipeline-aware analysis layer over the circuit. Open any pipelined design, hit
 - **Loop analysis** — backward-branch detection with induction-register inference; cross-iteration "steady-state" hazards tagged distinctly from cold-start ones.
 - **Forwarding detection** — structural pattern match on bypass MUXes (EX→EX, MEM→EX, WB→EX); resolved RAWs drop their bubbles and badge as `✓`. Coverage summary shows which canonical paths are present.
 
+**Pipeline Diagram**
+- **Gantt view** — instruction × cycle grid, colour-coded cells (`IF` / `ID` / `EX` / `MEM` / `WB`), stall bubbles between ID and EX, flush cells in the two IF slots after a taken JMP. Rendered directly from the decoded ROM + forwarding-aware program-hazard output, so the visible cycle count matches the PERFORMANCE section exactly. Bounded at 64 instructions / linear PC walk.
+
 **Control + elastic**
 - **Stall / flush** — per-stage `S`/`F` badges derived statically from PIPE_REG input wiring.
 - **HANDSHAKE** — valid/ready elastic pipelines with an `E` badge on affected stages.
@@ -754,6 +757,7 @@ js/pipeline/
 ├── ProgramHazardDetector.js    # ISA-level hazards, multi-cycle, loops
 ├── LoopAnalyzer.js             # backward-branch + induction-var detection
 ├── ForwardingDetector.js       # bypass-mux pattern match
+├── PipelineScheduler.js        # Gantt (instruction × cycle) static schedule
 ├── CdcDetector.js              # clock-domain crossings
 ├── LipChecker.js               # HANDSHAKE wiring rules
 ├── Retimer.js / RetimeVerifier.js

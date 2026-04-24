@@ -6,6 +6,7 @@
 import { bus } from '../../core/EventBus.js';
 import { setPipelineViolations, setPipelineCriticalPath, setPipelineHazards } from '../../rendering/CanvasRenderer.js';
 import { disassemble } from '../InstructionDecoder.js';
+import { cellAt as _cellAt } from '../PipelineScheduler.js';
 import * as Telemetry from '../Telemetry.js';
 
 function _hazardSummary(hazards) {
@@ -289,6 +290,74 @@ export class PipelinePanel {
            <div class="pipe-perf-row"><span class="k">Throughput</span><span class="v">${_esc(mips)}</span></div>
            ${fwdLine}
          </div>`);
+    }
+
+    // Pipeline Diagram (Gantt: instruction × cycle) — renders the static
+    // schedule from PipelineScheduler. Cells are colour-coded per stage;
+    // stalls appear as "**" cells between ID and EX, branch flushes as "✗"
+    // cells in the two IF slots following a taken JMP. Absence of stalls
+    // where a RAW hazard existed indicates forwarding already absorbed it.
+    if (r.schedule && r.schedule.rows.length) {
+      const sc = r.schedule;
+      const rows = sc.rows;
+      const cycles = sc.totalCycles;
+      const pcHex = (pc) => '0x' + pc.toString(16).toUpperCase().padStart(2, '0');
+
+      const header = [
+        `<div class="pipe-diag-header">PIPELINE DIAGRAM (${rows.length} instr · ${cycles} cycles${sc.truncated ? ' · truncated' : ''})</div>`,
+        `<div class="pipe-diag-legend">`,
+        `  <span class="pdl-cell pdc-IF">IF</span>`,
+        `  <span class="pdl-cell pdc-ID">ID</span>`,
+        `  <span class="pdl-cell pdc-EX">EX</span>`,
+        `  <span class="pdl-cell pdc-MEM">MEM</span>`,
+        `  <span class="pdl-cell pdc-WB">WB</span>`,
+        `  <span class="pdl-cell pdc-STALL" title="Bubble from RAW dependency">**</span>`,
+        `  <span class="pdl-cell pdc-FLUSH" title="IF slot flushed by taken branch">✗</span>`,
+        `</div>`,
+      ].join('');
+
+      // Column header — cycle numbers.
+      const cycHeader = ['<div class="pipe-diag-row pipe-diag-cyc-header"><div class="pdr-label"></div>'];
+      for (let c = 0; c < cycles; c++) cycHeader.push(`<div class="pdr-cyc">${c}</div>`);
+      cycHeader.push('</div>');
+
+      // Body — one row per instruction.
+      const body = rows.map((row, i) => {
+        const prev = rows[i - 1];
+        const flushStart = prev ? prev.ifCycle + 1 + prev.stallBefore : -1;
+        const flushEnd   = prev ? flushStart + prev.flushAfter : -1;
+
+        const cells = [];
+        for (let c = 0; c < cycles; c++) {
+          if (prev && c >= flushStart && c < flushEnd) {
+            cells.push(`<div class="pdr-cell pdc-FLUSH" title="Flushed by ${prev.name} @ ${pcHex(prev.pc)}">✗</div>`);
+            continue;
+          }
+          const lbl = _cellAt(row, c);
+          if (!lbl) { cells.push(`<div class="pdr-cell pdc-empty"></div>`); continue; }
+          if (lbl === 'STALL') {
+            const by = row.stalledBy.map(s => `${pcHex(s.producerPc)} (${s.bubbles})`).join(', ');
+            cells.push(`<div class="pdr-cell pdc-STALL" title="Stall: waiting on ${_esc(by)}">**</div>`);
+          } else {
+            cells.push(`<div class="pdr-cell pdc-${lbl}">${lbl}</div>`);
+          }
+        }
+
+        const badges = [
+          row.isLoad      ? '<span class="pdr-badge pdr-b-load">LD</span>' : '',
+          row.isBranch    ? '<span class="pdr-badge pdr-b-branch">BR</span>' : '',
+          row.speculative ? '<span class="pdr-badge pdr-b-spec" title="Conditional branch — flush not modelled">?</span>' : '',
+          row.isHalt      ? '<span class="pdr-badge pdr-b-halt">HLT</span>' : '',
+        ].join('');
+        const labelTitle = `${pcHex(row.pc)} · ${_esc(row.disasm)}`;
+        return `<div class="pipe-diag-row" title="${labelTitle}">
+          <div class="pdr-label"><span class="pdr-pc">${pcHex(row.pc)}</span> <span class="pdr-name">${_esc(row.disasm)}</span>${badges}</div>
+          ${cells.join('')}
+        </div>`;
+      }).join('');
+
+      this._body.insertAdjacentHTML('beforeend',
+        `${header}<div class="pipe-diag-grid" style="--pdg-cols:${cycles}">${cycHeader.join('')}${body}</div>`);
     }
 
     // Loops section (Phase 14 — induction-variable loop analysis).

@@ -1049,6 +1049,38 @@
 .pipe-perf-row .k { color: #6adfff; font-size: 0.85em; letter-spacing: 0.5px; }
 .pipe-perf-row .v { color: #e0f0ff; }
 
+/* Pipeline Diagram (Gantt — instruction × cycle). Horizontally scrollable
+   grid with a sticky left label column and a sticky top cycle-number row.
+   Stage cells use the colorblind-friendly hue palette already established
+   by the hazard tags (cyan/green/yellow/orange/magenta). */
+.pipe-diag-header { margin-top: 0.6em; padding: 0.5em 1.2em; font-weight: bold; color: #ffc070; border-top: 1px solid #2a1a08; border-bottom: 1px solid #2a1a08; background: #180e04; font-size: 0.95em; letter-spacing: 1px; }
+.pipe-diag-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 0.4em 1.2em; background: #0a0806; font-size: 0.82em; align-items: center; }
+.pdl-cell { padding: 2px 8px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 0.82em; border: 1px solid transparent; }
+
+.pipe-diag-grid { overflow-x: auto; padding: 0.5em 0.6em 0.8em 0.6em; background: #040608; font-family: 'JetBrains Mono', monospace; }
+.pipe-diag-row { display: grid; grid-template-columns: 180px repeat(var(--pdg-cols), 30px); gap: 2px; align-items: stretch; margin-bottom: 2px; }
+.pipe-diag-row.pipe-diag-cyc-header { position: sticky; top: 0; z-index: 2; background: #040608; padding-bottom: 3px; border-bottom: 1px solid #1a1a20; }
+.pipe-diag-row.pipe-diag-cyc-header .pdr-cyc { color: #6088a0; font-size: 0.72em; text-align: center; padding: 2px 0; }
+
+.pdr-label { position: sticky; left: 0; z-index: 1; background: #040608; padding: 2px 6px; font-size: 0.80em; color: #cfe6f0; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid #1a1a20; }
+.pdr-pc   { color: #7088a0; font-size: 0.78em; }
+.pdr-name { color: #e0f0ff; }
+.pdr-badge { padding: 0 4px; border-radius: 2px; font-size: 0.68em; font-weight: 600; letter-spacing: 0.5px; }
+.pdr-b-load   { background: #081a10; color: #6adf9a; border: 1px solid #103020; }
+.pdr-b-branch { background: #2a2008; color: #ffc840; border: 1px solid #5a4010; }
+.pdr-b-spec   { background: #201a2a; color: #b090ff; border: 1px solid #40306a; }
+.pdr-b-halt   { background: #2a0808; color: #ff5050; border: 1px solid #5a1010; }
+
+.pdr-cell { text-align: center; font-size: 0.74em; font-weight: 600; padding: 4px 0; border-radius: 2px; color: #040608; letter-spacing: 0.3px; }
+.pdc-empty { background: transparent; }
+.pdc-IF    { background: #6adfff; color: #041820; }
+.pdc-ID    { background: #c0ff50; color: #0a1808; }
+.pdc-EX    { background: #ffc840; color: #1a1204; }
+.pdc-MEM   { background: #ff9028; color: #1a0a04; }
+.pdc-WB    { background: #b090ff; color: #140a24; }
+.pdc-STALL { background: #3a1010; color: #ff8080; border: 1px dashed #7a2020; padding: 3px 0; }
+.pdc-FLUSH { background: #181820; color: #707080; border: 1px solid #303040; }
+
 .mem-row {
   display: flex;
   align-items: center;
