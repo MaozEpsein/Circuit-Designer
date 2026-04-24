@@ -226,6 +226,8 @@ export class PipelinePanel {
       const resolvedCount = r.programHazards.filter(h => h.resolvedByForwarding).length;
       const items = visible.map(h => {
         const loadUseTag = h.loadUse ? '<span class="pipe-hz-type hz-loaduse">LOAD-USE</span>' : '';
+        const steadyTag  = h.steadyState ? '<span class="pipe-hz-type hz-steady" title="Cross-iteration dependency inside a loop">STEADY</span>' : '';
+        const latTag     = (h.latencyI > 1) ? `<span class="pipe-hz-type hz-multicycle" title="Producer latency ${h.latencyI} cycles">×${h.latencyI}</span>` : '';
         let bubbleTxt;
         if (h.resolvedByForwarding) {
           const fwd = fwdById.get(h.forwardingPathId);
@@ -243,7 +245,7 @@ export class PipelinePanel {
         const rowCls = h.resolvedByForwarding ? 'pipe-prog-row resolved' : 'pipe-prog-row';
         return `
           <div class="${rowCls}">
-            <span class="pipe-hz-type ${typeCls[h.type] || ''}">${h.type}</span>${loadUseTag}
+            <span class="pipe-hz-type ${typeCls[h.type] || ''}">${h.type}</span>${loadUseTag}${steadyTag}${latTag}
             <span class="pipe-prog-names">
               <span class="pipe-prog-pc">${pcHex(h.instI)}</span> ${srcTxt}
               <span class="pipe-prog-arrow">\u2192</span>
@@ -265,6 +267,23 @@ export class PipelinePanel {
         `<div class="pipe-prog-header">PROGRAM HAZARDS (0)</div><div class="pipe-prog-clean">No inter-instruction hazards detected over ${r.instructions.length} instruction${r.instructions.length===1?'':'s'}.</div>`);
     }
 
+    // Loops section (Phase 14 — induction-variable loop analysis).
+    if (r.loops && r.loops.length) {
+      const pcHex = (pc) => '0x' + pc.toString(16).toUpperCase().padStart(2, '0');
+      const items = r.loops.map(L => {
+        const iv = L.inductionRegs.length
+          ? L.inductionRegs.map(r => `R${r}`).join(', ')
+          : '<span class="pipe-loop-noiv">no induction var</span>';
+        return `<div class="pipe-loop-row">
+          <span class="pipe-loop-range">${pcHex(L.startPc)} → ${pcHex(L.endPc)}</span>
+          <span class="pipe-loop-body">${L.bodyPcs.length} instr</span>
+          <span class="pipe-loop-iv">IV: ${iv}</span>
+        </div>`;
+      }).join('');
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-loops-header">LOOPS (${r.loops.length})</div>${items}`);
+    }
+
     // Forwarding Paths section (Phase 14c) — one row per detected bypass.
     if (r.forwardingPaths && r.forwardingPaths.length) {
       const labelOf = (id) => {
@@ -279,6 +298,69 @@ export class PipelinePanel {
         </div>`).join('');
       this._body.insertAdjacentHTML('beforeend',
         `<div class="pipe-forwards-header">FORWARDING PATHS (${r.forwardingPaths.length})</div>${items}`);
+
+      // Coverage summary (Tier 14d-lite): which of the canonical EX-targeted
+      // bypass paths are present. Informational — detector labels are coarse.
+      const present = new Set(r.forwardingPaths.map(p => p.fromStage).filter(Boolean));
+      const canonical = ['EX→EX', 'MEM→EX', 'WB→EX'];
+      const covLine = canonical.map(lbl =>
+        present.has(lbl)
+          ? `<span class="pipe-cov-ok">${_esc(lbl)} ✓</span>`
+          : `<span class="pipe-cov-miss">${_esc(lbl)} ✗</span>`
+      ).join(' · ');
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-cov-row">COVERAGE: ${covLine}</div>`);
+    }
+
+    // CDC section (Phase 13 stretch) — only when the scene has ≥2 clocks.
+    if (r.cdc && r.cdc.multiDomain) {
+      const labelOf = (id) => {
+        const n = this._analyzer._scene.getNode?.(id);
+        return n ? (n.label || n.id) : id;
+      };
+      const clkCount = r.cdc.clocks.length;
+      const crossings = r.cdc.crossings || [];
+      if (crossings.length) {
+        const items = crossings.map(c => {
+          const ok = c.syncDepth >= 2;
+          const badge = ok
+            ? `<span class="pipe-cdc-ok" title="${c.syncDepth} synchronizing flops on destination clock">sync ${c.syncDepth}✓</span>`
+            : `<span class="pipe-cdc-miss" title="Needs a 2-flop synchronizer on the destination clock">sync ${c.syncDepth}⚠</span>`;
+          return `<div class="pipe-cdc-row">
+            <span class="pipe-cdc-clocks">${_esc(labelOf(c.srcClock))} → ${_esc(labelOf(c.dstClock))}</span>
+            <span class="pipe-cdc-names">${_esc(labelOf(c.srcId))} → ${_esc(labelOf(c.dstId))}</span>
+            ${badge}
+          </div>`;
+        }).join('');
+        this._body.insertAdjacentHTML('beforeend',
+          `<div class="pipe-cdc-header">CDC CROSSINGS (${crossings.length}) · ${clkCount} clock domains</div>${items}`);
+      } else {
+        this._body.insertAdjacentHTML('beforeend',
+          `<div class="pipe-cdc-header">CDC CROSSINGS (0) · ${clkCount} clock domains</div>`);
+      }
+    }
+
+    // LIP section — structural check on HANDSHAKE wiring (Phase 13 stretch).
+    if (r.lip && r.lip.handshakeCount > 0) {
+      const labelOf = (id) => {
+        const n = this._analyzer._scene.getNode?.(id);
+        return n ? (n.label || n.id) : id;
+      };
+      if (r.lip.violations.length) {
+        const items = r.lip.violations.map(v => {
+          const sevCls = v.severity === 'error' ? 'pipe-lip-err' : 'pipe-lip-warn';
+          return `<div class="pipe-lip-row">
+            <span class="pipe-lip-rule ${sevCls}">${_esc(v.rule)}</span>
+            <span class="pipe-lip-hs">${_esc(labelOf(v.hsId))}</span>
+            <span class="pipe-lip-msg">${_esc(v.message)}</span>
+          </div>`;
+        }).join('');
+        this._body.insertAdjacentHTML('beforeend',
+          `<div class="pipe-lip-header">LIP VIOLATIONS (${r.lip.violations.length}) · ${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'}</div>${items}`);
+      } else {
+        this._body.insertAdjacentHTML('beforeend',
+          `<div class="pipe-lip-header">LIP ✓ (${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'} · all clean)</div>`);
+      }
     }
 
     // Row clicks emit a highlight event — the StageOverlay controller listens,

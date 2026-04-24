@@ -3388,6 +3388,20 @@ const EXAMPLES = [
     file: 'examples/circuits/pipeline-demo-program-all.json',
   },
   {
+    id: 'pipeline-demo-loop',
+    title: 'Pipeline Demo — Induction-Variable Loop (steady-state hazard)',
+    desc: '5-instruction ROM with a backward JZ at 0x03 → 0x00. The LOOPS panel reports one loop of 4 body instructions with R1 as the induction variable (self-update ADD R1, R1, R2). PROGRAM HAZARDS includes a RAW tagged STEADY — R1 is written at 0x01 and read by 0x00 of the next iteration across the back-edge.',
+    tags: ['pipeline', 'loop', 'induction-variable', 'steady-state', 'RAW'],
+    file: 'examples/circuits/pipeline-demo-loop.json',
+  },
+  {
+    id: 'pipeline-demo-cdc',
+    title: 'Pipeline Demo — Clock-Domain Crossing (CDC)',
+    desc: 'Two CLOCK sources (clkA, clkB) feeding stateful flops in separate domains. A source PIPE on clkA fans out to two receivers on clkB: one single flop (WARN — depth 1) and one 2-flop synchronizer chain (OK — depth 2). The CDC CROSSINGS section in the Pipeline panel reports both with sync-depth badges.',
+    tags: ['pipeline', 'cdc', 'clock-domain', 'synchronizer', 'multi-clock'],
+    file: 'examples/circuits/pipeline-demo-cdc.json',
+  },
+  {
     id: 'mips-5stage-forwarding-demo',
     title: 'Pipeline Demo — MIPS 5-stage + EX→EX forwarding',
     desc: 'The no-forwarding MIPS demo extended with two 2:1 forwarding MUXes on the ALU.A/B paths. Each MUX selects between the normal ID/EX read and the latched EX/MEM.alu_result, gated by an EQ comparator between ID/EX.rs{1,2}_field and EX/MEM.rd plus an AND with EX/MEM.regWe. The same 6-instruction program runs: 3 of the 4 RAW hazards are now marked ✓ resolved by forwarding; only the LOAD→ADD load-use remains with its full bubble cost. The canonical demo for Phase 14b detection on a real pipelined CPU.',

@@ -1012,6 +1012,36 @@
 .pipe-forward-reg  { color: #ffa028; font-weight: bold; font-size: 0.88em; padding: 1px 6px; border-radius: 3px; background: #2a1a08; border: 1px solid #4a3010; }
 .pipe-forward-names { color: #cfe6f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 0.90em; }
 
+/* Phase 14 — loop analysis, steady-state hazards, multi-cycle latency, coverage summary. */
+.pipe-loops-header { margin-top: 0.6em; padding: 0.5em 1.2em; font-weight: bold; color: #ffd060; border-top: 1px solid #2a2208; border-bottom: 1px solid #2a2208; background: #14100a; font-size: 0.95em; letter-spacing: 1px; }
+.pipe-loop-row { display: grid; grid-template-columns: auto auto 1fr; gap: 0.6em; align-items: center; padding: 0.5em 1.2em; border-bottom: 1px solid #201a08; font-size: 0.92em; color: #e8dcb0; }
+.pipe-loop-range { color: #ffd060; font-family: 'JetBrains Mono', monospace; font-weight: bold; }
+.pipe-loop-body  { color: #c0b080; font-size: 0.88em; }
+.pipe-loop-iv    { color: #ffa028; font-family: 'JetBrains Mono', monospace; font-size: 0.90em; }
+.pipe-loop-noiv  { color: #806030; font-style: italic; }
+.pipe-hz-type.hz-steady     { background: #2a2008; color: #ffd060; border-color: #5a4010; margin-left: 4px; }
+.pipe-hz-type.hz-multicycle { background: #1a1a2a; color: #90c0ff; border-color: #303060; margin-left: 4px; }
+.pipe-cov-row { padding: 0.45em 1.2em; font-size: 0.86em; color: #9ab0c0; background: #06120e; border-bottom: 1px solid #0a2018; letter-spacing: 0.5px; }
+.pipe-cov-ok   { color: #6adf9a; font-weight: bold; margin-right: 4px; }
+.pipe-cov-miss { color: #805060; margin-right: 4px; }
+
+/* Phase 13 stretch — CDC crossings. */
+.pipe-cdc-header { margin-top: 0.6em; padding: 0.5em 1.2em; font-weight: bold; color: #ff8050; border-top: 1px solid #2a1408; border-bottom: 1px solid #2a1408; background: #140a06; font-size: 0.95em; letter-spacing: 1px; }
+.pipe-cdc-row { display: grid; grid-template-columns: auto 1fr auto; gap: 0.6em; align-items: center; padding: 0.5em 1.2em; border-bottom: 1px solid #201008; font-size: 0.92em; color: #e8cfc0; }
+.pipe-cdc-clocks { color: #ff8050; font-weight: bold; font-family: 'JetBrains Mono', monospace; font-size: 0.88em; padding: 1px 6px; background: #201008; border-radius: 3px; border: 1px solid #402010; }
+.pipe-cdc-names  { color: #cfe6f0; font-family: 'JetBrains Mono', monospace; font-size: 0.90em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe-cdc-ok   { color: #6adf9a; font-weight: bold; }
+.pipe-cdc-miss { color: #ff5050; font-weight: bold; }
+
+/* Phase 13 stretch — LIP (latency-insensitive protocol) checker. */
+.pipe-lip-header { margin-top: 0.6em; padding: 0.5em 1.2em; font-weight: bold; color: #b090ff; border-top: 1px solid #1a1028; border-bottom: 1px solid #1a1028; background: #0a0614; font-size: 0.95em; letter-spacing: 1px; }
+.pipe-lip-row { display: grid; grid-template-columns: auto auto 1fr; gap: 0.6em; align-items: center; padding: 0.5em 1.2em; border-bottom: 1px solid #140a20; font-size: 0.92em; color: #d0c0e8; }
+.pipe-lip-rule { font-weight: bold; font-family: 'JetBrains Mono', monospace; font-size: 0.82em; padding: 1px 6px; border-radius: 3px; border: 1px solid #333; letter-spacing: 0.5px; }
+.pipe-lip-rule.pipe-lip-err  { color: #ff5050; background: #1a0808; border-color: #402020; }
+.pipe-lip-rule.pipe-lip-warn { color: #ffd060; background: #1a1408; border-color: #403020; }
+.pipe-lip-hs  { color: #b090ff; font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+.pipe-lip-msg { color: #cfe6f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .mem-row {
   display: flex;
   align-items: center;

@@ -96,7 +96,7 @@ console.log('\n-- cpu-detailed.json: SUB_CIRCUIT CU fallback --');
   check('returned ISA non-null',      isa !== null);
   check('has opcodes',                typeof isa.opcodes === 'object' && Object.keys(isa.opcodes).length > 0);
   check('source is a known tag',
-        ['native', 'native-default-table', 'subcircuit-fallback', 'no-ir-fallback', 'no-cu-fallback']
+        ['native', 'native-default-table', 'subcircuit-fallback', 'subcircuit-cu', 'no-ir-fallback', 'no-cu-fallback']
           .includes(isa.source),
         `got '${isa.source}'`);
 }

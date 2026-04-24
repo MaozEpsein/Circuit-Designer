@@ -15,9 +15,16 @@
  * like simple-cpu.json that haven't been customized via the `cu:edit`
  * modal.
  *
- * Out of scope for the MVP (tracked for Tier 14d):
- *   - SUB_CIRCUIT-based CUs (e.g. cpu-detailed.json): we return a fallback
- *     ISA with a warning rather than descend into the inner scene.
+ * Tier 14d additions:
+ *   - SUB_CIRCUIT-based CUs (e.g. cpu-detailed.json): we recursively descend
+ *     into `node.subCircuit.nodes` looking for a native CU that carries the
+ *     real controlTable. Only the first match is used — nested sub-circuits
+ *     in real CPUs virtually always wrap a single primitive CU.
+ *   - Missing top-level IR: we fall back to the DEFAULT_ISA field layout
+ *     scaled to the ROM's `dataBits`, which is the shape the native CU
+ *     expects on its instruction-word input.
+ *
+ * Still out of scope:
  *   - Control signals exposed on custom pin layouts (user-built CU from
  *     gates): we don't attempt to trace them.
  */
@@ -55,6 +62,50 @@ function _cloneFallback(source, warnings) {
     opcodes:       { ...DEFAULT_ISA.opcodes },
     source,
     warnings:      warnings.slice(),
+  };
+}
+
+/**
+ * Recursively search nodes (and any SUB_CIRCUIT children) for a native CU.
+ * Returns the first primitive CU encountered or null. Depth-limited to guard
+ * against pathological / circular sub-circuit graphs.
+ */
+function _findCuDeep(nodes, depth = 0) {
+  if (!Array.isArray(nodes) || depth > 8) return null;
+  for (const n of nodes) {
+    if (n?.type === 'CU') return n;
+  }
+  for (const n of nodes) {
+    const inner = n?.subCircuit?.nodes;
+    if (inner) {
+      const hit = _findCuDeep(inner, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build a field layout from the ROM's `dataBits` when no IR node is present.
+ * Uses the DEFAULT_ISA 4/4/4/4 shape scaled by width — the native CU expects
+ * its instruction input in this layout (op / rd / rs1 / rs2).
+ */
+function _fieldsFromRom(rom) {
+  const w = Number.isFinite(rom?.dataBits) ? rom.dataBits : 16;
+  const q = Math.floor(w / 4);
+  const opLo  = w - q;
+  const rdHi  = opLo - 1;
+  const rdLo  = rdHi - q + 1;
+  const rs1Hi = rdLo - 1;
+  const rs1Lo = rs1Hi - q + 1;
+  const rs2Hi = rs1Lo - 1;
+  const rs2Lo = Math.max(0, rs2Hi - q + 1);
+  return {
+    op:   [w - 1, opLo],
+    rd:   [rdHi,  rdLo],
+    rs1:  [rs1Hi, rs1Lo],
+    rs2:  [rs2Hi, rs2Lo],
+    addr: [rdHi,  0],
   };
 }
 
@@ -147,18 +198,28 @@ function _deriveOpcodeMeta(row, idx) {
  */
 export function inferIsa(scene) {
   const nodes = scene?.nodes || [];
-  const cu    = nodes.find(n => n.type === 'CU');
-  const ir    = nodes.find(n => n.type === 'IR');
+  const warnings = [];
+
+  // Tier 14d: descend into SUB_CIRCUITs when no primitive CU is at the top.
+  let cu = nodes.find(n => n.type === 'CU');
+  let cuSource = 'native';
+  if (!cu) {
+    const deep = _findCuDeep(nodes);
+    if (deep) {
+      cu = deep;
+      cuSource = 'subcircuit-descended';
+      warnings.push('CU descended from SUB_CIRCUIT — native controlTable used');
+    }
+  }
+
+  const ir  = nodes.find(n => n.type === 'IR');
+  const rom = nodes.find(n => n.type === 'ROM');
 
   if (!cu && !ir) {
-    // A SUB_CIRCUIT-based CPU (e.g. cpu-detailed.json with a `cu_spec`
-    // block) has no top-level CU or IR to introspect. Fall back to the
-    // default ISA rather than returning null, so the rest of the analyzer
-    // still has a usable opcode table.
-    const hasSubCircuit = nodes.some(n => n.type === 'SUB_CIRCUIT');
-    if (hasSubCircuit) {
+    // Nothing to infer from — neither a CU anywhere nor an IR at the top.
+    if (nodes.some(n => n.type === 'SUB_CIRCUIT')) {
       return _cloneFallback('subcircuit-fallback',
-        ['SUB_CIRCUIT-based CPU — top-level CU/IR not visible; using default ISA']);
+        ['SUB_CIRCUIT-based CPU — no native CU found at any depth; using default ISA']);
     }
     return null;
   }
@@ -168,21 +229,24 @@ export function inferIsa(scene) {
       ['no CU component found — using default ISA']);
   }
 
-  // SUB_CIRCUIT-based CU: deferred to Tier 14d. Returning a fallback keeps
-  // analysis functional on cpu-detailed.json rather than hard-erroring.
-  if (cu.type === 'SUB_CIRCUIT') {
-    return _cloneFallback('subcircuit-fallback',
-      ['SUB_CIRCUIT-based CU not yet supported — using default ISA']);
-  }
-
-  if (!ir) {
+  // IR layout: prefer an explicit IR node; fall back to the ROM's width
+  // using the 4/4/4/4 default shape the native CU expects.
+  let fields, wordBits;
+  if (ir) {
+    fields   = _fieldsFromIR(ir);
+    wordBits = ir.instrWidth || DEFAULT_ISA.wordBits;
+  } else if (rom) {
+    fields   = _fieldsFromRom(rom);
+    wordBits = rom.dataBits || DEFAULT_ISA.wordBits;
+    warnings.push('no IR component — field layout derived from ROM dataBits');
+  } else {
     return _cloneFallback('no-ir-fallback',
-      ['no IR component found — using default ISA']);
+      ['no IR component and no ROM to derive width — using default ISA']);
   }
 
-  const fields = _fieldsFromIR(ir);
   const table  = Array.isArray(cu.controlTable) ? cu.controlTable : DEFAULT_CONTROL_TABLE;
-  const source = Array.isArray(cu.controlTable) ? 'native' : 'native-default-table';
+  const tableTag = Array.isArray(cu.controlTable) ? 'native' : 'native-default-table';
+  const source = (cuSource === 'subcircuit-descended') ? 'subcircuit-cu' : tableTag;
 
   const opcodes = {};
   for (let i = 0; i < table.length; i++) {
@@ -193,11 +257,11 @@ export function inferIsa(scene) {
   return {
     id:            'inferred',
     name:          'Inferred from circuit',
-    wordBits:      ir.instrWidth || DEFAULT_ISA.wordBits,
+    wordBits,
     pipelineDepth: DEFAULT_ISA.pipelineDepth,
     fields,
     opcodes,
     source,
-    warnings:      [],
+    warnings,
   };
 }
