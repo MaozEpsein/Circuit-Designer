@@ -713,235 +713,56 @@ Drag a **PIPE** chip from the Pipeline palette tab. Wire data through it. Open t
 
 ---
 
-## Pipelining — Development Plan
+## Pipelining
 
-**Status**: design-stage. Prioritized ahead of the HDL Toolchain so pipeline-aware IR is available when HDL export matures.
+A pipeline-aware analysis layer over the circuit. Open any pipelined design, hit the **PIPE** button (or `P`), and the panel reports everything below live. All analysis runs in-memory on a cache invalidated by scene edits; single-clock scenes short-circuit the multi-clock passes.
 
-**Goal**: Turn Circuit-Designer into a pipeline-aware EDA tool — identify stages, measure latency/throughput/f_max, flag cross-stage violations, support stall/flush and valid/ready handshake, detect hazards, and (stretch) auto-retime. Culminates in pipeline-aware Verilog export that feeds back into the HDL Toolchain.
+**Core analysis**
+- **Stage levelization** — Kahn's topo-sort over data wires, cut at every `PIPE_REG`. Each node gets a `stage` index; the panel shows latency in cycles, bottleneck stage, f_max (ps → MHz/GHz), and per-stage balance.
+- **Delay model** — picosecond delays per component type with weighted critical-path reporting and a click-to-highlight path overlay on the canvas.
+- **Cross-stage validation** — flags any data wire that crosses stage boundaries without a `PIPE_REG` and paints it red on the canvas.
+- **Auto-retime** — Leiserson–Saxe-style greedy single-move suggestions with a preview overlay, semantics-preserving verification by random-vector simulation diff, and one-step undo.
 
-**Architecture overview**: dedicated `js/pipeline/` feature folder (mirrors `cpu/`, `hdl/`, `waveform/`), with minimal, targeted hooks in `components/`, `core/`, `engine/`, `ui/`, and `hdl/`. One feature = one folder; shared code stays in the kernel.
+**Hazards**
+- **Hardware hazards** — RAW / WAR / WAW / LOOP detection over the datapath graph with per-type suggestions and clickable jump-to-wire.
+- **Program hazards** — ROM decoded per-ISA; pair-wise RAW / WAR / WAW / load-use with bubble counts and disassembled source/sink rows. Multi-cycle producers widen the dependency window (`effW = W + latency − 1`).
+- **Loop analysis** — backward-branch detection with induction-register inference; cross-iteration "steady-state" hazards tagged distinctly from cold-start ones.
+- **Forwarding detection** — structural pattern match on bypass MUXes (EX→EX, MEM→EX, WB→EX); resolved RAWs drop their bubbles and badge as `✓`. Coverage summary shows which canonical paths are present.
 
-### Running "PIPELINE" Example
-Each phase — whenever applicable — adds to / updates a single evolving reference circuit: **`examples/pipeline-demo.json`**. It starts as the simplest possible pipelined design and grows with every new capability (stages, stall/flush, handshake, hazards, retime). At the end of the plan it is the canonical showcase: opens in-app, exercises every pipeline feature, matches a ready-to-run Verilog cosim in `examples/pipeline-demo.v`.
+**Control + elastic**
+- **Stall / flush** — per-stage `S`/`F` badges derived statically from PIPE_REG input wiring.
+- **HANDSHAKE** — valid/ready elastic pipelines with an `E` badge on affected stages.
+- **LIP checker** — structural validation of HANDSHAKE wiring: unregistered V/R, dangling S, and V→R combinational deadlock.
 
-Per-phase update obligations are listed as **Example update** bullets inside each phase.
+**Multi-clock**
+- **CDC detector** — every stateful node is mapped to its driving CLOCK; cross-domain data paths are reported with a synchronizer-depth badge (≥2 PIPE_REGs on the destination clock = classical 2-flop synchronizer).
 
-### Per-Phase Commit Discipline
-Every phase ends with a commit — message format `pipeline(phase-N): <short summary>`. Scope: code + docs + example update for that phase, nothing else. Checkboxes in this plan are ticked in the same commit.
+**ISA inference**
+- Auto-derives `{fields, opcodes}` from the native `CU.controlTable` + `IR` bit-layout, or descends recursively into a SUB_CIRCUIT-based CU and falls back to the ROM's `dataBits` when no IR node exists. No hand-maintained ISA JSON required for the shipping demos.
 
----
+**UX + infrastructure**
+- Keyboard shortcuts (`P`, `Shift+P`, `Ctrl+Shift+R`), colorblind-friendly stage palette, local telemetry counters, and a perf baseline (median `analyze()` ≈ 2 ms on a 500-node / 10-stage scene, hard-fail regression gate at 200 ms).
 
-### Phase 1 — Foundations (Component + Metadata)
-**Goal**: `PIPE_REG` is a first-class pipeline element; every node carries a `stage` field.
-- [x] `PIPE_REG` already supports `channels` width + STALL/FLUSH pins in engine; default factory now also seeds `pipelineRole: 'register'` and `stage: null`. (`valid`/`ready` deferred to Phase 8.)
-- [x] Added `stage: number | null` to node metadata (seeded at create; serializer keeps it; analyzer will overwrite in Phase 2).
-- [x] Added `pipelineRole: 'data'|'control'|'register'|'boundary'` tag on nodes.
-- [x] Palette: new **"Pipeline"** tab in `app.html`; PIPE moved to it. (`HANDSHAKE` + `STAGE_BOUNDARY` stubs deferred to their own phases — avoiding non-rendering chips.)
-- [x] Command palette: *Insert PIPE Register* already existed; added *Toggle Stage View* (stub wired to `pipeline:stageview:toggle`, UX: toast "coming in Phase 4").
-- **Example update**: created `examples/circuits/pipeline-demo.json` — 2-stage design (INPUT A/B → AND → PIPE_REG → OR with INPUT C → OUTPUT) + registered in the Examples menu.
-- **Deliverable**: user drops a width-N PIPE, wires through, field nullable until analyzed.
-- **Verify L1** — unit: serialize/deserialize preserves new fields.
-- **Verify L2** — manual: drop PIPE, wire through, simulate → output arrives 1 cycle later.
-
-### Phase 2 — Stage Evaluator (core pass)
-**Goal**: clean, reusable levelization + per-stage depth pass (currently missing from the engine).
-- [x] `js/pipeline/StageEvaluator.js`: Kahn topo-sort over data wires (clock wires skipped); cut at every `PIPE_REG`; assign `node.stage` 0..K-1; per-stage combinational depth (gate levels — PIPE/INPUT/OUTPUT/CLOCK pass-through).
-- [x] Public API: `evaluate(scene) → { stages, cycles, bottleneck, hasCycle }` in `StageEvaluator.js`; wrapped by `PipelineAnalyzer` class with cache.
-- [x] Cache invalidation on scene mutation via `EventBus` (`node:added/removed`, `wire:added/removed`, `scene:loaded/cleared`).
-- [x] Fan-out / fan-in handled naturally — stage = max over predecessors + PIPE bump.
-- [x] Hooked into Command Palette: *Analyze Pipeline* — logs stage table to console + toast with stage count & bottleneck. Exposed on `window.pipeline` for DevTools testing (`pipeline.analyze()`).
-- **Example update**: `examples/circuits/pipeline-demo.json` extended to 3 stages with fan-out (`AND → PIPE1 → {NOT, OR+C} → PIPE2/PIPE3 → XOR → Q`).
-- **Deliverable**: `PipelineAnalyzer.analyze()` returns correct stages for linear, branching, merging pipelines.
-- **Verify L1** — unit: golden graphs (3-stage MAC, 5-stage RISC datapath).
-- **Verify L2** — integration: run on bundled `examples/`.
-
-### Phase 3 — Pipeline Panel (UI, read-only)
-**Goal**: visible panel with latency / throughput / per-stage table.
-- [x] `js/pipeline/ui/PipelinePanel.js` — static container `#pipeline-panel` in `app.html`, controller manages visibility + live rendering.
-- [x] Panel shows: stage list (idx, depth, node count, bar chart); summary (latency, bottleneck stage+depth, throughput = 1/depth_max, balance %); bottleneck row highlighted red. Stage-highlighting overlay deferred to Phase 4.
-- [x] Toggle via new HUD **PIPE** button + Command Palette (*Toggle Pipeline Panel*). Keyboard shortcut deferred to Phase 13.
-- [x] Real-time update on scene mutation (debounced 200ms) + refresh on `pipeline:analyzed`.
-- **Example update**: `pipeline-demo.json` (3 stages) now shows in the panel: `Latency 3 cycles, Bottleneck S0 (d=1), Throughput 1.000 /gate-delay, Balance 100%`.
-- **Deliverable**: user opens panel, sees accurate numbers, can highlight any stage.
-- **Verify L2** — manual on example circuits.
-- **Verify L3** — screenshot regression.
-
-### Phase 4 — Stage Overlay (canvas)
-**Goal**: color-code stages on the main canvas.
-- [x] `js/pipeline/ui/StageOverlay.js` + `setStageOverlay(state)` hook in `CanvasRenderer` — draws translucent coloured halos under each node, per `node.stage`.
-- [x] Rotating palette of 8 distinct hues; bottleneck always overridden to red with a thicker stroke (no animation yet — deferred).
-- [x] Highlight mode: click a stage row in the Pipeline Panel → that stage stays bright, others dim; click again to clear.
-- [x] Toggle via Command Palette (*Toggle Stage View*) — live status shown in a toast.
-- **Example update**: load `pipeline-demo.json`, enable Stage View → three distinct hues (cyan/green/yellow) visible; click a row in Pipeline Panel to isolate a stage.
-
-### Phase 5 — Cross-Stage Validation
-**Goal**: hard-flag wires that jump stages without an intervening `PIPE_REG`.
-- [x] Violation detection now part of `StageEvaluator.evaluate()` result (`violations[]` with `wireId, srcId, dstId, srcStage, dstStage, missing`).
-- [x] Rule: wire `src → dst` is a violation when `src` is not a `PIPE_REG` and `src` has another consumer in an earlier stage — i.e. the signal is being re-used downstream without being latched. Correctly ignores stage-agnostic inputs that happen to feed only later stages.
-- [x] Violations listed in Pipeline Panel (red section, click → zoom-to-wire endpoints via `pipeline:jump-to-wire`).
-- [x] Red dashed pulsing stroke on the offending wires via `setPipelineViolations(list)` hook in `CanvasRenderer`. (Warning mode only — simulation still runs.)
-- [x] HDL export gating deferred to Phase 11 (where HDL export itself picks up pipeline awareness).
-- **Example update**: added `examples/circuits/pipeline-demo-bad.json` — clean 2-stage pipeline with a shortcut wire `A → XOR` that skips PIPE. Validator flags it on load.
-- **Tests**: `examples/tests/test-pipeline-phase5.mjs` — passes on clean + bad demos.
-
-### Phase 6 — Per-Stage Critical Path + Bottleneck
-**Goal**: real delay model, not just gate count.
-- [x] `js/pipeline/DelayModel.js` — per-component delay table in picoseconds (gate 50 ps, adder 150, MUX 200, ALU 800, registers/IO 0, …); unknown types default to 100 ps.
-- [x] `StageEvaluator` now computes weighted longest-path (`delayPs`) alongside gate count (`depth`). Tracks `critPred` per node to recover the exact critical chain.
-- [x] Per-stage result includes `delayPs` and ordered `criticalPath[]` node IDs. Top-level `maxDelayPs` and `fMaxMHz` exposed.
-- [x] Bottleneck is now delay-based (stage with max `delayPs`).
-- [x] Panel shows `ps` per stage and **f_max** (auto-scales to MHz/GHz). Clicking a stage row highlights its critical path on the canvas (yellow dashed via `setPipelineCriticalPath`).
-- **Example update**: same demo — measurable numbers now visible (3 × 50 ps ≈ 20 GHz theoretical with these toy delays).
-- **Tests**: `examples/tests/test-pipeline-phase6.mjs` — passes.
-
-### Phase 7 — Stall / Flush (synchronous control)
-**Goal**: PIPE register responds to `enable` (stall) and `clear` (flush/bubble).
-- [x] `SimulationEngine` already honours `PIPE_REG.STALL` (skip capture if 1) and `FLUSH` (drive 0) — pre-existing, confirmed during Phase 1 audit.
-- [x] Palette commands *Insert Stall Input → Selected PIPE* / *Insert Flush Input → Selected PIPE* — auto-creates a labelled `INPUT` and wires it to the correct pin of the selected PIPE (undoable via `AddNodeCommand` + `AddWireCommand`). Toast feedback on missing selection / duplicate wire.
-- [x] Pipeline Panel per-stage **S** / **F** badges (green `S` = stall wired, pink `F` = flush wired) — derived statically by `StageEvaluator` from wires into PIPE_REG inputs `channels` and `channels+1`.
-- **Example update**: wire via palette commands — e.g. select PIPE1 in the demo → Ctrl+K → *Insert Stall Input* → new STALL input appears. Toggle it to 1 → PIPE freezes its value across clock edges.
-
----
-
-**Milestone 1 (Phases 1–7)**: *"Pipeline-aware design + static analysis + basic control."* The tool can model a pipeline, measure it, validate it, stall it. Ship-ready mid-point.
-
----
-
-### Phase 8 — Valid / Ready Handshake (elastic pipeline)
-**Goal**: proper back-pressure between stages.
-- [x] New `HANDSHAKE` component — 2 inputs (**V** valid, **R** ready), 2 outputs (**S** stall = NOT(V AND R), **F** fire = V AND R). Combinational, 60 ps delay.
-- [x] Convention: wire **S** directly into a PIPE's STALL pin — auto-stall whenever downstream isn't ready or producer hasn't asserted valid.
-- [x] Analyzer flags a stage as **elastic** when its PIPE's STALL source is a HANDSHAKE. Panel shows a yellow **E** badge on the stage row.
-- [x] Palette chip under PIPELINE tab + Command Palette entry.
-- **Example update**: promote the demo later — for now, the user can drop a HS manually between two PIPEs, wire V/R, observe E badge.
-
-### Phase 9 — Hazard Detection
-**Goal**: detect RAW / WAR / WAW across stages with feedback.
-- [x] Analyze back-edges where a later stage writes a node read earlier. (`js/pipeline/HazardDetector.js` — iterative DFS with gray/black coloring; back-edge = data-wire `u → v` where `v` is already on the ancestor stack. Also WAW pass on the forward DAG: two stateful writers into the same `(target, inputIndex)`.)
-- [x] Report: hazard type, source stage, sink stage, offending signal. (Each hazard record carries `type ∈ {RAW, WAR, WAW, LOOP}`, `wireId`, `srcId/dstId`, `srcStage/dstStage`, `cyclePath`.)
-- [x] Suggestion engine: *"insert forwarding mux here"* or *"insert PIPE to match stages."* (Per-type suggestion strings attached to each hazard and shown under the row in the panel.)
-- [x] Panel tab **"Hazards"**. (Summary line in the header + dedicated `HAZARDS (N)` section below Violations, with colored RAW/WAR/WAW/LOOP badges, stage arrow, clickable rows that `pipeline:jump-to-wire`, and inline fix suggestion. Hazard wires drawn on canvas as pulsing orange/magenta dashes, color-keyed by hazard type.)
-- **Example update**: `examples/circuits/pipeline-demo-hazard.json` — 2-PIPE forward path + feedback arc from PIPE2 back to XOR (stage-0 reader) → classic RAW flagged on load. Registered in the Examples menu as *Pipeline Demo — RAW Hazard*.
-- **Tests**: `examples/tests/test-pipeline-phase9.mjs` — 14 checks across the hazard demo (RAW on `w_raw`), a synthetic 2-NOT combinational loop (LOOP), a WAW collision (two PIPEs → same XOR pin), and the clean demos (no false positives).
-
-### Phase 9.5 — Program Hazard Analysis (ISA-level)
-**Goal**: detect RAW / WAR / WAW / load-use hazards **between consecutive instructions in ROM**, independently of the hardware graph. Phase 9 detects topological hazards in the datapath; Phase 9.5 detects hazards in the *program* running on that datapath. Two sub-milestones — **Easy** (hardcoded MIPS-5) ships first, then **Medium** (user-defined ISA + branches).
-
-**Easy (MVP — hardcoded MIPS 5-stage):**
-- [ ] `js/pipeline/isa/mips.js` — MIPS-I opcode table: `{opcode → {name, reads:[rs,rt], writes:[rd], fields:{rs:[25,21],rt:[20,16],rd:[15,11],imm:[15,0]}, latency, isLoad, isBranch}}`. Covers the ops used in `simple-cpu` + `mips-gcd`.
-- [ ] `js/pipeline/InstructionDecoder.js` — reads a ROM node's memory, decodes word-by-word into `Array<{pc, raw, opcode, rs, rt, rd, imm}>`.
-- [ ] `js/pipeline/ProgramHazardDetector.js` — pipeline-window scan with `W=5`. For each pair `(i, j)` with `j - i < W`: if `j` reads a register that `i` writes, emit `{type:RAW, loadUse:(i.isLoad && j-i===1), instI:i.pc, instJ:j.pc, reg, bubbles: W - (j - i) - 1}`. WAR/WAW fall out the same way under OOO; for a strict in-order 5-stage, report them as informational. Assumes no forwarding (Phase 14 adds that).
-- [ ] Panel section **PROGRAM HAZARDS (N)** — rows like `PC 0x04 → PC 0x08  RAW on R1  (2 bubbles)` with a tooltip showing the decoded source/sink instructions. Clickable → highlights the two ROM addresses.
-
-**Medium (user-defined ISA + branches):**
-- [ ] ISA as data: `examples/isa/*.json` — `{name, wordBits, opcodes: {...}}`. Loader in `js/pipeline/isa/IsaLoader.js`.
-- [ ] ISA picker: dropdown in the Pipeline panel header + auto-detect via `scene.meta.isaId` stored on the ROM node.
-- [ ] Branch handling: for each branch, analyze the fall-through *and* the target path within the pipeline window; emit hazards that appear on any path (annotated with which path).
-- [ ] Loop detection: if a branch target PC is ≤ current PC, report "steady-state" hazards in the loop body separately from cold-start hazards in the header row (`3 RAW (steady-state in loop @ 0x0C)`).
-- [ ] Pipeline-depth knob: ISA JSON carries `pipelineDepth` (default 5); the window scanner uses it.
-
-- **Example update**: `examples/circuits/pipeline-demo-program.json` — minimal MIPS-style datapath with a 4-instruction ROM containing a deliberate RAW (`ADD R1,R2,R3` → `SUB R4,R1,R5`) and a load-use (`LW R3,0(R2)` → `ADD R5,R3,R6`). Registered in the Examples menu. `pipeline-demo-program-isa.json` variant carries the ISA JSON reference, exercising the Medium loader.
-- **Tests**: `examples/tests/test-pipeline-phase9-5.mjs` — textbook RAW / load-use / WAR / WAW sequences; branch-path hazards; loop steady-state detection. Plus: no false positives on NOP-padded clean programs.
-- **Verify L1** — unit: Patterson & Hennessy classic 3-instruction hazard sequences produce the documented bubble counts.
-- **Verify L2** — manual: open `mips-gcd` → Program Hazards tab lists the loop-body hazards with correct PCs.
-- **Verify L3** — differential: hand-insert the reported number of NOPs into the ROM, re-run simulation; outputs match the un-padded version at shifted cycle offsets.
-
-### Phase 10 — Auto-Retime (Leiserson–Saxe)
-**Goal**: optionally move `PIPE_REG`s to balance stages while preserving semantics.
-- [ ] `js/pipeline/Retimer.js` — classic retiming on the sequential graph.
-- [ ] Opt-in: *Suggest Retiming* → preview overlay → accept/reject.
-- [ ] Invariants preserved: initial state + I/O behavior, verified by simulation diff on N random vectors.
-- [ ] Fallback: if verification fails, revert and warn.
-- **Example update**: snapshot `pipeline-demo.json` pre-retime; accept the retime suggestion; commit the retimed version alongside as `pipeline-demo.retimed.json` for before/after comparison.
-- **Verify L1** — unit: known retimeable graphs reach optimal balance.
-- **Verify L2** — manual: unbalanced pipeline → accept suggestion → latency same, throughput up.
-- **Verify L3** — differential sim: N random vectors, before/after outputs identical at matching cycle offset.
-
-### Phase 11 — *moved to the HDL Toolchain plan*
-Pipeline-aware Verilog export is fundamentally HDL-generation work, not pipeline-analysis work: the code lives in [js/hdl/](js/hdl/), the relevant `PIPE_REG` translator sits alongside the other sequential translators, and gating export on pipeline violations is an exporter-UX concern. Those responsibilities were migrated into the **HDL Toolchain** plan (see Phase 2, Phase 4, and Phase 7 of that plan for the specific bullets). This slot in the pipelining plan is kept as a cross-reference marker so the phase numbering stays stable for prior commits.
-
-### Phase 12 — Templates, Docs, Examples
-**Goal**: onboarding + reusable building blocks.
-- [x] `examples/`: the demo set now covers all the analysis features — `pipeline-demo.json` (3-stage with fan-out), `pipeline-demo-retime.json` (imbalanced, 3-stage, retimeable), `pipeline-demo-elastic.json` *(new)* (2-stage with HANDSHAKE back-pressure), `pipeline-demo-hazard*.json` (hazards), `pipeline-demo-program*.json` (program-level), `pipeline-demo-hazard-all.json` (RAW/WAR/WAW/LOOP together). **Deferred**: *3-stage MAC* (needs a dedicated MULTIPLIER component the library doesn't ship yet) and *5-stage RISC skeleton* (covered in spirit by `simple-cpu.json` / `mips-gcd.json`, neither of which is *pipelined* yet — a real pipelined RISC demo belongs with Phase 14 once ISA inference lands).
-- [x] README section: *Pipelining — Quick Start*. Six-step tour above the plan (analyze → balance → hazards → program → back-pressure → build your own).
-- [ ] In-app tutorial overlay (optional) — skipped for v1; the Quick Start covers the same ground with lower engineering cost, and overlay UX would need its own design pass.
-- **Example update**: `pipeline-demo-elastic.json` is new; `pipeline-demo.json` kept as-is (it's already the canonical Quick-Start step 1).
-- **Verify L4** — user-level: the Quick Start was authored from a first-time-reader perspective; each step names exactly which button to click, and every step corresponds to a live demo in the Pipeline tab.
-
-### Phase 13 — Polish, Telemetry, Stretch
-**Goal**: ready for upstream HDL Toolchain consumption.
-- [x] Performance: measured baseline on a synthetic 500-node / 10-stage pipeline — median `analyze()` runtime is **~2 ms** on commodity hardware, well under the 50 ms goal. Bench lives at `examples/tests/test-pipeline-perf.mjs` and gates any future regression (hard fail at 200 ms, soft warn at 50 ms).
-- [x] Keyboard shortcuts: `P` toggles the Pipeline Panel, `Shift+P` toggles the Stage Overlay, `Ctrl+Shift+R` fires *Suggest Retiming*. Registered via `ShortcutManager` and show up in the Shortcuts overlay under a new "Pipeline" group, so users can rebind them like everything else.
-- [x] Local telemetry hooks: `js/pipeline/Telemetry.js` — a single-file, localStorage-backed counter set (`analyses`, `analysesForced`, `panelOpens`, `stageViewOpens`, `paletteToggles`, `firstSeen`, `lastSeen`). No network, no IDs, no payload. Inspect via `window.pipeline.telemetry()` in DevTools; clear via `window.pipeline.resetTelemetry()`.
-- [x] Accessibility: colorblind-friendly stage palette based on Wong 2011 (sky-blue, orange, bluish-green, yellow, blue, vermillion, reddish-purple, grey). Toggle via Command Palette → *Toggle Colorblind Stage Palette*; the choice persists in localStorage.
-- [x] Stretch: latency-insensitive protocol (LIP) checker. `js/pipeline/LipChecker.js` validates each HANDSHAKE's wiring against four rules: **R1 unregistered-valid** / **R2 unregistered-ready** (V and R must trace back through combinational-only nodes to a stateful boundary — PIPE_REG, another HANDSHAKE, a register file, etc.); **R3 dangling-stall** (HANDSHAKE.S must reach at least one PIPE_REG's STALL pin at input-index `channels`); **R4 valid-to-ready-loop** (V-ancestor and R-ancestor combinational subgraphs must be disjoint — any shared non-stateful node is a `ready = f(valid)` deadlock). Panel: **LIP VIOLATIONS** section with `error`/`warn` severity chips; scenes without HANDSHAKEs short-circuit.
-- [x] Stretch: clock-domain-crossing awareness. `js/pipeline/CdcDetector.js` assigns every stateful node (PIPE_REG, REG_FILE*, PC, IR, COUNTER, RAM) to the CLOCK that drives it via `isClockWire: true` edges. For every data path from one stateful node to a stateful node in a different domain, it emits a `{srcId, dstId, srcClock, dstClock, syncDepth}` crossing — `syncDepth` is the length of the same-clock PIPE_REG chain starting at the receiver (≥2 = classical 2-flop synchronizer). Panel: new **CDC CROSSINGS** section with green `sync N✓` / red `sync N⚠` badges. Single-clock scenes short-circuit. Demo: `examples/circuits/pipeline-demo-cdc.json`.
-
-### Phase 14 — Auto-ISA Inference + Forwarding-Aware Program Analysis
-**Goal**: eliminate the ISA-JSON requirement from Phase 9.5 by deriving the ISA directly from the user's circuit, and suppress program hazards that the datapath already resolves via forwarding muxes. This is the bridge from "educational analyzer" to "works on any CPU the user draws".
-
-- [x] `js/pipeline/isa/IsaInference.js` — derives `{fields, opcodes}` directly from the semantically-named `CU.controlTable` (or the engine's fallback 16-op dispatch when the table is `null`) plus the `IR` node's `opBits/rdBits/rs1Bits/rs2Bits`. Full wire-trace through the datapath turned out to be unnecessary: the CU carries all the read/write/branch/load semantics needed, so inference is a structured read of existing metadata. **Tier 14d**: when no primitive CU is at the top level, the inference recursively walks `node.subCircuit.nodes` to find a wrapped CU (e.g. `cpu-detailed.json`'s Control Unit block), and when no IR exists at all it falls back to the DEFAULT 4/4/4/4 field shape scaled to the ROM's `dataBits`. Inference now produces a real ISA for every shipping demo, including the detailed CPU. Sources: `native`, `native-default-table`, `subcircuit-cu`, `subcircuit-fallback`, `no-cu-fallback`, `no-ir-fallback`.
-- [x] `js/pipeline/ForwardingDetector.js` — structural pattern match on two canonical shapes: (a) the minimal case where one MUX input traces back to `REG_FILE_DP.Q` and another to a `PIPE_REG.Q` (Phase 14b demo), and (b) the classical MIPS 5-stage where both MUX inputs are PIPE_REGs — a "normal" one whose own predecessor is a REG_FILE, and a "forwarded" one that isn't. The detector also computes each path's `fromStage` label via a standalone graph-distance BFS from the ALU consumer through the forward pipeline (`EX→EX` = 1 PIPE_REG downstream, `MEM→EX` = 2, etc.), so labels stay correct even when the forwarding cycle collapses `StageEvaluator`'s own stage indices. The select-side comparator isn't semantically validated for the MVP; pattern-level matching is tolerant of cosmetic wiring variations.
-- [x] Hazard annotation: `PipelineAnalyzer.analyze()` annotates each RAW with `resolvedByForwarding: true | false` + `forwardingPathId`, and zeros `bubbles` when resolved. Load-use RAWs are never flipped to resolved. The UI toggle to hide resolved rows ships with Tier 14c.
-- [x] Multi-cycle instructions: per-opcode `latency > 1` on an ISA row (e.g. IDIV, multi-cycle MUL) widens the dependency window for any RAW pair where that opcode is the producer. `effW = W + (latency - 1)`; bubble count scales accordingly. Each hazard carries `latencyI` so the panel can badge `×N` on the offending row.
-- [x] Induction-variable loop analysis: `js/pipeline/LoopAnalyzer.js` detects backward-branch loops (branch target PC ≤ its own PC, target resolved in the decoded stream). Induction registers = any body register both read and written by the same instruction (classic `R = R op ?` self-update). The program-hazard detector runs a second pass over each loop body as a cyclic sequence, so tail-writes feeding head-reads across the back-edge show up as `steadyState: true` hazards with their own `loopId`. Same-iteration hazards in the body are tagged `inLoop: true`. Panel: new **LOOPS** section + `STEADY` badge on cross-iteration rows.
-- [x] Panel: new **"FORWARDING PATHS"** section below Program Hazards — one row per detected bypass (fromStage badge · register · `PIPE → MUX → ALU` path). Resolved RAWs in Program Hazards now show a `✓ EX→EX` badge in place of the bubble count and the row dims; the header displays `N ✓ resolved`. *Toggle Hide Resolved Hazards* in the Command Palette filters those rows out (session-only). A `COVERAGE: EX→EX ✓ / MEM→EX ✗ / WB→EX ✗` line under the Forwarding Paths section shows which canonical EX-targeted bypasses the detector found. Deeper SUB_CIRCUIT-CU descent stays on the Tier 14d list.
-- **Example update**: three pipelined demos now ship under the **Pipeline** tab of the Examples menu:
-  1. `examples/circuits/pipeline-forwarding-demo.json` — minimal 2-stage datapath with 2 forwarding MUXes. Smallest circuit that exercises the detector; useful as a teaching aid.
-  2. `examples/circuits/mips-5stage-demo.json` — canonical MIPS 5-stage pipeline **without** forwarding. IR serves as the IF/ID latch, with explicit `ID/EX` / `EX/MEM` / `MEM/WB` PIPE_REGs; the panel shows 4 visible stages (`hasCycle: false`). ROM runs a 6-instruction program exercising back-to-back RAW, 2-apart RAW, and load-use — every hazard reports its full bubble cost since no forwarding exists.
-  3. `examples/circuits/mips-5stage-forwarding-demo.json` — same datapath extended with 2 forwarding MUXes plus EQ+AND select logic. Detector reports `FORWARDING PATHS (2) · EX→EX rs1 / rs2`; 3 of 4 RAWs flip to `✓ EX→EX`, the load-use stays with its 3-bubble cost.
-- **Supporting fix** (`StageEvaluator.js`): writeback wires — edges into a register file's `waddr`/`wdata`/`we` pins — are cut before Kahn's topo sort so pipelined CPUs with a real write-back path no longer collapse to `hasCycle: true, stages: 1`. Without this, every realistic pipelined CPU would have been levelized into a single stage.
-- **Tests**: `examples/tests/test-pipeline-phase14.mjs` — (a) ISA inference matches the hand-written MIPS table from Phase 9.5 on `mips-gcd`; (b) scenes with/without forwarding muxes produce the expected hazard deltas; (c) induction loops in `mips-gcd` reported correctly.
-- **Verify L1** — unit: synthetic scenes with known ISA / known forwarding configurations.
-- **Verify L2** — manual: hand-build a MIPS forwarding mux → watch the Program Hazards count drop → delete the mux → count rises.
-- **Verify L3** — differential vs. a reference MIPS ISS (50+ random programs, same bubble counts).
-
----
-
-### Success Criteria (end-of-plan)
-1. Any pipelined design built in the tool is analyzed, validated, and visualized.
-2. Latency, throughput, and f_max reported accurately.
-3. Stall/flush and valid/ready primitives work end-to-end (waveform-verified).
-4. Hardware hazards detected; fixes suggested.
-5. Program-level hazards detected per-ISA; MIPS-5 demos report correct RAW / load-use bubble counts (Phase 9.5), and forwarding-aware suppression matches a reference ISS (Phase 14).
-6. Auto-retime preserves semantics on random-vector diff.
-7. *Pipeline-aware Verilog export is owned by the HDL Toolchain plan (see its Phase 4 + 7). Not a deliverable of this plan.*
-
-### Module Layout (final)
+**Module layout**
 ```
 js/pipeline/
-├── PipelineAnalyzer.js         # public API, event wiring
+├── PipelineAnalyzer.js         # public API, event wiring, cache
 ├── StageEvaluator.js           # levelization + critical path
-├── PipelineState.js            # metrics, cached results
+├── DelayModel.js               # per-type picosecond delays
 ├── HazardDetector.js           # hardware RAW/WAR/WAW/LOOP
-├── InstructionDecoder.js       # ROM → instruction stream         (Phase 9.5)
-├── ProgramHazardDetector.js    # ISA-level pair-wise hazard pass   (Phase 9.5)
-├── ForwardingDetector.js       # detect forwarding muxes            (Phase 14)
-├── Retimer.js                  # Leiserson–Saxe
-├── isa/
-│   ├── mips.js                 # hardcoded MIPS-5 table             (Phase 9.5 Easy)
-│   ├── IsaLoader.js            # JSON ISA loader                    (Phase 9.5 Medium)
-│   └── IsaInference.js         # wire-trace ISA derivation          (Phase 14)
-└── ui/
-    ├── PipelinePanel.js        # side panel (Hazards + Program Hazards sections)
-    └── StageOverlay.js         # canvas color overlay
+├── InstructionDecoder.js       # ROM → decoded instruction stream
+├── ProgramHazardDetector.js    # ISA-level hazards, multi-cycle, loops
+├── LoopAnalyzer.js             # backward-branch + induction-var detection
+├── ForwardingDetector.js       # bypass-mux pattern match
+├── CdcDetector.js              # clock-domain crossings
+├── LipChecker.js               # HANDSHAKE wiring rules
+├── Retimer.js / RetimeVerifier.js
+├── isa/ { default, IsaInference }
+└── ui/ { PipelinePanel, StageOverlay }
 ```
-Plus minor hooks in: `components/Component.js`, `core/SceneGraph.js`, `engine/SimulationEngine.js`, `ui/CommandPalette.js`, `core/ShortcutManager.js`, `app.html`. (HDL export hooks belong to the HDL Toolchain plan — this module does not touch `js/hdl/`.)
 
-### Known Risks
+**Demos** — ≈10 pipeline demos under the **Pipeline** tab of the Examples menu: basic analyzer (`pipeline-demo`), imbalanced for retime, hazards (all four types), program hazards (simple / rich / all types), elastic back-pressure, MIPS 5-stage with and without forwarding, induction-variable loop, and multi-clock CDC.
 
-| Risk | Mitigation |
-|------|------------|
-| Critical-path pass slow on large circuits | Memoize + incremental update on mutation |
-| Retiming breaks semantics on corner cases | Random-vector diff gate before commit |
-| Stall/flush interact unexpectedly with memory | Dedicated unit tests per FF type |
-| Palette gets too crowded | New "Pipeline" tab, not overload CPU tab |
-| HDL export + pipeline metadata clash | Resolved by moving pipeline-aware export into the HDL Toolchain plan (Phase 2 / 4 / 7); no `js/hdl/` code is owned by this module |
-| ISA JSON proliferates (Phase 9.5 Medium) | Ship MIPS-I + nano-MIPS as reference; validate user JSON against a schema at load time |
-| Auto-ISA inference (Phase 14) brittle on non-MIPS datapaths | Fall back to explicit ISA JSON when inference confidence is low; surface a "confidence score" in the panel |
-| Forwarding-mux pattern matching (Phase 14) too strict / too loose | Unit-test against both hand-built forwarded MIPS and deliberately mis-wired variants; require user-toggleable override |
-
----
 
 ## Analysis Utilities — `js/analysis/`
 
