@@ -377,7 +377,16 @@
       <div>
         <button id="btn-stageview-toggle" class="btn-secondary" style="font-size:9px" title="Toggle Stage View — colour nodes by pipeline stage">STAGES</button>
         <button id="btn-pipeline-retime" class="btn-secondary" style="font-size:9px" title="Suggest Retiming — balance pipeline stages by moving a PIPE_REG">RETIME</button>
-        <button id="btn-pipeline-refresh" class="btn-secondary" style="font-size:9px" title="Re-analyze now">REFRESH</button>
+        <span class="pipe-export-wrap">
+          <button id="btn-pipeline-export" class="btn-secondary" style="font-size:9px;background:rgba(160,96,255,0.12);border-color:#a060ff;color:#d0b0ff" title="Export analysis snapshot">EXPORT</button>
+          <div id="pipe-export-menu" class="pipe-export-menu hidden">
+            <button data-export="json"     title="Full snapshot — every panel section, machine-readable">JSON snapshot</button>
+            <button data-export="csv"      title="Flat metrics table — paste into a spreadsheet">CSV metrics</button>
+            <button data-export="md"       title="Human-readable report — drop in PR descriptions or docs">Markdown report</button>
+            <button data-export="png"      title="Render the full ANALYSIS panel — including content below the scroll fold — as a PNG image">PNG image</button>
+            <button data-export="copyjson" title="Copy full snapshot JSON to clipboard">Copy JSON to clipboard</button>
+          </div>
+        </span>
         <button id="btn-pipeline-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
       </div>
     </div>
@@ -560,6 +569,9 @@
       <div id="examples-list"></div>
     </div>
   </div>
+
+  <!-- html2canvas — used by the ANALYSIS panel EXPORT ▸ PNG option. Loaded async; absence is handled gracefully. -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 
   <!-- App Entry Point -->
   <script type="module" src="js/app.js"></script>

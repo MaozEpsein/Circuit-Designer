@@ -9,6 +9,7 @@ import { disassemble } from '../InstructionDecoder.js';
 import { cellAt as _cellAt } from '../PipelineScheduler.js';
 import { HAZARD_TYPES } from '../HazardDetector.js';
 import * as Telemetry from '../Telemetry.js';
+import { exportJSON, exportCSV, exportMarkdown, exportPNG, copyJSON } from './PipelineExporter.js';
 
 function _hazardSummary(hazards) {
   const counts = { RAW: 0, WAR: 0, WAW: 0, LOOP: 0 };
@@ -55,9 +56,7 @@ export class PipelinePanel {
 
     document.getElementById('btn-pipeline-toggle')?.addEventListener('click', () => this.toggle());
     document.getElementById('btn-pipeline-close')?.addEventListener('click', () => this.hide());
-    document.getElementById('btn-pipeline-refresh')?.addEventListener('click', () => {
-      this._analyzer.analyze({ force: true });
-    });
+    this._wireExportMenu();
 
     // Live updates
     bus.on('pipeline:analyzed', (r) => { if (this._visible) this._render(r); });
@@ -98,6 +97,45 @@ export class PipelinePanel {
     setPipelineHazards(null);
   }
   toggle() { this._visible ? this.hide() : this.show(); }
+
+  _wireExportMenu() {
+    const btn  = document.getElementById('btn-pipeline-export');
+    const menu = document.getElementById('pipe-export-menu');
+    if (!btn || !menu) return;
+
+    const closeMenu = () => menu.classList.add('hidden');
+    const openMenu  = () => menu.classList.remove('hidden');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.classList.contains('hidden') ? openMenu() : closeMenu();
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && e.target !== btn) closeMenu();
+    });
+
+    menu.addEventListener('click', async (e) => {
+      const action = e.target?.dataset?.export;
+      if (!action) return;
+      const r = this._analyzer.analyze();
+      if (!r || r.cycles === 0) { closeMenu(); return; }
+      // Close the menu BEFORE rendering so PNG captures don't include it.
+      closeMenu();
+      try {
+        if      (action === 'json') exportJSON(r);
+        else if (action === 'csv')  exportCSV(r);
+        else if (action === 'md')   exportMarkdown(r);
+        else if (action === 'png')      await exportPNG(this._el,   `pipeline-panel-${Date.now()}.png`);
+        else if (action === 'copyjson') {
+          const ok = await copyJSON(r);
+          btn.textContent = ok ? 'COPIED ✓' : 'COPY FAILED';
+          setTimeout(() => { btn.textContent = 'EXPORT'; }, 1200);
+        }
+      } catch (err) {
+        console.error('[PipelineExport]', err);
+      }
+    });
+  }
 
   _renderPredictorCompare() {
     const host = document.getElementById('pipe-predictor-compare-table');
@@ -376,6 +414,7 @@ export class PipelinePanel {
         `  <span class="pdl-cell pdc-STALL pdc-haz-raw"     title="${HAZARD_TYPES.RAW.desc}">RAW</span>`,
         `  <span class="pdl-cell pdc-STALL pdc-haz-loaduse" title="${HAZARD_TYPES.LOAD_USE.desc}">LDU</span>`,
         `  <span class="pdl-cell pdc-FLUSH pdc-haz-control" title="${HAZARD_TYPES.CONTROL.desc}">CTL</span>`,
+        `  <span class="pdl-cell pdc-IF pdc-speculative"    title="Speculative IF/ID — fetched on a correct branch prediction (work that paid off)">SPEC</span>`,
         `</div>`,
       ].join('');
 
@@ -416,7 +455,21 @@ export class PipelinePanel {
               : `Stall: waiting on ${by}`;
             cells.push(`<div class="pdr-cell pdc-STALL ${hazClass}" title="${_esc(tip)}">**</div>`);
           } else {
-            cells.push(`<div class="pdr-cell pdc-${lbl}">${lbl}</div>`);
+            // Speculative shading: when the previous row is a correctly-
+            // predicted branch, this row's IF and ID cells were fetched
+            // before EX confirmed the prediction — mark them with a hatch
+            // overlay so the user can see speculation that paid off.
+            const isSpec = prev
+              && prev.predicted !== null
+              && !prev.mispredict
+              && (lbl === 'IF' || lbl === 'ID');
+            if (isSpec) {
+              const dirLbl = prev.predicted ? 'taken' : 'not-taken';
+              const tip = `Speculative ${lbl} — fetched on correct ${dirLbl} prediction at ${pcHex(prev.pc)}${prev.iterIdx ? ` #${prev.iterIdx}/${prev.iterTotal}` : ''}`;
+              cells.push(`<div class="pdr-cell pdc-${lbl} pdc-speculative" title="${_esc(tip)}">${lbl}</div>`);
+            } else {
+              cells.push(`<div class="pdr-cell pdc-${lbl}">${lbl}</div>`);
+            }
           }
         }
 
