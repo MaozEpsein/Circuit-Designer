@@ -3419,13 +3419,6 @@ const EXAMPLES = [
     file: 'examples/circuits/mips-5stage-complete.json',
   },
   {
-    id: 'mips-5stage-branch',
-    title: '9b. MIPS 5-Stage — Conditional-Branch Flush ⭐',
-    desc: 'Branch-flush demo built on the complete 5-stage pipeline. A MUX between ROM and IR is selected by CU.JMP — when a JZ/JC is taken, the next-fetched instruction in IF is squashed to NOP at the latch boundary. An OR gate folds HDU.Bubble together with CU.JMP into ID/EX.FLUSH for defense-in-depth. Program: LI R1,5 / NOPs / CMP R0,R0 (Z=1) / NOPs / JZ 8 / [POISON: LI R5,99 at PC=7] / LI R3,42 (target) / HALT. With the flush wiring, the POISON is squashed and R5 stays 0; without it, R5 would land at 99. Final RF: R1=5, R3=42, R5=0.',
-    tags: ['pipeline', 'mips', '5-stage', 'branch', 'flush', 'JZ', 'control-hazard'],
-    file: 'examples/circuits/mips-5stage-branch.json',
-  },
-  {
     id: 'fwd-demo',
     title: '8. Forwarding Unit (FWD) — EX/MEM → ALU bypass',
     desc: 'Standalone FWD sandbox. Six step-driven INPUTs feed the Patterson & Hennessy priority forwarder. **Press ▶ STEP repeatedly, or click AUTO CLK to animate.** ForwardA / ForwardB take on 00 (use RF), 10 (forward EX/MEM → ALU input), or 01 (forward MEM/WB → ALU input), with EX/MEM winning ties. The 5-cycle script: c0 idle, c1 = EX/MEM→A (Rs match), c2 = MEM/WB→B (Rt match), c3 = priority (both stages match Rs, EX/MEM wins), c4 = no forward (Rd=0). The FWD glows green when any bypass is active and prints the live A/B selector pair.',
