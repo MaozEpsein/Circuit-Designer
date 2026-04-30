@@ -572,8 +572,16 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
 
     } else if (node.type === 'SPLIT') {
       // Bus splitter: one input bus → N outputs, each a bit-range slice.
+      // Read input via sourceOutputIndex so multi-output drivers (FWD, ALU, …)
+      // deliver the right specific output, not just their primary value.
       const inputSlots = inputs.get(id);
-      const inVal = inputSlots[0] ? (nodeValues.get(inputSlots[0].sourceId) ?? 0) : 0;
+      const slot = inputSlots[0];
+      let inVal = 0;
+      if (slot) {
+        const outIdx = slot.wire.sourceOutputIndex || 0;
+        const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+        inVal = nodeValues.get(key) ?? 0;
+      }
       const slices = parseSlices(node.slicesSpec || '');
       for (let i = 0; i < slices.length; i++) {
         const s = slices[i];
@@ -1190,6 +1198,27 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         } else {
           value = _readSlot(dataInputs[selIdx]) ?? null;
         }
+      } else if (node.type === 'SPLIT') {
+        // Re-evaluate so multi-output drivers (FWD, etc.) deliver
+        // post-edge values into the bit-slices that downstream MUX
+        // selectors read. Without this, P3 generic eval would set
+        // every successor wire to the same primary value.
+        const slot = inputSlots[0];
+        let inVal = 0;
+        if (slot) {
+          const outIdx = slot.wire.sourceOutputIndex || 0;
+          const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+          inVal = nodeValues.get(key) ?? 0;
+        }
+        const slices = parseSlices(node.slicesSpec || '');
+        for (let i = 0; i < slices.length; i++) {
+          const s = slices[i];
+          const width = sliceWidth(s);
+          const mask = width >= 32 ? 0xFFFFFFFF : ((1 << width) - 1);
+          const sliced = ((inVal >>> s.lo) & mask) >>> 0;
+          nodeValues.set(id + '__out' + i, sliced);
+        }
+        value = slices.length > 0 ? (nodeValues.get(id + '__out0') ?? 0) : 0;
       } else if (node.type === 'MERGE') {
         // Re-evaluate so IR-field inputs deliver post-edge values into
         // the merged immediate that pipe_idex captures next cycle.
@@ -1290,7 +1319,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       successors.get(id)?.forEach(({ wire }) => {
         const outIdx = wire.sourceOutputIndex || 0;
         if (node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS' ||
-            node.type === 'HDU' || node.type === 'FWD') {
+            node.type === 'HDU' || node.type === 'FWD' || node.type === 'SPLIT') {
           wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? value);
         } else {
           wireValues.set(wire.id, value);
@@ -1369,13 +1398,19 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     // 4b: ALU recompute + latch Z/C flags (persistent across ticks)
     // Read persisted flags
     let _flagState = ffStates.get('__cpu_flags__') || { z: 0, c: 0 };
+    const _readSlotP4 = (slot) => {
+      if (!slot) return 0;
+      const outIdx = slot.wire.sourceOutputIndex || 0;
+      const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+      return nodeValues.get(key) ?? 0;
+    };
     for (const node of nodes) {
       if (node.type !== 'ALU') continue;
       const id = node.id;
       const inputSlots = inputs.get(id);
-      const a  = _immSel ? 0 : (inputSlots[0] ? _nv(inputSlots[0].sourceId) : 0);
-      const b  = _immSel ? _immValue : (inputSlots[1] ? _nv(inputSlots[1].sourceId) : 0);
-      const op = inputSlots[2] ? _nv(inputSlots[2].sourceId) : 0;
+      const a  = _readSlotP4(inputSlots[0]);
+      const b  = _readSlotP4(inputSlots[1]);
+      const op = _readSlotP4(inputSlots[2]);
       const bits = node.bitWidth || 8, mask = _mask(bits);
       let r = 0, carry = 0;
       switch (op & 7) {
@@ -1401,8 +1436,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const zFlag = r === 0 ? 1 : 0;
       nodeValues.set(id + '__out1', zFlag);
       nodeValues.set(id + '__out2', carry);
-      // Only update flags when current instruction is an ALU operation (opcodes 0-7)
-      if (_currentOpcode >= 0 && _currentOpcode <= 7) {
+      // Only CMP (alu_op=7 in our ISA) updates flags. ADD/SUB/AND/OR/etc.
+      // produce a result but leave flags unchanged. NOP (alu_op=0 with no
+      // reg_we) must definitely not pollute Z/C between a CMP and the
+      // following branch.
+      if ((op & 7) === 7) {
         _flagState = { z: zFlag, c: carry };
         ffStates.set('__cpu_flags__', _flagState);
       }

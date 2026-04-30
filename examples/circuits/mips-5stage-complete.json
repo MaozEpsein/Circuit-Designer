@@ -111,6 +111,8 @@
     { "sourceId": "ir",        "targetId": "hdu", "targetInputIndex": 3, "sourceOutputIndex": 3, "waypoints": [], "isClockWire": false, "id": "wh4" },
 
     { "sourceId": "hdu", "targetId": "pc",        "targetInputIndex": 2,  "sourceOutputIndex": 0, "waypoints": [], "isClockWire": false, "id": "wh5" },
+    { "sourceId": "ir",  "targetId": "pc",        "targetInputIndex": 0,  "sourceOutputIndex": 1, "waypoints": [], "isClockWire": false, "id": "wpc_addr" },
+    { "sourceId": "cu",  "targetId": "pc",        "targetInputIndex": 1,  "sourceOutputIndex": 4, "waypoints": [], "isClockWire": false, "id": "wpc_jmp" },
     { "sourceId": "hdu", "targetId": "ir",        "targetInputIndex": 1,  "sourceOutputIndex": 1, "waypoints": [], "isClockWire": false, "id": "wh6" },
     { "sourceId": "hdu", "targetId": "pipe_idex", "targetInputIndex": 12, "sourceOutputIndex": 2, "waypoints": [], "isClockWire": false, "id": "wh7" },
     { "sourceId": "gnd", "targetId": "pipe_idex", "targetInputIndex": 11, "sourceOutputIndex": 0, "waypoints": [], "isClockWire": false, "id": "wh8" },
