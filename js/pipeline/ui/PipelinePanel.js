@@ -582,6 +582,16 @@ export class PipelinePanel {
            <div class="pipe-perf-row"><span class="k">Throughput</span><span class="v">${_esc(mips)}</span></div>
            ${fwdLine}
            ${predLine}
+         </div>`);
+    }
+    // Live runtime telemetry — own section ("runtime"), not part of
+    // PERFORMANCE so presets that hide static-analysis sections still
+    // show this. Only renders when the engine has actually logged a
+    // taken branch.
+    if (this._liveBranchFlushes && this._liveBranchFlushes.length) {
+      this._body.insertAdjacentHTML('beforeend',
+        `<div class="pipe-runtime-header">RUNTIME</div>
+         <div class="pipe-perf-grid">
            ${this._renderLiveBranchFlushes()}
          </div>`);
     }
