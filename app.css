@@ -754,20 +754,16 @@
   padding: 24px 32px;
   font-size: 18px;
 }
-/* Each section card must stay intact across columns. The
- * inline-block + width:100% combo is the established CSS trick that
- * forces browsers to honour break-inside:avoid in column layouts —
- * without it, very tall cards still get split between columns. */
+/* Each section card must stay intact across columns. */
 #pipeline-panel.pipeline-fullscreen #pipeline-panel-body > .pipe-section,
 #pipeline-panel.pipeline-fullscreen #pipeline-panel-body > #pipeline-panel-summary,
 #pipeline-panel.pipeline-fullscreen #pipeline-panel-body > #pipe-stages-area {
   break-inside: avoid;
   page-break-inside: avoid;        /* legacy */
   -webkit-column-break-inside: avoid;
-  display: inline-block;
+  display: block;
   width: 100%;
   margin: 0 0 22px 0;
-  vertical-align: top;
 }
 /* The summary + stages overview sit at the top spanning every column,
  * mirroring the original two-band layout above the section cards. */
