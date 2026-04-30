@@ -368,9 +368,13 @@ function _showBlockViewer(node) {
   const popup = window.open('', 'BlockViewer', 'width=900,height=650,menubar=no,toolbar=no,status=no');
   if (!popup) { alert('Popup blocked. Please allow popups for this site.'); return; }
 
-  const title = node.subName || node.label || 'BLOCK';
-  const nodesJSON = JSON.stringify(sc.nodes);
-  const wiresJSON = JSON.stringify(sc.wires || []);
+  const rawTitle = node.subName || node.label || 'BLOCK';
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const title = esc(rawTitle);
+  // Escape `<` inside JSON literals so an embedded `</script>` cannot break out of the inline script tag.
+  const safeJSON = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+  const nodesJSON = safeJSON(sc.nodes);
+  const wiresJSON = safeJSON(sc.wires || []);
 
   popup.document.write(`<!DOCTYPE html>
 <html><head>
