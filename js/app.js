@@ -3424,6 +3424,13 @@ const EXAMPLES = [
     file: 'examples/circuits/mips-5stage-complete.json',
   },
   {
+    id: 'mips-5stage-branch-flush-demo',
+    title: '9b. MIPS 5-Stage — Live Branch-Flush Counter ⭐',
+    desc: 'Purpose-built to exercise the runtime branch-flush counter. Same complete 5-stage pipeline (HDU + FWD + MUX-before-IR squash + OR-into-ID/EX.FLUSH), but the IMEM is loaded with a program that takes THREE branches back-to-back: JZ at PC=5, JZ at PC=10, and an unconditional JMP at PC=13. Open the Pipeline panel and run AUTO CLK — the RUNTIME section will show "Branch flushes (live): 3 — at PC=5, 10, 13" and the POISON instructions in between (LI R5, 99 at PCs 6,7,11,12,14) all get squashed to NOP, so R5 stays 0.',
+    tags: ['pipeline', 'mips', '5-stage', 'branch', 'flush', 'JZ', 'JMP', 'control-hazard', 'runtime', 'live'],
+    file: 'examples/circuits/mips-5stage-branch-flush-demo.json',
+  },
+  {
     id: 'fwd-demo',
     title: '8. Forwarding Unit (FWD) — EX/MEM → ALU bypass',
     desc: 'Standalone FWD sandbox. Six step-driven INPUTs feed the Patterson & Hennessy priority forwarder. **Press ▶ STEP repeatedly, or click AUTO CLK to animate.** ForwardA / ForwardB take on 00 (use RF), 10 (forward EX/MEM → ALU input), or 01 (forward MEM/WB → ALU input), with EX/MEM winning ties. The 5-cycle script: c0 idle, c1 = EX/MEM→A (Rs match), c2 = MEM/WB→B (Rt match), c3 = priority (both stages match Rs, EX/MEM wins), c4 = no forward (Rd=0). The FWD glows green when any bypass is active and prints the live A/B selector pair.',
