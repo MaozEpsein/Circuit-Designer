@@ -653,6 +653,11 @@ function tick() {
   _lastNodeValues = result.nodeValues;
   _lastWireValues = result.wireValues;
 
+  // Surface the engine's live branch-flush log so the Pipeline Performance
+  // panel can show "Branch flushes (live): N — at PC=…". Always emit so a
+  // post-reset empty log clears the previous render.
+  bus.emit('runtime:branch-flushes', state.ffStates.get('__branch_flushes__') || []);
+
   // Lower clock after evaluation
   if (state.clockHigh) {
     state.clockHigh = false;

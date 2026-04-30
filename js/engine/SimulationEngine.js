@@ -1529,6 +1529,38 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       }
     }
 
+    // Live branch-flush log: record (cycle, pc-of-branch) on the rising
+    // edge where a taken branch is committed. Detection happens after
+    // P4d (CU recompute on the latched-this-edge IR) but before P4e's
+    // PC update, so PC.q still holds the branch instruction's own slot.
+    const _clkRisingNow = nodes.some(n => {
+      if (n.type !== 'CLOCK') return false;
+      const ms = ffStates.get(n.id);
+      const cur = n.value;
+      const prev = ms ? ms.prevClkValue : null;
+      return cur === 1 && (prev === 0 || prev === null || prev === undefined);
+    });
+    if (_jmpActive && _clkRisingNow) {
+      const pcNode = nodes.find(n => n.type === 'PC');
+      if (pcNode) {
+        const pcMs = ffStates.get(pcNode.id);
+        const bits = pcNode.bitWidth || 8;
+        const mask = (1 << bits) - 1;
+        const branchPc = pcMs ? (pcMs.q & mask) : 0;
+        let log = ffStates.get('__branch_flushes__');
+        if (!log) { log = []; ffStates.set('__branch_flushes__', log); }
+        log.push({ cycle: stepCount ?? 0, pc: branchPc });
+        if (log.length > 1024) log.splice(0, log.length - 1024);
+      }
+    }
+    // CLOCK prevClkValue tracking for rising-edge detection above.
+    for (const n of nodes) {
+      if (n.type !== 'CLOCK') continue;
+      let ms = ffStates.get(n.id);
+      if (!ms) { ms = { prevClkValue: null }; ffStates.set(n.id, ms); }
+      ms.prevClkValue = n.value;
+    }
+
     for (const node of nodes) {
       if (node.type !== 'REG_FILE' && node.type !== 'REG_FILE_DP' && node.type !== 'PC') continue;
       const ms = ffStates.get(node.id);

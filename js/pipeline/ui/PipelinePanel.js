@@ -89,6 +89,13 @@ export class PipelinePanel {
       if (this._visible) this._render(this._analyzer.analyze());
     });
 
+    // Live runtime branch-flush log, fed by the engine via app.js.
+    this._liveBranchFlushes = [];
+    bus.on('runtime:branch-flushes', (log) => {
+      this._liveBranchFlushes = Array.isArray(log) ? log : [];
+      if (this._visible) this._render(this._analyzer.analyze());
+    });
+
     document.getElementById('btn-pipeline-toggle')?.addEventListener('click', () => this.toggle());
     document.getElementById('btn-pipeline-close')?.addEventListener('click', () => this.hide());
     this._wireExportMenu();
@@ -343,6 +350,20 @@ export class PipelinePanel {
       ${rows}`;
   }
 
+  // Renders one row in the Performance grid summarising taken branches
+  // observed at simulation runtime. Counts rising-edges of CU.JMP and
+  // shows up to 6 of the most recent PCs where they fired. Empty string
+  // if no flushes have been logged yet (keeps the grid tidy).
+  _renderLiveBranchFlushes() {
+    const log = this._liveBranchFlushes;
+    if (!log || log.length === 0) return '';
+    const max = 6;
+    const recent = log.slice(-max);
+    const pcs = recent.map(e => `PC=${e.pc}`).join(', ');
+    const more = log.length > max ? ` (+${log.length - max} earlier)` : '';
+    return `<div class="pipe-perf-row"><span class="k">Branch flushes (live)</span><span class="v">${log.length} — at ${pcs}${more}</span></div>`;
+  }
+
   _render(r) {
     if (!this._body || !this._summary) return;
     // Always push violations + hazards to the renderer (null when no data).
@@ -561,6 +582,7 @@ export class PipelinePanel {
            <div class="pipe-perf-row"><span class="k">Throughput</span><span class="v">${_esc(mips)}</span></div>
            ${fwdLine}
            ${predLine}
+           ${this._renderLiveBranchFlushes()}
          </div>`);
     }
 
