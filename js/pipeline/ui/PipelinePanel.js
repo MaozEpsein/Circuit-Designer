@@ -355,8 +355,10 @@ export class PipelinePanel {
   // shows up to 6 of the most recent PCs where they fired. Empty string
   // if no flushes have been logged yet (keeps the grid tidy).
   _renderLiveBranchFlushes() {
-    const log = this._liveBranchFlushes;
-    if (!log || log.length === 0) return '';
+    const log = this._liveBranchFlushes || [];
+    if (log.length === 0) {
+      return `<div class="pipe-perf-row"><span class="k">Branch flushes (live)</span><span class="v">0 — none yet (run AUTO CLK on a program with a taken JZ/JC/JMP)</span></div>`;
+    }
     const max = 6;
     const recent = log.slice(-max);
     const pcs = recent.map(e => `PC=${e.pc}`).join(', ');
@@ -586,15 +588,13 @@ export class PipelinePanel {
     }
     // Live runtime telemetry — own section ("runtime"), not part of
     // PERFORMANCE so presets that hide static-analysis sections still
-    // show this. Only renders when the engine has actually logged a
-    // taken branch.
-    if (this._liveBranchFlushes && this._liveBranchFlushes.length) {
-      this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-runtime-header">RUNTIME</div>
-         <div class="pipe-perf-grid">
-           ${this._renderLiveBranchFlushes()}
-         </div>`);
-    }
+    // show this. Always renders so the user can find it before the
+    // first branch fires.
+    this._body.insertAdjacentHTML('beforeend',
+      `<div class="pipe-runtime-header">RUNTIME</div>
+       <div class="pipe-perf-grid">
+         ${this._renderLiveBranchFlushes()}
+       </div>`);
 
     // Pipeline Diagram (Gantt: instruction × cycle) — renders the static
     // schedule from PipelineScheduler. Cells are colour-coded per stage;
