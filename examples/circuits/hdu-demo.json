@@ -1,0 +1,26 @@
+{
+  "nodes": [
+    { "type": "INPUT", "id": "in_mr",   "label": "MemRead",  "x": -440, "y": -180, "fixedValue": 0, "stepValues": [0, 1, 1, 0, 1] },
+    { "type": "INPUT", "id": "in_idrt", "label": "IDEX_Rt",  "x": -440, "y":  -60, "fixedValue": 0, "stepValues": [0, 5, 3, 5, 5] },
+    { "type": "INPUT", "id": "in_ifrs", "label": "IFID_Rs",  "x": -440, "y":   60, "fixedValue": 0, "stepValues": [0, 5, 0, 5, 6] },
+    { "type": "INPUT", "id": "in_ifrt", "label": "IFID_Rt",  "x": -440, "y":  180, "fixedValue": 0, "stepValues": [0, 0, 3, 0, 7] },
+
+    { "type": "HDU", "id": "hdu_1", "label": "HDU", "regAddrBits": 4, "pipelineRole": "control", "x": -120, "y": 0 },
+
+    { "type": "OUTPUT", "id": "out_pc",   "label": "PCWrite",   "x": 240, "y": -180, "targetValue": 1, "sandbox": true },
+    { "type": "OUTPUT", "id": "out_ifid", "label": "IFIDWrite", "x": 240, "y":    0, "targetValue": 1, "sandbox": true },
+    { "type": "OUTPUT", "id": "out_bub",  "label": "Bubble",    "x": 240, "y":  180, "targetValue": 0, "sandbox": true },
+
+    { "type": "CLOCK", "id": "clk", "label": "CLK", "value": 0, "x": -120, "y": 240 }
+  ],
+  "wires": [
+    { "sourceId": "in_mr",   "targetId": "hdu_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w1" },
+    { "sourceId": "in_idrt", "targetId": "hdu_1", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w2" },
+    { "sourceId": "in_ifrs", "targetId": "hdu_1", "targetInputIndex": 2, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w3" },
+    { "sourceId": "in_ifrt", "targetId": "hdu_1", "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w4" },
+
+    { "sourceId": "hdu_1", "targetId": "out_pc",   "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w5" },
+    { "sourceId": "hdu_1", "targetId": "out_ifid", "targetInputIndex": 0, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w6" },
+    { "sourceId": "hdu_1", "targetId": "out_bub",  "targetInputIndex": 0, "sourceOutputIndex": 2, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false, "id": "w7" }
+  ]
+}

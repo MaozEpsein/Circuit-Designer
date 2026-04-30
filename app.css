@@ -1730,7 +1730,7 @@
   background: #0a0e14;
   border: 2px solid #ffa028;
   border-radius: 12px;
-  width: 850px;
+  width: min(1400px, 95vw);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -1741,12 +1741,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
+  padding: 18px 24px;
   border-bottom: 2px solid #4a3020;
   color: #ffa028;
-  font-weight: bold;
-  font-size: 14px;
-  letter-spacing: 1px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 1.6px;
 }
 
 #cu-editor-header > div {
@@ -2390,3 +2390,515 @@
   border-color: #2a6a8a;
   color: #8fd4ff;
 }
+
+/* Preset view bar — quick-switch profiles for the ANALYSIS panel. */
+.pipe-preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px solid #1a3040;
+  background: rgba(143, 212, 255, 0.025);
+  font-size: 11px;
+}
+.pipe-preset-label {
+  color: #8fd4ff;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+.pipe-preset-hint {
+  color: #567;
+  font-style: italic;
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+.pipe-preset-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+.pipe-preset-status {
+  color: #678;
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+.pipe-preset-btn {
+  background: rgba(143, 212, 255, 0.06);
+  border: 1px solid rgba(143, 212, 255, 0.22);
+  color: #8fd4ff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.pipe-preset-btn:hover { background: rgba(143, 212, 255, 0.14); color: #cfe6f0; }
+.pipe-preset-btn.active {
+  background: #163a5a;
+  border-color: #8fd4ff;
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(143, 212, 255, 0.45) inset;
+}
+#pipeline-panel.pipeline-fullscreen .pipe-preset-bar {
+  font-size: 14px;
+  padding: 12px 24px;
+  gap: 14px;
+}
+#pipeline-panel.pipeline-fullscreen .pipe-preset-btn { font-size: 13px; padding: 6px 14px; }
+
+/* Hide / fade animations for preset transitions. The fade runs 200 ms;
+   afterwards `.pipe-section-hidden` removes the section from layout entirely. */
+.pipe-section { transition: opacity 0.2s ease-out; }
+.pipe-section-fading { opacity: 0; }
+.pipe-section-hidden { display: none !important; }
+
+/* Inline SAVE button next to the BRANCH PREDICTOR header — appears only when
+   the user has staged a predictor change that hasn't been committed to the
+   CU yet. Glow + green to signal "click me to persist". */
+.pred-save-btn {
+  margin-left: 12px;
+  padding: 3px 12px;
+  background: linear-gradient(180deg, #1a4a2a, #0f3a20);
+  border: 1.5px solid #39ff14;
+  border-radius: 999px;
+  color: #c0ff9a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  cursor: pointer;
+  vertical-align: middle;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.45);
+  animation: pred-save-pulse 1.4s ease-in-out infinite;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.pred-save-btn:hover { transform: translateY(-1px); box-shadow: 0 0 16px rgba(57, 255, 20, 0.75); }
+.pred-save-btn.hidden { display: none; }
+@keyframes pred-save-pulse {
+  0%, 100% { box-shadow: 0 0 8px  rgba(57, 255, 20, 0.4); }
+  50%      { box-shadow: 0 0 16px rgba(57, 255, 20, 0.85); }
+}
+
+/* CU editor — Branch Predictor control. Bold red-pill chip with glow.
+   Larger text, fully tinted dropdown (no white default styling). */
+.cu-bp-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+  margin-right: 16px;
+  background: linear-gradient(180deg, rgba(255, 80, 100, 0.22), rgba(160, 30, 40, 0.12));
+  border: 2px solid #ff5060;
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(255, 80, 96, 0.30),
+    0 0 18px rgba(255, 80, 96, 0.55),
+    inset 0 0 10px rgba(255, 80, 96, 0.14);
+  vertical-align: middle;
+}
+.cu-bp-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1.8px;
+  color: #ffd0a0;
+  text-shadow: 0 0 7px rgba(255, 130, 110, 0.55);
+}
+.cu-bp-select {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 8px 40px 8px 18px;
+  /* Cream background so the BLACK text reads at high contrast. */
+  background:
+    linear-gradient(180deg, #ffe8c8, #ffd49a)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'><path d='M1 1l6 8 6-8' stroke='%23202020' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    no-repeat right 14px center;
+  border: 2px solid #ff8090;
+  border-radius: 999px;
+  color: #1a0810;          /* deep black-burgundy — high contrast on cream */
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  min-width: 240px;
+  letter-spacing: 0.5px;
+  /* Pulsing highlight to signal "this is interactive — pick one". Pauses on
+     hover/focus so the user isn't distracted while reading the choices. */
+  animation: cu-bp-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cu-bp-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(255, 224, 128, 0.0),  0 0 8px  rgba(255, 100, 100, 0.35); }
+  50%      { box-shadow: 0 0 0 4px rgba(255, 224, 128, 0.35), 0 0 18px rgba(255, 160, 100, 0.7); }
+}
+.cu-bp-select:hover,
+.cu-bp-select:focus {
+  animation: none;
+  border-color: #ffd080;
+  box-shadow: 0 0 0 3px rgba(255, 200, 120, 0.45), 0 0 16px rgba(255, 160, 100, 0.55);
+  outline: none;
+}
+/* Options — cream background, BLACK text, clearly highlighted on hover. */
+.cu-bp-select option {
+  background: #fff2dc;
+  color: #1a0810;
+  font-weight: 700;
+  padding: 6px 12px;
+}
+.cu-bp-select option:checked,
+.cu-bp-select option:hover {
+  background: #ffb060 !important;
+  color: #1a0810 !important;
+}
+
+/* ─── Tutorial / Learn Mode ────────────────────────────────── */
+#btn-tutorial {
+  font-size: 9px;
+  padding: 2px 8px;
+  background: #102a1a;
+  border: 1px solid #2a8a4a;
+  color: #80f0a0;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: bold;
+}
+#btn-tutorial:hover { background: #154028; border-color: #39ff80; color: #aaffc8; }
+
+#tutorial-panel {
+  position: fixed;
+  top: 180px;
+  right: 8px;
+  width: 520px;
+  max-height: calc(100vh - 200px);
+  background: #0d1320;
+  border: 1px solid #2a8a4a;
+  border-radius: 8px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  font-family: 'JetBrains Mono', monospace;
+  color: #c8d8f0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+#tutorial-panel.hidden { display: none; }
+
+#tutorial-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #102a1a;
+  border-bottom: 1px solid #2a8a4a;
+  color: #80f0a0;
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+#tutorial-panel-header .tut-x {
+  background: #2a1010;
+  border: 1px solid #4a2020;
+  color: #ff6666;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 5px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#tutorial-panel-header .tut-x:hover { background: #3a1818; }
+
+#tutorial-panel-body {
+  padding: 14px 18px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.tut-catalog-intro {
+  color: #a0c0e0;
+  font-size: 13px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #0a1520;
+  border-left: 3px solid #2a8a4a;
+  border-radius: 3px;
+}
+
+.tut-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #2a4060;
+  padding-bottom: 0;
+  flex-wrap: wrap;
+}
+.tut-tab {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-bottom: none;
+  color: #80a0c0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 7px 12px 6px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.tut-tab:hover { background: #102018; color: #c0e0f0; }
+.tut-tab-active {
+  background: #102a1a;
+  border-color: #2a8a4a;
+  color: #80f0a0;
+}
+.tut-tab-count {
+  font-size: 9px;
+  background: #1a2030;
+  border: 1px solid #2a4060;
+  color: #6080a0;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.tut-tab-active .tut-tab-count {
+  background: #0a2018;
+  border-color: #39ff80;
+  color: #80f0a0;
+}
+.tut-catalog-empty {
+  color: #6080a0;
+  font-size: 12px;
+  font-style: italic;
+  padding: 16px;
+  text-align: center;
+  background: #0a1520;
+  border: 1px dashed #2a4060;
+  border-radius: 4px;
+}
+
+.tut-cards { display: flex; flex-direction: column; gap: 10px; }
+.tut-card {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-radius: 5px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+.tut-card:hover { border-color: #2a8a4a; background: #102018; }
+.tut-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tut-card-title { color: #80f0a0; font-weight: bold; font-size: 14px; }
+.tut-card-summary { color: #b0c0d8; font-size: 12px; margin-top: 6px; line-height: 1.55; }
+
+.tut-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: #1a2030;
+  border: 1px solid #2a4060;
+  color: #6080a0;
+  white-space: nowrap;
+  font-weight: bold;
+}
+.tut-badge-done {
+  background: #102a1a;
+  border-color: #39ff80;
+  color: #80f0a0;
+}
+.tut-badge-progress {
+  background: #1a2030;
+  border-color: #ffb060;
+  color: #ffb060;
+}
+
+.tut-lesson-head { margin-bottom: 12px; }
+.tut-link {
+  background: none;
+  border: none;
+  color: #6090c0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 8px;
+}
+.tut-link:hover { color: #80c0e0; }
+.tut-lesson-title { color: #80f0a0; font-weight: bold; font-size: 16px; margin: 6px 0 4px; }
+.tut-lesson-progress { color: #80a0c0; font-size: 11px; }
+
+.tut-instruction {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-left: 4px solid #2a8a4a;
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  color: #d8f0e0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.tut-code {
+  background: #06101a;
+  border: 1px solid #2a4060;
+  border-left: 4px solid #00d4ff;
+  border-radius: 4px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+.tut-code-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #0a1828;
+  border-bottom: 1px solid #2a4060;
+  font-size: 10px;
+  color: #80a0c0;
+}
+.tut-code-lang {
+  background: #00d4ff;
+  color: #001828;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+.tut-code-title { flex: 1; color: #80c0e0; font-size: 11px; }
+.tut-code-copy {
+  background: #102a3a;
+  border: 1px solid #2a6080;
+  color: #80d0f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: auto;
+}
+.tut-code-copy:hover { background: #154058; border-color: #4a90c0; }
+.tut-code-text {
+  margin: 0;
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #d0e8f8;
+  white-space: pre;
+  overflow-x: auto;
+  background: transparent;
+}
+
+.tut-hint {
+  background: #1a1a08;
+  border: 1px solid #4a4020;
+  border-left: 4px solid #ffb060;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 6px 0;
+  color: #f0d090;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tut-result {
+  padding: 11px 14px;
+  margin: 10px 0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: bold;
+  border: 1px solid;
+  line-height: 1.5;
+}
+.tut-result-ok  { background: #0a2018; border-color: #39ff80; color: #80f0a0; }
+.tut-result-bad { background: #2a1010; border-color: #ff6666; color: #ffa0a0; }
+
+.tut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2a4060;
+}
+.tut-btn {
+  background: #1a2030;
+  border: 1px solid #2a4060;
+  color: #c8d8f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.tut-btn:hover:not(:disabled) { background: #243048; border-color: #4060a0; }
+.tut-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tut-btn-primary {
+  background: #102a1a;
+  border-color: #39ff80;
+  color: #80f0a0;
+}
+.tut-btn-primary:hover { background: #154028; }
+
+.tut-btn-warn {
+  background: #2a2010;
+  border-color: #ffb060;
+  color: #ffb060;
+}
+.tut-btn-warn:hover { background: #3a2818; }
+
+.tut-btn-danger {
+  background: #2a1010;
+  border-color: #ff6666;
+  color: #ffa0a0;
+}
+.tut-btn-danger:hover { background: #3a1818; }
+
+#tut-confirm {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 20px;
+}
+#tut-confirm.hidden { display: none; }
+.tut-confirm-box {
+  background: #0d1320;
+  border: 2px solid #ffb060;
+  border-radius: 6px;
+  padding: 18px 20px;
+  max-width: 420px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+}
+.tut-confirm-title {
+  color: #ffb060;
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+.tut-confirm-text {
+  color: #c8d8f0;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.tut-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+

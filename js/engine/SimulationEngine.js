@@ -386,6 +386,59 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         value = a === b ? 1 : 0;
       }
 
+    } else if (node.type === 'HDU') {
+      // Hazard Detection Unit — load-use stall detector (textbook MIPS).
+      //   stall = IDEX_MemRead && (IDEX_Rt == IFID_Rs || IDEX_Rt == IFID_Rt)
+      //   stall ⇒ PCWrite=0, IFIDWrite=0, Bubble=1
+      //   else  ⇒ PCWrite=1, IFIDWrite=1, Bubble=0
+      const inputSlots = inputs.get(id);
+      const get = (i) => {
+        const slot = inputSlots[i];
+        if (!slot) return 0;
+        const outIdx = slot.wire.sourceOutputIndex || 0;
+        const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+        return nodeValues.get(key) ?? 0;
+      };
+      const memRead = get(0) ? 1 : 0;
+      const idexRt  = get(1);
+      const ifidRs  = get(2);
+      const ifidRt  = get(3);
+      const stall = memRead && (idexRt === ifidRs || idexRt === ifidRt) ? 1 : 0;
+      nodeValues.set(id + '__out0', stall ? 0 : 1); // PCWrite
+      nodeValues.set(id + '__out1', stall ? 0 : 1); // IFIDWrite
+      nodeValues.set(id + '__out2', stall);          // Bubble
+      value = stall;
+
+    } else if (node.type === 'FWD') {
+      // Forwarding Unit — textbook MIPS priority forwarder.
+      // ForwardA encoding: 00 = use RF, 10 = forward EX/MEM, 01 = forward MEM/WB.
+      // EX/MEM has priority over MEM/WB when both match, per Patterson & Hennessy.
+      const inputSlots = inputs.get(id);
+      const get = (i) => {
+        const slot = inputSlots[i];
+        if (!slot) return 0;
+        const outIdx = slot.wire.sourceOutputIndex || 0;
+        const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+        return nodeValues.get(key) ?? 0;
+      };
+      const idexRs  = get(0);
+      const idexRt  = get(1);
+      const exmemRd = get(2);
+      const exmemRW = get(3) ? 1 : 0;
+      const memwbRd = get(4);
+      const memwbRW = get(5) ? 1 : 0;
+      // Forwarding to source A
+      let fwdA = 0;
+      if (exmemRW && exmemRd !== 0 && exmemRd === idexRs) fwdA = 2;        // 10
+      else if (memwbRW && memwbRd !== 0 && memwbRd === idexRs) fwdA = 1;  // 01
+      // Forwarding to source B
+      let fwdB = 0;
+      if (exmemRW && exmemRd !== 0 && exmemRd === idexRt) fwdB = 2;
+      else if (memwbRW && memwbRd !== 0 && memwbRd === idexRt) fwdB = 1;
+      nodeValues.set(id + '__out0', fwdA);
+      nodeValues.set(id + '__out1', fwdB);
+      value = fwdA;
+
     } else if (MEMORY_TYPE_SET.has(node.type)) {
       // Memory components act as sources: emit stored Q value (packed integer)
       let ms = ffStates.get(id);
@@ -677,7 +730,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       } else if (node.type === 'DEMUX' || node.type === 'DECODER' || node.type === 'ENCODER' ||
                  node.type === 'HALF_ADDER' || node.type === 'FULL_ADDER' || node.type === 'COMPARATOR' ||
                  node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS' ||
-                 node.type === 'SUB_CIRCUIT' || node.type === 'SPLIT' || node.type === 'HANDSHAKE') {
+                 node.type === 'SUB_CIRCUIT' || node.type === 'SPLIT' || node.type === 'HANDSHAKE' ||
+                 node.type === 'HDU' || node.type === 'FWD') {
         wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? null);
       } else if (node.type === 'REG_FILE_DP') {
         // Dual port: out0=RD1_DATA, out1=RD2_DATA
@@ -1064,6 +1118,42 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const cu = _evalCU(node, op, z, c);
         value = cu.aluOp;
         nodeValues.set(id+'__out0',cu.aluOp);nodeValues.set(id+'__out1',cu.regWe);nodeValues.set(id+'__out2',cu.memWe);nodeValues.set(id+'__out3',cu.memRe);nodeValues.set(id+'__out4',cu.jmp);nodeValues.set(id+'__out5',cu.halt);nodeValues.set(id+'__out6',cu.immSel);
+      } else if (node.type === 'HDU' || node.type === 'FWD') {
+        // Re-evaluate using the current __out values of multi-output sources.
+        const get = (i) => {
+          const slot = inputSlots[i];
+          if (!slot) return 0;
+          const outIdx = slot.wire.sourceOutputIndex || 0;
+          const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+          return nodeValues.get(key) ?? 0;
+        };
+        if (node.type === 'HDU') {
+          const memRead = get(0) ? 1 : 0;
+          const idexRt  = get(1);
+          const ifidRs  = get(2);
+          const ifidRt  = get(3);
+          const stall = memRead && (idexRt === ifidRs || idexRt === ifidRt) ? 1 : 0;
+          nodeValues.set(id + '__out0', stall ? 0 : 1);
+          nodeValues.set(id + '__out1', stall ? 0 : 1);
+          nodeValues.set(id + '__out2', stall);
+          value = stall;
+        } else {
+          const idexRs  = get(0);
+          const idexRt  = get(1);
+          const exmemRd = get(2);
+          const exmemRW = get(3) ? 1 : 0;
+          const memwbRd = get(4);
+          const memwbRW = get(5) ? 1 : 0;
+          let fwdA = 0;
+          if (exmemRW && exmemRd !== 0 && exmemRd === idexRs) fwdA = 2;
+          else if (memwbRW && memwbRd !== 0 && memwbRd === idexRs) fwdA = 1;
+          let fwdB = 0;
+          if (exmemRW && exmemRd !== 0 && exmemRd === idexRt) fwdB = 2;
+          else if (memwbRW && memwbRd !== 0 && memwbRd === idexRt) fwdB = 1;
+          nodeValues.set(id + '__out0', fwdA);
+          nodeValues.set(id + '__out1', fwdB);
+          value = fwdA;
+        }
       } else if (node.type === 'ALU') {
         const a = inputSlots[0] ? (nodeValues.get(inputSlots[0].sourceId) ?? 0) : 0;
         const b = inputSlots[1] ? (nodeValues.get(inputSlots[1].sourceId) ?? 0) : 0;
@@ -1083,7 +1173,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       nodeValues.set(id, value);
       successors.get(id)?.forEach(({ wire }) => {
         const outIdx = wire.sourceOutputIndex || 0;
-        if (node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS') {
+        if (node.type === 'ALU' || node.type === 'CU' || node.type === 'BUS' ||
+            node.type === 'HDU' || node.type === 'FWD') {
           wireValues.set(wire.id, nodeValues.get(id + '__out' + outIdx) ?? value);
         } else {
           wireValues.set(wire.id, value);

@@ -54,6 +54,7 @@
     <div id="hud-right">
       <div id="hud-right-top">
         <button id="btn-examples" style="font-size:9px;padding:2px 8px;background:#1a1430;border:1px solid #5a3d8a;color:#c0a0f0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold">EXAMPLES</button>
+        <button id="btn-tutorial" style="font-size:9px;padding:0 8px;height:20px;line-height:18px;background:#102a1a;border:1px solid #2a8a4a;color:#80f0a0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold;display:inline-flex;align-items:center;gap:4px" title="Open guided lessons (Learn Mode). Your current circuit is restored on exit."><span style="font-size:14px;line-height:1">🎓</span>LEARN</button>
         <button id="btn-design-undo" class="hud-action-btn" title="Undo (Ctrl+Z)">&#8630;</button>
         <button id="btn-design-redo" class="hud-action-btn" title="Redo (Ctrl+Y)">&#8631;</button>
         <button id="btn-shortcuts" class="hud-action-btn" title="Keyboard Shortcuts (?)">?</button>
@@ -114,6 +115,8 @@
         <div class="palette-panel" data-panel="pipeline">
           <span class="palette-chip palette-block" data-tool="place-pipereg" draggable="true">PIPE</span>
           <span class="palette-chip palette-block" data-tool="place-handshake" draggable="true">HS</span>
+          <span class="palette-chip palette-block" data-tool="place-hdu" draggable="true" title="Hazard Detection Unit — load-use stall detector">HDU</span>
+          <span class="palette-chip palette-block" data-tool="place-fwd" draggable="true" title="Forwarding Unit — bypass ALU result to next instruction">FWD</span>
         </div>
         <div class="palette-panel" data-panel="memory">
           <span class="palette-chip palette-block" data-tool="place-register" draggable="true">REG</span>
@@ -480,6 +483,15 @@
       <div id="cu-editor-header">
         <span>CONTROL UNIT — OPCODE TABLE</span>
         <div>
+          <div class="cu-bp-control" title="Branch prediction policy used by this Control Unit. Affects how branches are scheduled in the pipeline analysis (mispredicts, flush penalty, hit rate).">
+            <span class="cu-bp-label">BRANCH PREDICTOR</span>
+            <select id="cu-branch-pred-select" class="cu-bp-select">
+              <option value="static-nt">Static Not-Taken</option>
+              <option value="static-btfn">Static BTFN</option>
+              <option value="1bit">1-bit (last-outcome)</option>
+              <option value="2bit">2-bit saturating</option>
+            </select>
+          </div>
           <label style="color:#8a6830;font-size:12px;margin-right:6px;font-weight:bold">Opcodes:
             <select id="cu-opcount-select">
               <option value="4">4</option>

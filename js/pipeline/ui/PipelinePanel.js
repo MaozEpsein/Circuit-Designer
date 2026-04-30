@@ -32,6 +32,41 @@ function _progTypeSummary(hazards) {
   return parts.join(', ');
 }
 
+/**
+ * Built-in preset views — quick-switch profiles for the ANALYSIS panel that
+ * hide sections irrelevant to the current task. Stored as a list of section
+ * ids to HIDE (rather than show), so a preset doesn't break when new section
+ * types are added to the analyzer.
+ */
+/**
+ * Preset views — quick-switch profiles for the ANALYSIS panel that hide
+ * sections irrelevant to the current task. Each preset answers a clear
+ * question, with full-word labels so first-time users don't have to decode
+ * acronyms.
+ */
+const PRESETS = {
+  all: {
+    label: 'All',
+    title: 'Show every section',
+    hide:  [],
+  },
+  overview: {
+    label: 'Overview',
+    title: 'What is running and how it looks (default)',
+    hide:  ['violations', 'hazards', 'prog', 'cdc', 'lip', 'pred', 'loops', 'forwards'],
+  },
+  debug: {
+    label: 'Debug',
+    title: 'Why isn’t it working — hazards, violations, forwarding',
+    hide:  ['perf', 'pred', 'diag', 'loops'],
+  },
+  performance: {
+    label: 'Performance',
+    title: 'What is slow — CPI / IPC / predictor / forwarding',
+    hide:  ['violations', 'hazards', 'prog', 'cdc', 'lip'],
+  },
+};
+
 function _esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -57,6 +92,7 @@ export class PipelinePanel {
     document.getElementById('btn-pipeline-toggle')?.addEventListener('click', () => this.toggle());
     document.getElementById('btn-pipeline-close')?.addEventListener('click', () => this.hide());
     this._wireExportMenu();
+    this._buildPresetBar();
 
     const fsBtn = document.getElementById('btn-pipeline-fullscreen');
     fsBtn?.addEventListener('click', () => this._toggleFullscreen());
@@ -105,6 +141,87 @@ export class PipelinePanel {
     setPipelineHazards(null);
   }
   toggle() { this._visible ? this.hide() : this.show(); }
+
+  _buildPresetBar() {
+    if (!this._summary) return;
+    if (document.getElementById('pipe-preset-bar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'pipe-preset-bar';
+    bar.className = 'pipe-preset-bar';
+    const active = this._loadActivePreset();
+    bar.innerHTML =
+      '<span class="pipe-preset-label">View:</span>' +
+      '<span class="pipe-preset-hint">focus on a task — sections that don’t fit are hidden, not deleted</span>' +
+      '<span class="pipe-preset-buttons">' +
+      Object.entries(PRESETS).map(([id, p]) =>
+        `<button class="pipe-preset-btn${id === active ? ' active' : ''}" data-preset="${id}" title="${p.title}">${p.label}</button>`
+      ).join('') +
+      '</span>' +
+      '<span class="pipe-preset-status" id="pipe-preset-status"></span>';
+    bar.addEventListener('click', (e) => {
+      const id = e.target?.dataset?.preset;
+      if (!id) return;
+      this._setActivePreset(id);
+      this._applyActivePreset({ animate: true });
+      bar.querySelectorAll('.pipe-preset-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.preset === id);
+      });
+    });
+    this._summary.parentNode.insertBefore(bar, this._summary);
+  }
+
+  _loadActivePreset() {
+    try { return localStorage.getItem('pipe-panel-preset') || 'overview'; }
+    catch { return 'overview'; }
+  }
+  _setActivePreset(id) {
+    try { localStorage.setItem('pipe-panel-preset', id); } catch {}
+  }
+  _applyActivePreset({ animate = false } = {}) {
+    if (!this._body) return;
+    const id = this._loadActivePreset();
+    const preset = PRESETS[id] || PRESETS.all;
+    const hide = new Set(preset.hide);
+    const sections = this._body.querySelectorAll(':scope > .pipe-section');
+    let hiddenCount = 0;
+    let totalCount  = sections.length;
+
+    sections.forEach(sec => {
+      const shouldHide = hide.has(sec.dataset.section);
+      const isHidden   = sec.classList.contains('pipe-section-hidden');
+      if (shouldHide) hiddenCount++;
+
+      if (!animate) {
+        sec.classList.toggle('pipe-section-hidden', shouldHide);
+        sec.classList.remove('pipe-section-fading');
+        return;
+      }
+
+      // Animated transitions: opacity fades over 200 ms, then display:none
+      // takes the section out of the grid (or vice versa on un-hide).
+      if (shouldHide && !isHidden) {
+        sec.classList.add('pipe-section-fading');
+        setTimeout(() => {
+          if (sec.classList.contains('pipe-section-fading')) {
+            sec.classList.add('pipe-section-hidden');
+          }
+        }, 200);
+      } else if (!shouldHide && isHidden) {
+        sec.classList.remove('pipe-section-hidden');
+        sec.classList.add('pipe-section-fading');
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => sec.classList.remove('pipe-section-fading')));
+      }
+    });
+
+    // Update the "X of Y hidden" status indicator.
+    const status = document.getElementById('pipe-preset-status');
+    if (status) {
+      status.textContent = hiddenCount === 0
+        ? `all ${totalCount} sections shown`
+        : `${hiddenCount} of ${totalCount} hidden`;
+    }
+  }
 
   _toggleFullscreen() {
     if (!this._el) return;
@@ -625,7 +742,7 @@ export class PipelinePanel {
         : '<div class="pred-empty">No branches in program.</div>';
       const hitPct = p.totalBranches > 0 ? (p.hitRate * 100).toFixed(1) + '%' : '—';
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-pred-header">BRANCH PREDICTOR</div>
+        `<div class="pipe-pred-header">BRANCH PREDICTOR<button id="pipe-predictor-save" class="pred-save-btn hidden" title="Save predictor change to the CU">SAVE</button></div>
          <div class="pred-controls">
            <label class="pred-label">Predictor:</label>
            <select id="pipe-predictor-select" class="pred-select">${opts}</select>
@@ -644,9 +761,33 @@ export class PipelinePanel {
            ${rows}
          </div>
          <div id="pipe-predictor-compare-table"></div>`);
-      const sel = document.getElementById('pipe-predictor-select');
+      // Predictor change is now staged — only commits when the user clicks
+      // the SAVE button next to the section title. Lets users explore "what-if"
+      // (the panel re-runs analysis previewing the chosen predictor) without
+      // mutating the CU until they confirm.
+      const sel     = document.getElementById('pipe-predictor-select');
+      const saveBtn = document.getElementById('pipe-predictor-save');
+      const currentId = p.id;
+      const cuNode = this._analyzer._scene.nodes?.find(n => n.type === 'CU');
+      const cuPredictorId = cuNode?.branchPredictor || 'static-nt';
       sel?.addEventListener('change', (e) => {
-        this._analyzer.setPredictor(e.target.value);
+        const dirty = e.target.value !== cuPredictorId;
+        saveBtn?.classList.toggle('hidden', !dirty);
+        // What-if preview: override wins over the CU until SAVE / revert.
+        if (dirty) this._analyzer.setPredictorOverride(e.target.value);
+        else       this._analyzer.clearPredictorOverride();
+      });
+      saveBtn?.addEventListener('click', () => {
+        if (!cuNode) return;
+        const newValue = sel.value;
+        // Commit to the CU, then drop the preview override so the analyzer
+        // reads the now-persisted CU value going forward.
+        bus.emit('pipeline:set-cu-prop', {
+          nodeId: cuNode.id,
+          props:  { branchPredictor: newValue },
+        });
+        this._analyzer.clearPredictorOverride();
+        saveBtn.classList.add('hidden');
       });
       const cmpBtn = document.getElementById('pipe-predictor-compare');
       cmpBtn?.addEventListener('click', () => this._renderPredictorCompare());
@@ -787,6 +928,7 @@ export class PipelinePanel {
     }
 
     this._applySectionOrderAndDrag();
+    this._applyActivePreset();
   }
 
   _loadSectionOrder() {

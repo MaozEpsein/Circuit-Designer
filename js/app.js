@@ -47,6 +47,12 @@ const pipelineAnalyzer = new PipelineAnalyzer(scene);
 const pipelinePanel    = new PipelinePanel(pipelineAnalyzer);
 const stageOverlay     = new StageOverlay(pipelineAnalyzer);
 
+// Pipeline panel asks to mutate a CU's props (e.g. branchPredictor dropdown);
+// route through the command stack so the change is undoable.
+bus.on('pipeline:set-cu-prop', ({ nodeId, props }) => {
+  commands.execute(new SetNodePropsCommand(scene, nodeId, props));
+});
+
 function _toggleStageView() {
   stageOverlay.toggle();
   const on = stageOverlay.isEnabled();
@@ -3124,9 +3130,14 @@ function _openCuEditor(node) {
   // Set dropdown
   const opSel = document.getElementById('cu-opcount-select');
   if (opSel) opSel.value = node._opCount;
+  // Sync branch-predictor dropdown to the CU node's stored value.
+  const bpSel = document.getElementById('cu-branch-pred-select');
+  if (bpSel) bpSel.value = node.branchPredictor || 'static-nt';
   _renderCuTable();
   cuOverlay?.classList.remove('hidden');
 }
+
+// Branch predictor — read directly from the dropdown on SAVE (no buffering).
 
 let _cuFullTable = []; // stores all rows even when view is trimmed
 
@@ -3243,9 +3254,17 @@ function _renderCuTable() {
 
 document.getElementById('btn-cu-save')?.addEventListener('click', () => {
   if (!_cuEditorNode) return;
-  commands.execute(new SetNodePropsCommand(scene, _cuEditorNode.id, {
-    controlTable: JSON.parse(JSON.stringify(_cuEditorTable))
-  }));
+  const bpSel = document.getElementById('cu-branch-pred-select');
+  const newPredictor = bpSel?.value || 'static-nt';
+  const props = {
+    controlTable:    JSON.parse(JSON.stringify(_cuEditorTable)),
+    branchPredictor: newPredictor,
+  };
+  commands.execute(new SetNodePropsCommand(scene, _cuEditorNode.id, props));
+  // Belt & braces — nudge the analyzer so the panel definitely re-renders
+  // even if the EventBus listeners somehow get out of order on this tick.
+  pipelineAnalyzer.invalidate();
+  pipelineAnalyzer.analyze({ force: true });
   cuOverlay?.classList.add('hidden');
   _cuEditorNode = null;
 });
@@ -3381,6 +3400,27 @@ const EXAMPLES = [
     tags: ['pipeline', 'cdc', 'clock-domain', 'synchronizer', 'multi-clock'],
     file: 'examples/circuits/pipeline-demo-cdc.json',
   },
+  {
+    id: 'hdu-demo',
+    title: '7. Hazard Detection Unit (HDU) — load-use stall',
+    desc: 'Standalone HDU sandbox. Four step-driven INPUTs feed the textbook MIPS load-use detector. **Press the ▶ STEP button (top bar) repeatedly, or click AUTO CLK to animate** — each step advances the input scenario one cycle. When IDEX_MemRead=1 and the loaded register (IDEX_Rt) matches one of the next instruction’s sources (IFID_Rs or IFID_Rt), the unit drops PCWrite and IFIDWrite to 0 and raises Bubble to 1 — freezing IF/ID and injecting a NOP into ID/EX. The 5-cycle script: c0 idle, c1 stall (Rt=Rs=5), c2 stall (Rt=Rt=3), c3 no-stall (MR=0), c4 no-stall (no match). The HDU glows red when STALL fires.',
+    tags: ['pipeline', 'hazard', 'HDU', 'load-use', 'stall'],
+    file: 'examples/circuits/hdu-demo.json',
+  },
+  {
+    id: 'mips-5stage-complete',
+    title: '9. MIPS 5-Stage — HDU + FWD Complete Pipeline ⭐',
+    desc: 'Full textbook 5-stage MIPS pipeline that wires HDU and FWD as discrete components driving real control. Three PIPE_REGs (ID/EX, EX/MEM, MEM/WB) carry data and control between stages. HDU detects load-use and asserts PCWrite=0, IFIDWrite=0, Bubble=1 — freezing PC + IR and flushing ID/EX. FWD outputs are bit-split and drive 4:1 forwarding MUXes before each ALU input, with EX/MEM priority over MEM/WB. The 4-instruction program: c1 LW R5; c2 stall (HDU fires); c3 ADD R6,R5,R3 with MEM/WB forward of R5; c5 ADD R6,R8,R8 (re-write R6); c6 SUB R7,R6,R5 with EX/MEM forward of R6.',
+    tags: ['pipeline', 'mips', '5-stage', 'HDU', 'FWD', 'load-use', 'forwarding'],
+    file: 'examples/circuits/mips-5stage-complete.json',
+  },
+  {
+    id: 'fwd-demo',
+    title: '8. Forwarding Unit (FWD) — EX/MEM → ALU bypass',
+    desc: 'Standalone FWD sandbox. Six step-driven INPUTs feed the Patterson & Hennessy priority forwarder. **Press ▶ STEP repeatedly, or click AUTO CLK to animate.** ForwardA / ForwardB take on 00 (use RF), 10 (forward EX/MEM → ALU input), or 01 (forward MEM/WB → ALU input), with EX/MEM winning ties. The 5-cycle script: c0 idle, c1 = EX/MEM→A (Rs match), c2 = MEM/WB→B (Rt match), c3 = priority (both stages match Rs, EX/MEM wins), c4 = no forward (Rd=0). The FWD glows green when any bypass is active and prints the live A/B selector pair.',
+    tags: ['pipeline', 'forwarding', 'FWD', 'bypass', 'EX-MEM'],
+    file: 'examples/circuits/fwd-demo.json',
+  },
   // ── Branch Predictor tab — phased demos for the predictor visualizer.
   // Phase 1 (read-only state): observe a predictor's evolving FSM/state
   // table over a synthesized outcome trace. Schedule unchanged from Pipeline
@@ -3500,6 +3540,29 @@ function _showExamples() {
 }
 
 document.getElementById('btn-examples')?.addEventListener('click', _showExamples);
+
+// ── Tutorial / Learn Mode (lazy-loaded on first click) ─────
+let _tutorial = null;
+async function _ensureTutorial() {
+  if (_tutorial) return _tutorial;
+  const mod = await import('./tutorial/index.js');
+  _tutorial = mod.createTutorial({
+    scene,
+    state,
+    commands,
+    renderer: { zoomToFit: Renderer.zoomToFit },
+  });
+  return _tutorial;
+}
+document.getElementById('btn-tutorial')?.addEventListener('click', async () => {
+  try {
+    const t = await _ensureTutorial();
+    t.panel.toggle();
+  } catch (err) {
+    console.error('[tutorial] failed to open:', err);
+    alert('Tutorial failed to load: ' + (err?.message || err));
+  }
+});
 document.getElementById('btn-examples-close')?.addEventListener('click', () => {
   examplesOverlay.classList.add('hidden');
 });

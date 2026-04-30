@@ -85,7 +85,16 @@ export class PipelineAnalyzer {
     let predictor = null;
     let PredictorClass = null;
     if (this._cache.hasProgram) {
-      PredictorClass = predictorById(this._predictorId);
+      // Predictor priority:
+      //   1. Panel "what-if" override (set via setPredictor) — transient,
+      //      cleared when the user commits a change to the CU.
+      //   2. CU node's branchPredictor prop — persistent design choice.
+      //   3. Legacy default fallback.
+      const cuNode = this._scene.nodes?.find(n => n.type === 'CU');
+      const predictorId = this._predictorOverride
+        || cuNode?.branchPredictor
+        || this._predictorId;
+      PredictorClass = predictorById(predictorId);
       predictor = new PredictorClass();
     }
 
@@ -133,6 +142,19 @@ export class PipelineAnalyzer {
   setPredictor(id) {
     if (id === this._predictorId) return;
     this._predictorId = id;
+    this._dirty = true;
+    this.analyze({ force: true });
+  }
+
+  /** Transient "what-if" preview — wins over the CU node until cleared. */
+  setPredictorOverride(id) {
+    this._predictorOverride = id || null;
+    this._dirty = true;
+    this.analyze({ force: true });
+  }
+  clearPredictorOverride() {
+    if (!this._predictorOverride) return;
+    this._predictorOverride = null;
     this._dirty = true;
     this.analyze({ force: true });
   }

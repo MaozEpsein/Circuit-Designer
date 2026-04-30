@@ -131,6 +131,8 @@ export class CommandPalette {
       { id: 'place-signext', label: 'Place Sign Extender', category: 'Block', action: () => bus.emit('palette:tool', 'place-signext') },
       { id: 'place-pipereg', label: 'Place Pipeline Register', category: 'Pipeline', action: () => bus.emit('palette:tool', 'place-pipereg') },
       { id: 'place-handshake', label: 'Place Valid/Ready Handshake', category: 'Pipeline', action: () => bus.emit('palette:tool', 'place-handshake') },
+      { id: 'place-hdu', label: 'Place Hazard Detection Unit', category: 'Pipeline', action: () => bus.emit('palette:tool', 'place-hdu') },
+      { id: 'place-fwd', label: 'Place Forwarding Unit',       category: 'Pipeline', action: () => bus.emit('palette:tool', 'place-fwd') },
       // Flip-Flops — direct placement
       { id: 'place-dff', label: 'Place D Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-dff') },
       { id: 'place-tff', label: 'Place T Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-tff') },

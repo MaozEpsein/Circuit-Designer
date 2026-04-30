@@ -879,6 +879,19 @@ function _nodeOutputAnchor(node, outputIndex) {
     const startY = node.y - spread; // EQ, GT, LT
     return { x: node.x + hw, y: startY + outputIndex * spread };
   }
+  if (node.type === 'HDU') {
+    // 3 outputs: PCWrite, IFIDWrite, Bubble — right side, evenly spaced
+    const w = 90, h = 86;
+    const spread = 22;
+    const startY = node.y - spread; // index 0..2
+    return { x: node.x + w / 2, y: startY + outputIndex * spread };
+  }
+  if (node.type === 'FWD') {
+    // 2 outputs: ForwardA, ForwardB — right side
+    const w = 90, h = 110;
+    const yOff = outputIndex === 0 ? -16 : 16;
+    return { x: node.x + w / 2, y: node.y + yOff };
+  }
   if (node.type === 'BUS_MUX') {
     return { x: node.x + 45, y: node.y };
   }
@@ -1005,6 +1018,20 @@ function _nodeInputAnchor(_src, node, inputIndex, isClockWire) {
     const hw = 45;
     const yOff = inputIndex === 0 ? -12 : 12;
     return { x: node.x - hw, y: node.y + yOff };
+  }
+  if (node.type === 'HDU') {
+    // 4 inputs: IDEX_MemRead, IDEX_Rt, IFID_Rs, IFID_Rt — left side
+    const w = 90, h = 86;
+    const spread = (h - 14) / 3;
+    const startY = node.y - (h - 14) / 2;
+    return { x: node.x - w / 2, y: startY + inputIndex * spread };
+  }
+  if (node.type === 'FWD') {
+    // 6 inputs: IDEX_Rs, IDEX_Rt, EXMEM_Rd, EXMEM_RegWrite, MEMWB_Rd, MEMWB_RegWrite — left side
+    const w = 90, h = 110;
+    const spread = (h - 14) / 5;
+    const startY = node.y - (h - 14) / 2;
+    return { x: node.x - w / 2, y: startY + inputIndex * spread };
   }
   if (node.type === 'PIPE_REG') {
     const ch = node.channels || 4;
@@ -1145,6 +1172,8 @@ function _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId) 
     else if (node.type === 'IMM')        _drawImmNode(node, val, hovered);
     else if (node.type === 'PIPE_REG')  _drawPipeRegNode(node, val, hovered, ffStates);
     else if (node.type === 'HANDSHAKE') _drawHandshakeNode(node, val, hovered, nodeValues);
+    else if (node.type === 'HDU')       _drawHduNode(node, val, hovered, nodeValues);
+    else if (node.type === 'FWD')       _drawFwdNode(node, val, hovered, nodeValues);
     else if (node.type === 'SIGN_EXT')  _drawSignExtNode(node, val, hovered);
     else if (node.type === 'BUS_MUX')   _drawBusMuxNode(node, val, hovered);
     else if (node.type === 'SPLIT')     _drawSplitNode(node, val, hovered);
@@ -2003,6 +2032,143 @@ function _drawHandshakeNode(node, val, hovered, nodeValues) {
   ctx.textAlign = 'left';
   ctx.fillText('S', x + w - 10, node.y - 10);
   ctx.fillText('F', x + w - 10, node.y + 10);
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── HDU node — Hazard Detection Unit ────────────────────────
+// Inputs:  IDEX_MemRead, IDEX_Rt, IFID_Rs, IFID_Rt
+// Outputs: PCWrite, IFIDWrite, Bubble
+function _drawHduNode(node, val, hovered, nodeValues) {
+  const w = 90, h = 86;
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(220,80,80,0.5)'; ctx.shadowBlur = 18; }
+  ctx.fillStyle = 'rgba(36,12,12,0.96)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hovered ? '#ff7878' : '#a04848';
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = '#ff8888';
+  ctx.font = 'bold 11px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HDU', node.x, y + 12);
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.fillStyle = '#a06060';
+  ctx.fillText('load-use', node.x, y + 22);
+
+  // Stall indicator: flash red when bubble output is asserted
+  const bubbleVal = nodeValues?.get(node.id + '__out2') ?? 0;
+  if (bubbleVal) {
+    ctx.fillStyle = 'rgba(255,80,80,0.18)';
+    _roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 5);
+    ctx.fill();
+    ctx.fillStyle = '#ff5050';
+    ctx.font = 'bold 7px JetBrains Mono, monospace';
+    ctx.fillText('STALL', node.x, y + h - 8);
+  }
+
+  // Input labels
+  ctx.fillStyle = '#a06060';
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  const inSpread = (h - 14) / 3;
+  const inStartY = node.y - (h - 14) / 2;
+  const inLabels = ['MR', 'Rt', 'Rs', 'Rt'];
+  for (let i = 0; i < 4; i++) {
+    ctx.fillText(inLabels[i], x + 14, inStartY + i * inSpread + 1);
+  }
+
+  // Output labels
+  ctx.textAlign = 'left';
+  const outSpread = 22;
+  const outStartY = node.y - outSpread;
+  const outLabels = ['PC', 'IF', 'BUB'];
+  for (let i = 0; i < 3; i++) {
+    ctx.fillText(outLabels[i], x + w - 18, outStartY + i * outSpread + 1);
+  }
+
+  // Node label above
+  ctx.fillStyle = C.textDim;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(node.label || '', node.x, y - 8);
+
+  ctx.restore();
+}
+
+// ── FWD node — Forwarding Unit ──────────────────────────────
+// Inputs:  IDEX_Rs, IDEX_Rt, EXMEM_Rd, EXMEM_RegWrite, MEMWB_Rd, MEMWB_RegWrite
+// Outputs: ForwardA[1:0], ForwardB[1:0]  (00=RF, 10=EX/MEM, 01=MEM/WB)
+function _drawFwdNode(node, val, hovered, nodeValues) {
+  const w = 90, h = 110;
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(80,220,120,0.5)'; ctx.shadowBlur = 18; }
+  ctx.fillStyle = 'rgba(12,28,16,0.96)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hovered ? '#78ff9c' : '#48a064';
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = '#88ff9c';
+  ctx.font = 'bold 11px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FWD', node.x, y + 12);
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.fillStyle = '#60a070';
+  ctx.fillText('bypass', node.x, y + 22);
+
+  // Forwarding indicator: any non-zero forward selector means a bypass is active
+  const fwA = nodeValues?.get(node.id + '__out0') ?? 0;
+  const fwB = nodeValues?.get(node.id + '__out1') ?? 0;
+  if (fwA || fwB) {
+    ctx.fillStyle = 'rgba(80,255,140,0.16)';
+    _roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 5);
+    ctx.fill();
+    ctx.fillStyle = '#88ff9c';
+    ctx.font = 'bold 7px JetBrains Mono, monospace';
+    ctx.fillText(`A=${fwA} B=${fwB}`, node.x, y + h - 8);
+  }
+
+  // Input labels (left side)
+  ctx.fillStyle = '#60a070';
+  ctx.font = '7px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  const inSpread = (h - 14) / 5;
+  const inStartY = node.y - (h - 14) / 2;
+  const inLabels = ['Rs', 'Rt', 'Md', 'MW', 'Wd', 'WW'];
+  for (let i = 0; i < 6; i++) {
+    ctx.fillText(inLabels[i], x + 14, inStartY + i * inSpread + 1);
+  }
+
+  // Output labels (right side)
+  ctx.textAlign = 'left';
+  ctx.fillText('FwA', x + w - 18, node.y - 16);
+  ctx.fillText('FwB', x + w - 18, node.y + 16);
 
   // Node label above
   ctx.fillStyle = C.textDim;
@@ -3273,6 +3439,12 @@ export function getNodeAtPoint(px, py, nodes) {
     } else if (n.type === 'HALF_ADDER' || n.type === 'FULL_ADDER' || n.type === 'COMPARATOR') {
       const hw = 45 + 6, hh = 30 + 6;
       if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
+    } else if (n.type === 'HDU') {
+      const hw = 45 + 6, hh = 43 + 6;
+      if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
+    } else if (n.type === 'FWD') {
+      const hw = 45 + 6, hh = 55 + 6;
+      if (x >= n.x - hw && x <= n.x + hw && y >= n.y - hh && y <= n.y + hh) return n;
     } else if (MEMORY_TYPE_SET.has(n.type)) {
       const sz = _memoryNodeSize(n);
       const hw = sz.w / 2 + 6, hh = sz.h / 2 + 6;
@@ -3416,6 +3588,8 @@ function _getNodeInputCount(node) {
   if (node.type === 'REG_FILE_DP') return 6; // RD1_ADDR, RD2_ADDR, WR_ADDR, WR_DATA, WE, CLK
   if (node.type === 'PIPE_REG') return (node.channels || 4) + 3; // D0..Dn-1, STALL, FLUSH, CLK
   if (node.type === 'HANDSHAKE') return 2; // V, R
+  if (node.type === 'HDU') return 4; // IDEX_MemRead, IDEX_Rt, IFID_Rs, IFID_Rt
+  if (node.type === 'FWD') return 6; // IDEX_Rs, IDEX_Rt, EXMEM_Rd, EXMEM_RegWrite, MEMWB_Rd, MEMWB_RegWrite
   if (node.type === 'SIGN_EXT') return 1;      // IN
   if (node.type === 'BUS_MUX') return (node.inputCount || 2) + 1; // D0..Dn-1, SEL
   if (node.type === 'SPLIT')   return 1;       // one bus in
@@ -3501,6 +3675,10 @@ export function getInputAnchors(node) {
       label = ['A', 'B', 'OP'][i] || '';
     } else if (node.type === 'HANDSHAKE') {
       label = i === 0 ? 'V' : 'R';
+    } else if (node.type === 'HDU') {
+      label = ['MR', 'Rt', 'Rs', 'Rt2'][i] || '';
+    } else if (node.type === 'FWD') {
+      label = ['Rs', 'Rt', 'Md', 'MW', 'Wd', 'WW'][i] || '';
     } else if (node.type === 'HALF_ADDER' || node.type === 'COMPARATOR') {
       label = i === 0 ? 'A' : 'B';
     } else if (node.type === 'FULL_ADDER') {
@@ -3545,6 +3723,13 @@ export function getOutputAnchors(node) {
     anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'EQ' });
     anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'GT' });
     anchors.push({ ..._nodeOutputAnchor(node, 2), index: 2, label: 'LT' });
+  } else if (node.type === 'HDU') {
+    anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'PC' });
+    anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'IF' });
+    anchors.push({ ..._nodeOutputAnchor(node, 2), index: 2, label: 'BUB' });
+  } else if (node.type === 'FWD') {
+    anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'FwA' });
+    anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'FwB' });
   } else if (node.type === 'BUS') {
     anchors.push({ ..._nodeOutputAnchor(node, 0), index: 0, label: 'OUT' });
     anchors.push({ ..._nodeOutputAnchor(node, 1), index: 1, label: 'ERR' });

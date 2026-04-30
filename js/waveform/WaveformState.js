@@ -160,7 +160,7 @@ const PICKABLE_TYPES = new Set([
   'REGISTER', 'SHIFT_REG', 'COUNTER', 'PC', 'IR',
   'RAM', 'ROM', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
-  'ALU', 'CU', 'HANDSHAKE',
+  'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
   'GATE_SLOT', 'FF_SLOT',
 ]);
 
@@ -169,7 +169,7 @@ const TYPE_TO_SIG_TYPE = {
   REGISTER: 'memory', SHIFT_REG: 'memory', COUNTER: 'memory', PC: 'memory', IR: 'memory',
   RAM: 'memory', ROM: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
-  ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute',
+  ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff',
 };
 
@@ -187,6 +187,8 @@ const PINS_BY_TYPE = {
   STACK:       [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   COUNTER:     [['Q', 0], ['TC', 1]],
   HANDSHAKE:   [['S', 0], ['F', 1]],
+  HDU:         [['PCWrite', 0], ['IFIDWrite', 1], ['Bubble', 2]],
+  FWD:         [['ForwardA', 0], ['ForwardB', 1]],
 };
 
 // ── Input pins (matches SimulationEngine inputSlots[i].inputIndex order) ──
@@ -208,6 +210,8 @@ const INPUT_PINS_BY_TYPE = {
   FULL_ADDER:  [['A', 0], ['B', 1], ['Cin', 2]],
   COMPARATOR:  [['A', 0], ['B', 1]],
   HANDSHAKE:   [['V', 0], ['R', 1]],
+  HDU:         [['IDEX_MemRead', 0], ['IDEX_Rt', 1], ['IFID_Rs', 2], ['IFID_Rt', 3]],
+  FWD:         [['IDEX_Rs', 0], ['IDEX_Rt', 1], ['EXMEM_Rd', 2], ['EXMEM_RegWrite', 3], ['MEMWB_Rd', 4], ['MEMWB_RegWrite', 5]],
 };
 
 function _outPinsFor(type) { return PINS_BY_TYPE[type] || [['Q', 0]]; }

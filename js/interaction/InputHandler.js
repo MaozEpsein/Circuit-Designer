@@ -71,6 +71,8 @@ const TOOL_TYPE_MAP = {
   'place-signext':       COMPONENT_TYPES.SIGN_EXT,
   'place-pipereg':       COMPONENT_TYPES.PIPE_REG,
   'place-handshake':     COMPONENT_TYPES.HANDSHAKE,
+  'place-hdu':           COMPONENT_TYPES.HDU,
+  'place-fwd':           COMPONENT_TYPES.FWD,
   'place-regfiledp':     COMPONENT_TYPES.REG_FILE_DP,
   'place-split':         COMPONENT_TYPES.SPLIT,
   'place-merge':         COMPONENT_TYPES.MERGE,
@@ -195,7 +197,7 @@ export function init(canvasEl, scene, stateManager, commandManager, selectionMan
 
   // Context menu → properties
   bus.on('node:dblclick', ({ node, screenX, screenY }) => {
-    const RESIZABLE = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM', 'BUS_MUX', 'SIGN_EXT', 'PIPE_REG', 'SPLIT', 'MERGE']);
+    const RESIZABLE = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM', 'BUS_MUX', 'SIGN_EXT', 'PIPE_REG', 'SPLIT', 'MERGE', 'CU']);
     if (MEMORY_TYPE_SET.has(node.type) || RESIZABLE.has(node.type)) {
       _showComponentPropsPopup(node, screenX, screenY);
     } else {
@@ -752,7 +754,7 @@ function _onCanvasDblClick(e) {
     return;
   }
 
-  const RESIZABLE_BLOCKS = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM', 'BUS_MUX', 'SIGN_EXT', 'PIPE_REG', 'SPLIT', 'MERGE']);
+  const RESIZABLE_BLOCKS = new Set(['MUX', 'DEMUX', 'DECODER', 'ENCODER', 'REG_FILE', 'ALU', 'IR', 'BUS', 'IMM', 'BUS_MUX', 'SIGN_EXT', 'PIPE_REG', 'SPLIT', 'MERGE', 'CU']);
   if (MEMORY_TYPE_SET.has(node.type) || RESIZABLE_BLOCKS.has(node.type)) {
     _showComponentPropsPopup(node, screenX, screenY);
     return;
@@ -878,6 +880,17 @@ function _getComponentFields(node) {
         { key: 'depth',    label: 'Depth',     min: 2,  max: 1024,        val: node.depth || 8 },
         { key: 'dataBits', label: 'Data Bits',  min: 1,  max: 64,         val: node.dataBits || 8 },
       ];
+    case 'CU':
+      return [
+        { key: 'branchPredictor', label: 'Branch Pred.', type: 'select',
+          val: node.branchPredictor || 'static-nt',
+          options: [
+            { value: 'static-nt',   label: 'Static Not-Taken' },
+            { value: 'static-btfn', label: 'Static BTFN' },
+            { value: '1bit',        label: '1-bit (last-outcome)' },
+            { value: '2bit',        label: '2-bit saturating' },
+          ] },
+      ];
     default: return [];
   }
 }
@@ -925,16 +938,26 @@ function _showComponentPropsPopup(node, screenX, screenY) {
     const label = document.createElement('span');
     label.textContent = f.label;
     label.style.color = '#8090a8';
-    const inp = document.createElement('input');
-    const isText = f.type === 'text';
-    inp.type = isText ? 'text' : 'number';
-    if (!isText) { inp.min = f.min; inp.max = f.max; }
-    if (isText && f.placeholder) inp.placeholder = f.placeholder;
-    inp.value = f.val;
+    const isSelect = f.type === 'select';
+    const isText   = f.type === 'text';
+    const inp = isSelect ? document.createElement('select') : document.createElement('input');
+    if (isSelect) {
+      for (const opt of f.options) {
+        const o = document.createElement('option');
+        o.value = opt.value; o.textContent = opt.label;
+        if (opt.value === f.val) o.selected = true;
+        inp.appendChild(o);
+      }
+    } else {
+      inp.type = isText ? 'text' : 'number';
+      if (!isText) { inp.min = f.min; inp.max = f.max; }
+      if (isText && f.placeholder) inp.placeholder = f.placeholder;
+      inp.value = f.val;
+    }
     inp.style.cssText = `
-      width: ${isText ? 140 : 48}px; padding: 2px 6px;
+      width: ${isSelect ? 160 : isText ? 140 : 48}px; padding: 2px 6px;
       background: #161e2e; border: 1px solid #3a4a60; border-radius: 3px;
-      color: #c8d8f0; font: 11px 'JetBrains Mono', monospace; text-align: ${isText ? 'left' : 'center'};
+      color: #c8d8f0; font: 11px 'JetBrains Mono', monospace; text-align: ${isText || isSelect ? 'left' : 'center'};
     `;
     inputEls[f.key] = inp;
     row.appendChild(label);
@@ -989,7 +1012,7 @@ function _showComponentPropsPopup(node, screenX, screenY) {
   function apply() {
     const props = {};
     for (const f of fields) {
-      if (f.type === 'text') {
+      if (f.type === 'text' || f.type === 'select') {
         props[f.key] = inputEls[f.key].value;
       } else {
         const raw = parseInt(inputEls[f.key].value, 10);

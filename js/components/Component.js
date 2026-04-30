@@ -43,6 +43,8 @@ export const COMPONENT_TYPES = {
   SPLIT:        'SPLIT',
   MERGE:        'MERGE',
   HANDSHAKE:    'HANDSHAKE',
+  HDU:          'HDU',
+  FWD:          'FWD',
 };
 
 /**
@@ -148,7 +150,7 @@ export function createComponent(type, x, y) {
     case COMPONENT_TYPES.IR:
       return { ...base, instrWidth: 16, opBits: 4, rdBits: 4, rs1Bits: 4, rs2Bits: 4, label: 'IR' };
     case COMPONENT_TYPES.CU:
-      return { ...base, label: 'CU', controlTable: null }; // null = use default
+      return { ...base, label: 'CU', controlTable: null, branchPredictor: 'static-nt' }; // null = use default
     case COMPONENT_TYPES.BUS:
       return { ...base, sourceCount: 3, label: 'BUS' };
     case COMPONENT_TYPES.IMM:
@@ -169,6 +171,13 @@ export function createComponent(type, x, y) {
       return { ...base, outBits: 8, slicesSpec: '7:4, 3:0', label: 'MERGE' };
     case COMPONENT_TYPES.HANDSHAKE:
       return { ...base, label: 'HS', pipelineRole: 'control' };
+    case COMPONENT_TYPES.HDU:
+      // Hazard Detection Unit — combinational MIPS-style load-use stall detector.
+      // regAddrBits sets the width compared on rs/rt/rd ports (4 = 16 regs).
+      return { ...base, label: 'HDU', regAddrBits: 4, pipelineRole: 'control' };
+    case COMPONENT_TYPES.FWD:
+      // Forwarding Unit — combinational MIPS-style two-source priority forwarder.
+      return { ...base, label: 'FWD', regAddrBits: 4, pipelineRole: 'control' };
     default:
       return base;
   }
