@@ -15,16 +15,20 @@
  *   { type: 'manual' }                       — learner self-verifies
  */
 
-// All tabs follow the same staged-build pedagogy: one concept per
-// step, each step preloads the previous solution via startsFrom, the
-// build literally accumulates on the canvas. Build a CPU is the
-// canonical example; the topic-specific tabs (MUX 2:1, Traffic Light
-// FSM, 2-bit ALU) apply the same pattern to smaller building blocks.
+// Tabs are ordered by learning curve, smallest concept first:
+//   1. MUX 2:1            — pure combinational, 4 gates total
+//   2. 2-bit ALU          — combinational + the "MUX picks one of N"
+//                            mental model from MUX 2:1, scaled up
+//   3. Traffic Light FSM  — first taste of sequential (D-FFs + state)
+//   4. Build a CPU        — everything above, glued together
+// Every tab uses the same staged-build pedagogy: one concept per step,
+// each step preloads the previous solution via startsFrom, the build
+// literally accumulates on the canvas.
 export const TRACKS = [
-  { id: 'cpu-build',     label: 'Build a CPU' },
   { id: 'mux-2to1',      label: 'MUX 2:1' },
-  { id: 'traffic-light', label: 'Traffic Light FSM' },
   { id: 'alu-2bit',      label: '2-bit ALU' },
+  { id: 'traffic-light', label: 'Traffic Light FSM' },
+  { id: 'cpu-build',     label: 'Build a CPU' },
 ];
 
 export const LESSONS = [
@@ -40,7 +44,19 @@ export const LESSONS = [
     summary: 'Every CPU needs to remember which instruction is next. The PC (Program Counter) holds that address and ticks forward on every clock edge — the heartbeat of execution.',
     steps: [
       {
-        instruction: 'Place a PC (Memory tab), set `bitWidth=4`. Wire INPUTs to `EN`(pin 2) and `RST`(pin 3), CLOCK to `CLK`(pin 4). Wire `PC → OUTPUT COUNT`. STEP: COUNT 0→15→0. Toggle RST=1 → 0. Toggle EN=0 → freeze.',
+        instruction:
+`Place a PC (Memory tab), set \`bitWidth=4\`.
+
+Wire:
+  • INPUT \`EN\`  → PC pin 2
+  • INPUT \`RST\` → PC pin 3
+  • CLOCK       → PC pin 4 (\`CLK\`)
+  • PC          → OUTPUT \`COUNT\`
+
+Try it:
+  • STEP repeatedly → COUNT advances 0 → 1 → 2 → ... → 15 → 0 (wrap).
+  • Toggle RST=1 for one cycle → COUNT snaps to 0.
+  • Toggle EN=0 → counter freezes.`,
         hints: [
           'PC pin layout (per the simulation engine): JUMP_ADDR(0), JUMP(1), EN(2), CLR(3), CLK(4). Leave pins 0 and 1 disconnected for this lesson — we are not jumping yet.',
           'EN defaults to 1 if disconnected. Wiring an explicit INPUT to pin 2 lets you freeze the counter, which is a real-world feature (used to stall the CPU).',
@@ -59,7 +75,12 @@ export const LESSONS = [
     summary: 'Programs live in memory. The PC indexes them. Hook the PC you built last lesson into a ROM, watch each address fetch a different instruction — this is the FETCH stage of fetch-decode-execute.',
     steps: [
       {
-        instruction: 'STEP repeatedly and watch DATA cycle through 10 different instructions, ending at HALT (`0xF000`) at address 9. To edit, right-click the ROM (opens on the ASM tab — keep ASM, never paste into C).',
+        instruction:
+`STEP repeatedly and watch DATA cycle through 10 different instructions, ending at HALT (\`0xF000\`) at address 9.
+
+To edit:
+  • Right-click the ROM → opens the editor on the ASM tab.
+  • Stay on ASM. Never paste ASM into the C tab — the C compiler will reject it.`,
         codeBlock: {
           language: 'asm',
           title: 'ROM program (already loaded by Show solution). 10 varied instructions exercising every major opcode class. Manual paste? ASM tab only — never C.',
@@ -133,7 +154,12 @@ HALT                ; OP=15 → HALT=1`,
     summary: 'Carry forward PC + ROM from lesson 2. Add an IR (Instruction Register) that captures each fetched instruction and exposes its fields, and a CU (Control Unit) that decodes the OP field into control signals. Nothing changes state yet — no Register File, no ALU, no RAM. The ROM is loaded with a special demo program that exercises 13 different opcodes back-to-back, so you can watch every CU output flip as the right instruction arrives. Steps 4–7 will plug those control signals into real components.',
     steps: [
       {
-        instruction: 'STEP through the 13-instruction demo and watch the CU LEDs (ALU_OP, RG_WE, MM_WE, MM_RE, JMP, HALT, IMM) flip as each opcode arrives. Open WAVEFORM to see all signals over time.',
+        instruction:
+`STEP through the 13-instruction demo. Watch the CU LEDs flip as each opcode arrives:
+
+  ALU_OP, RG_WE, MM_WE, MM_RE, JMP, HALT, IMM
+
+Open WAVEFORM to see all 7 signals over time.`,
         codeBlock: {
           language: 'asm',
           title: 'Step-3 demo program (already loaded). Each instruction lights a different combination of CU LEDs.',
@@ -222,7 +248,13 @@ HALT`,
     summary: 'First lesson where running the program actually changes CPU state. Carry forward everything from lesson 3 (PC, ROM, IR, CU, all 7 control LEDs). Add an RF-DP (Register File, dual-port — two simultaneous reads, one write). Now the CU\'s RG_WE drives RF.WE; the IR\'s RD / RS1 / RS2 fields drive the RF\'s three address ports; and the IR\'s RS2 field (which holds the immediate of an LI) doubles as RF.WR_DATA for now (step 5 will add a MUX so ALU results can also be written back). Each LI writes its immediate into the right register. Each CMP reads two registers (visible on the RD1 / RD2 LEDs) but writes nothing — RG_WE stays low for CMP.',
     steps: [
       {
-        instruction: 'Open the MEM panel (RF tab). STEP: the four LIs fill R1..R4 (5, 3, 9, 1); the two CMPs light RD1/RD2 without writing.',
+        instruction:
+`Open the MEM panel → RF tab.
+
+STEP through the program:
+
+  • The four LIs fill R1..R4 with 5, 3, 9, 1.
+  • The two CMPs light RD1 / RD2 without writing — RG_WE stays low for CMP.`,
         codeBlock: {
           language: 'asm',
           title: 'Step-4 demo program (already loaded). Two leading NOPs warm up the PC; four LI\'s fill the registers; two CMP\'s exercise the read ports.',
@@ -306,7 +338,15 @@ HALT`,
     summary: 'Carry forward everything from lesson 4. Add an ALU (so RD1, RD2, and CU.ALU_OP turn into a real arithmetic result) and a BUS_MUX that selects what gets written back into the Register File. CU.IMM is now wired to the MUX selector — for LI the MUX picks the immediate field of the instruction, for ADD/SUB/etc. the MUX picks the ALU result. The temporary direct wire from c04 (IR.RS2 → RF.WR_DATA) is removed and replaced by the MUX output. With this single architectural change, the CPU goes from "remembers immediates" to "actually computes".',
     steps: [
       {
-        instruction: 'STEP: the two LIs use the IMM path (CU.IMM=1, MUX picks IR.RS2). ADD/SUB/AND/XOR use the ALU path (CU.IMM=0, MUX picks ALU.Y) — R3=8, R4=2, R5=1, R6=6.',
+        instruction:
+`STEP through the program. Watch CU.IMM and the WB MUX selection:
+
+  • LI cycles            → CU.IMM=1, MUX picks IR.RS2 (immediate path).
+  • ADD/SUB/AND/XOR cycles → CU.IMM=0, MUX picks ALU.Y (compute path).
+
+End state in the RF:
+
+  R3 = 8,  R4 = 2,  R5 = 1,  R6 = 6.`,
         codeBlock: {
           language: 'asm',
           title: 'Step-5 demo program (already loaded). LI exercises the IMM path; ADD/SUB/AND/XOR exercise the ALU path through the same MUX.',
@@ -403,7 +443,13 @@ HALT`,
     summary: 'Carry forward the c05 datapath. Add a data RAM (the second memory in the CPU — separate from the instruction ROM that has been there since lesson 2) and a small MEM_MUX that selects what the WB_MUX\'s compute-path input sees: either the ALU result (for ADD/SUB/...) or the RAM output (for LOAD). The selector is CU.MM_RE. With this added, STORE finally moves data out of registers into RAM, and LOAD finally pulls data back in. The CPU now has both a working ALU and working data memory.',
     steps: [
       {
-        instruction: 'Open the MEM panel (toggle RF / DMEM tabs). STEP: STOREs fill RAM[1..3] with 5, 8, 15; LOADs pull each value back into R7 (visible on the MEM_OUT LED).',
+        instruction:
+`Open the MEM panel and toggle between the RF and DMEM tabs.
+
+STEP through the program:
+
+  • STOREs fill RAM[1..3] with 5, 8, 15.
+  • LOADs pull each value back into R7 (visible on the MEM_OUT LED).`,
         codeBlock: {
           language: 'asm',
           title: 'Step-6 demo program (already loaded). 3 STOREs to mem[1..3], then 3 LOADs reading them back into R7.',
@@ -482,7 +528,14 @@ HALT`,
     summary: 'Carry forward the entire c06 datapath. Add the two wires that close the PC feedback loop: IR.RD → PC.JUMP_ADDR (the jump target encoded in the instruction\'s RD field) and CU.JMP → PC.JMP. With these, JMP and BEQ/BNE actually move the PC sideways instead of letting it tick monotonically forward — and the CPU can loop, branch, and run real programs. The JMP LED returns since the signal now drives a real wire. BEQ/BNE are ATOMIC compare-and-branch: in one cycle the ALU compares Rs1 to Rs2 and the CU consumes the fresh Z flag to decide the jump — there is no two-instruction CMP-then-test sequence, and no risk of an intervening op clobbering the flag.',
     steps: [
       {
-        instruction: 'STEP through the countdown. SUB decrements R1; BEQ R1,R0,7 falls through while R1≠0 and fires when R1=0; JMP 4 closes the loop. PC visits 4→5→6 four times before exiting to HALT at 7.',
+        instruction:
+`STEP through the countdown. The loop body has three roles:
+
+  • SUB R1, R1, R2       → decrements R1 by 1.
+  • BEQ R1, R0, 7        → atomic compare-and-branch; falls through while R1≠0, fires when R1=0.
+  • JMP 4                → closes the loop back to the SUB.
+
+PC walk: visits 4 → 5 → 6 four times, then exits to HALT at 7.`,
         codeBlock: {
           language: 'asm',
           title: 'Step-7 demo program (already loaded). 4-iteration countdown using SUB + BEQ + JMP.',
@@ -574,7 +627,14 @@ HALT`,
     summary: 'No new hardware. The CPU built across lessons 1–7 is functionally complete, and this lesson proves it by running Fibonacci. The same circuit you wired up — every wire untouched — computes F(2) through F(6) and stores them in RAM. The whole point of this step is to feel the completeness: a real algorithm that any programmer would recognize, executing on the gates you connected.',
     steps: [
       {
-        instruction: 'STEP through the program (open MEM → DMEM tab) and watch RAM[0..4] fill with `1, 2, 3, 5, 8` over 5 loop iterations. BEQ R5,R0 fires when the counter hits 0, halting at PC=15.',
+        instruction:
+`Open the MEM panel → DMEM tab.
+
+STEP through the program. Over 5 loop iterations RAM[0..4] fills with the Fibonacci sequence:
+
+  mem[0]=1,  mem[1]=2,  mem[2]=3,  mem[3]=5,  mem[4]=8
+
+BEQ R5, R0 fires when the counter hits 0 → halts at PC=15.`,
         codeBlock: {
           language: 'asm',
           title: 'Fibonacci — computes F(2)..F(6) into RAM[0..4]. Final result: 1, 2, 3, 5, 8.',
@@ -625,7 +685,10 @@ HALT`,
     summary: 'A multiplexer picks one of two inputs based on a SEL bit. To do that we need both SEL and its inverse — the inverse is what enables the A-branch when SEL=0. Start by placing SEL through a NOT gate and watching its output flip.',
     steps: [
       {
-        instruction: 'Place INPUT `SEL`, NOT gate, OUTPUT `NOT_SEL`. Wire `SEL → NOT → NOT_SEL`.',
+        instruction:
+`Place: INPUT \`SEL\`, NOT gate, OUTPUT \`NOT_SEL\`.
+
+Wire: \`SEL → NOT → NOT_SEL\`.`,
         hints: [
           'Inputs alpha-sorted for the validator: SEL → NOT_SEL.',
           'A NOT gate has one input pin (0) and one output pin (0).',
@@ -650,7 +713,13 @@ HALT`,
     summary: 'Add the first half of the MUX: a single AND gate that lets A through only when NOT_SEL=1 (i.e. SEL=0). When SEL=1 the gate clamps to 0 — the A-branch is "closed". This is the core MUX trick: an AND used as a controllable switch.',
     steps: [
       {
-        instruction: 'Add INPUT `A`, AND gate, OUTPUT `BRANCH_A`. Wire `A → AND.in0`, `NOT_SEL → AND.in1`, `AND → BRANCH_A`.',
+        instruction:
+`Add: INPUT \`A\`, AND gate, OUTPUT \`BRANCH_A\`.
+
+Wire:
+  • \`A → AND.in0\`
+  • \`NOT_SEL → AND.in1\`
+  • \`AND → BRANCH_A\``,
         hints: [
           'Pin order on AND (and most 2-input gates): in0 = top, in1 = bottom, out = right.',
           'Inputs alpha-sorted for the validator: A, SEL → BRANCH_A. (NOT_SEL is internal — the validator does not look at intermediate outputs.)',
@@ -680,7 +749,13 @@ HALT`,
     summary: 'Mirror the A-branch with SEL as the control instead of NOT_SEL. Now the two branches are perfectly complementary — at any moment exactly one is "open" and one is "closed", because SEL and NOT_SEL are bitwise opposites. This is the key insight that lets the next step combine them safely with OR.',
     steps: [
       {
-        instruction: 'Add INPUT `B`, AND gate, OUTPUT `BRANCH_B`. Wire `B → AND.in0`, `SEL → AND.in1`, `AND → BRANCH_B`.',
+        instruction:
+`Add: INPUT \`B\`, AND gate, OUTPUT \`BRANCH_B\`.
+
+Wire:
+  • \`B → AND.in0\`
+  • \`SEL → AND.in1\`
+  • \`AND → BRANCH_B\``,
         hints: [
           'Symmetry check: this AND looks just like the A-branch from Step 2, but its second input is SEL (not NOT_SEL). One letter different, opposite behaviour.',
           'Watch BRANCH_A and BRANCH_B together. The pair (BRANCH_A, BRANCH_B) is one of (0,0), (1,0), or (0,1) — never (1,1). The (0,0) case means the selected input itself is 0; the (1,1) case is impossible.',
@@ -732,7 +807,13 @@ HALT`,
     },
     steps: [
       {
-        instruction: 'Add OR gate, OUTPUT `OUT`. Wire `BRANCH_A → OR.in0`, `BRANCH_B → OR.in1`, `OR → OUT`.',
+        instruction:
+`Add: OR gate, OUTPUT \`OUT\`.
+
+Wire:
+  • \`BRANCH_A → OR.in0\`
+  • \`BRANCH_B → OR.in1\`
+  • \`OR → OUT\``,
         hints: [
           'OR\'s pin order matches AND: in0 top, in1 bottom, out right.',
           'You can now toggle SEL with A and B held at different values and watch OUT switch between them in real time. That is exactly what a MUX does in hardware — instant, no clock involved.',
@@ -778,7 +859,20 @@ HALT`,
     summary: 'A finite state machine is just a register that remembers which state we are in, plus combinational logic that decides where to go next. Start with the memory: two D-FFs sharing a clock, manually driven by INPUT pins so you can prove they latch on the rising edge.',
     steps: [
       {
-        instruction: 'Place CLOCK, INPUTs `D0_IN`/`D1_IN`, two D-FFs (`S0`, `S1`), OUTPUTs `S0_OUT`/`S1_OUT`. Wire `D0_IN → S0.D`, `D1_IN → S1.D`, CLOCK to both `.CLK`, FF outputs to LEDs.',
+        instruction:
+`Place: CLOCK, INPUTs \`D0_IN\` / \`D1_IN\`, 2 D-FFs (\`S0\`, \`S1\`), OUTPUTs \`S0_OUT\` / \`S1_OUT\`.
+
+Wire the data path:
+  • \`D0_IN → S0.D\`
+  • \`D1_IN → S1.D\`
+
+Wire the clock to both FFs:
+  • CLOCK → \`S0.CLK\`
+  • CLOCK → \`S1.CLK\`
+
+Wire the LEDs:
+  • \`S0 → S0_OUT\`
+  • \`S1 → S1_OUT\``,
         hints: [
           'D-FF pin layout (FF_SLOT with ffType=D): inputs `D`(0), `CLK`(1). Outputs: `Q`(0), `Q_BAR`(1). The FF samples D only on the rising edge of CLK.',
           'Two FFs sharing one CLOCK is the canonical 2-bit state register. Both transitions happen on the same edge — no skew.',
@@ -796,7 +890,19 @@ HALT`,
     summary: 'Two state bits encode 4 possible states; we use only 3 of them. Decode each valid code into exactly one LED: 00 lights RED, 01 lights GREEN, 10 lights YELLOW. The illegal code 11 lights nothing — a clue that the FSM landed in an undefined state.',
     steps: [
       {
-        instruction: 'Add 2 NOT gates (`NOT_S0`, `NOT_S1`), 3 AND gates, 3 OUTPUTs (`RED`, `GREEN`, `YELLOW`). Wire `S0 → NOT_S0`, `S1 → NOT_S1`. RED = `NOT_S1 AND NOT_S0`, GREEN = `NOT_S1 AND S0`, YELLOW = `S1 AND NOT_S0`.',
+        instruction:
+`Add: 2 NOT gates (\`NOT_S0\`, \`NOT_S1\`), 3 AND gates, 3 OUTPUTs (\`RED\`, \`GREEN\`, \`YELLOW\`).
+
+Wire the inverters:
+  • \`S0 → NOT_S0\`
+  • \`S1 → NOT_S1\`
+
+Wire each output AND:
+  • RED    = \`NOT_S1 AND NOT_S0\`
+  • GREEN  = \`NOT_S1 AND S0\`
+  • YELLOW = \`S1 AND NOT_S0\`
+
+Toggle D inputs and STEP — each valid state code (00, 01, 10) lights exactly one LED. State 11 lights none.`,
         hints: [
           'Toggle D0_IN/D1_IN to walk through the four state codes (00, 01, 10, 11) and STEP. Each valid code lights exactly one LED. Code 11 lights none — that is the "unused" state.',
           'Why no LED for state 11? Because we only need 3 states and 2 bits give us 4. The 4th code is "spare" — left unhandled here, fixed by RST in step 4.',
@@ -814,7 +920,16 @@ HALT`,
     summary: 'The transition rule is 00→01→10→00. Working out the boolean equations: D0 (next S0) = NOT(S1) AND NOT(S0); D1 (next S1) = NOT(S1) AND S0. Look closely — those are exactly the same expressions as the RED and GREEN decoders you just built. So we don\'t add new gates; we just fan out the existing AND outputs back to the FF.D inputs. The FSM becomes autonomous.',
     steps: [
       {
-        instruction: 'Delete `D0_IN` and `D1_IN`. Wire `RED_AND.out → S0.D` and `GREEN_AND.out → S1.D` (those AND outputs already compute the next-state equations). Press AUTO CLK and watch RED → GREEN → YELLOW cycle in WAVEFORM.',
+        instruction:
+`Delete: \`D0_IN\` and \`D1_IN\` (the manual drivers — and their wires).
+
+Wire the next-state loop (no new gates needed — the decoder ANDs already compute the right equations):
+  • \`RED_AND → S0.D\`     (D0 = NOT_S1 AND NOT_S0)
+  • \`GREEN_AND → S1.D\`   (D1 = NOT_S1 AND S0)
+
+Run AUTO CLK and watch the cycle in WAVEFORM:
+
+  RED → GREEN → YELLOW → RED → ...`,
         hints: [
           'Why no new gates? RED = NOT(S1) AND NOT(S0). D0 (next S0) = NOT(S1) AND NOT(S0). Identical expression. The AND output already exists; we just route it to a second sink.',
           'Same for GREEN = NOT(S1) AND S0 = D1 (next S1). YELLOW has no next-state role — its output only drives the LED.',
@@ -851,7 +966,24 @@ HALT`,
     },
     steps: [
       {
-        instruction: 'Add INPUT `RST`, NOT gate, 2 AND gates. Re-route: `RED_AND → AND_RST_0.in0`, `NOT_RST → AND_RST_0.in1`, `AND_RST_0 → S0.D` (replacing the direct wire). Same for `GREEN_AND → AND_RST_1 → S1.D`. Pulse RST=1 → state forces to 00 (RED) on the next clock.',
+        instruction:
+`Add: INPUT \`RST\`, NOT gate (\`NOT_RST\`), 2 AND gates (\`AND_RST_0\`, \`AND_RST_1\`).
+
+Wire the RST inverter:
+  • \`RST → NOT_RST\`
+
+Re-route bit 0 (delete the direct \`RED_AND → S0.D\` wire first):
+  • \`RED_AND → AND_RST_0.in0\`
+  • \`NOT_RST → AND_RST_0.in1\`
+  • \`AND_RST_0 → S0.D\`
+
+Re-route bit 1 (same pattern):
+  • \`GREEN_AND → AND_RST_1.in0\`
+  • \`NOT_RST  → AND_RST_1.in1\`
+  • \`AND_RST_1 → S1.D\`
+
+Test: pulse RST=1 → on the next clock edge, state forces to 00 (RED).
+Release RST → cycle resumes from RED.`,
         hints: [
           'How does it work? When RST=0: NOT_RST=1, the AND gate passes the next-state value through unchanged. When RST=1: NOT_RST=0, both AND gates output 0, so D0=D1=0, so the next state is 00 = RED.',
           'This is a SYNCHRONOUS reset — it takes effect on the next clock edge, not instantly. That is the cleanest, most timing-safe form of reset and is how most modern silicon resets its registers.',
@@ -883,7 +1015,16 @@ HALT`,
     summary: 'An ALU is just four small computers crammed into one box, with a MUX picking the answer. Start with the easiest two: bitwise AND and bitwise OR. Each one is just parallel gates, one per bit slice. No carry, no order — pure combinational logic.',
     steps: [
       {
-        instruction: 'Place INPUTs `A0`, `A1`, `B0`, `B1`. Add 2 ANDs (bit 0 and bit 1) and 2 ORs (bit 0 and bit 1). Wire each AND/OR to the matching A/B bit pair, then to OUTPUTs `AND0_OUT`, `AND1_OUT`, `OR0_OUT`, `OR1_OUT`.',
+        instruction:
+`Place: INPUTs \`A0\`, \`A1\`, \`B0\`, \`B1\`.
+
+Add: 2 ANDs (one per bit slice), 2 ORs (one per bit slice).
+
+Wire each gate to its matching A/B bit pair, then route to OUTPUTs:
+  • \`A0, B0 → AND0 → AND0_OUT\`
+  • \`A1, B1 → AND1 → AND1_OUT\`
+  • \`A0, B0 → OR0  → OR0_OUT\`
+  • \`A1, B1 → OR1  → OR1_OUT\``,
         hints: [
           'Bitwise = "do the gate per bit, no interaction between bit slices". Bit 0 sees A0 and B0; bit 1 sees A1 and B1. They never talk to each other.',
           'This is the fastest part of any ALU because there is no carry to propagate. All bit slices compute in parallel in one gate-delay.',
@@ -915,7 +1056,18 @@ HALT`,
     summary: 'Add a 2-bit binary adder by chaining two F-ADD blocks. Bit 0\'s carry-out feeds bit 1\'s carry-in. The first stage\'s carry-in is left unwired — defaults to 0, so we get pure ADD. The result wraps mod 4 (any overflow leaves through the unused COUT of bit 1).',
     steps: [
       {
-        instruction: 'Add 2 F-ADD blocks (palette → BLOCKS): `FA0` for bit 0, `FA1` for bit 1. Wire `A0,B0 → FA0.A,FA0.B`; `A1,B1 → FA1.A,FA1.B`; `FA0.COUT → FA1.CIN`. Add OUTPUTs `SUM0_OUT`, `SUM1_OUT` from the FA SUM pins. Leave `FA0.CIN` unwired (defaults to 0).',
+        instruction:
+`Add: 2 F-ADD blocks (palette → BLOCKS) — \`FA0\` for bit 0, \`FA1\` for bit 1.
+
+Wire the data inputs:
+  • \`A0 → FA0.A\`, \`B0 → FA0.B\`
+  • \`A1 → FA1.A\`, \`B1 → FA1.B\`
+
+Wire the carry chain:
+  • \`FA0.COUT → FA1.CIN\`
+  • Leave \`FA0.CIN\` unwired (defaults to 0 → pure ADD).
+
+Add OUTPUTs \`SUM0_OUT\`, \`SUM1_OUT\` from the FA SUM pins.`,
         hints: [
           'F-ADD pin layout: inputs `A`(0), `B`(1), `CIN`(2). Outputs: `SUM`(0), `COUT`(1). Three inputs, two outputs — a building block of every adder ever made.',
           'Why chain? Because addition is *sequential per bit* — you cannot compute bit 1\'s sum without knowing whether bit 0 produced a carry. The carry chain encodes that dependency directly in the wires.',
@@ -950,7 +1102,22 @@ HALT`,
     summary: 'The adder you just built can subtract too — without changing a single F-ADD. The trick: add an OP0 control bit, XOR each B input with OP0, and feed OP0 itself as the carry-in. When OP0=0 nothing changes (XOR with 0 = identity, CIN=0 → ADD). When OP0=1 every B bit flips (XOR with 1 = NOT) and CIN=1 → A + NOT(B) + 1 = A − B in two\'s complement. ONE adder. Two operations. No new subtractor.',
     steps: [
       {
-        instruction: 'Add INPUT `OP0`. Add 2 XOR gates: `XOR_B0 = B0 XOR OP0`, `XOR_B1 = B1 XOR OP0`. Re-route the FA `B` inputs to come from the XOR outputs (`XOR_B0 → FA0.B`, `XOR_B1 → FA1.B`). Wire `OP0 → FA0.CIN` (replacing the unwired default). Toggle OP0 between 0 and 1 to see SUM switch between A+B and A−B.',
+        instruction:
+`Add: INPUT \`OP0\`, 2 XOR gates (\`XOR_B0\`, \`XOR_B1\`).
+
+Wire the conditional inverter (B XOR OP0):
+  • \`B0 → XOR_B0.in0\`, \`OP0 → XOR_B0.in1\`
+  • \`B1 → XOR_B1.in0\`, \`OP0 → XOR_B1.in1\`
+
+Re-route the FA \`B\` inputs (delete the direct \`B0 → FA0.B\` and \`B1 → FA1.B\` first):
+  • \`XOR_B0 → FA0.B\`
+  • \`XOR_B1 → FA1.B\`
+
+Wire CIN: \`OP0 → FA0.CIN\` (replacing the unwired default).
+
+Toggle OP0:
+  • OP0=0 → adder runs A+B.
+  • OP0=1 → adder runs A−B (two's complement).`,
         hints: [
           'Two\'s complement primer: −B (mod 4) equals NOT(B) + 1. So A − B = A + NOT(B) + 1. The +1 is exactly what CIN=1 contributes.',
           'XOR is the canonical "conditional inverter" — XOR with 0 passes through, XOR with 1 inverts. So `B XOR OP0` is "B normally, NOT(B) when OP0=1". One gate per bit, controlled by one signal.',
@@ -998,7 +1165,22 @@ HALT`,
     },
     steps: [
       {
-        instruction: 'Add INPUT `OP1`. Add 2 BUS_MUX blocks with `inputCount=4` (one per output bit). For each MUX: `D0 = FA.SUM` (ADD), `D1 = FA.SUM` (SUB — same wire, the adder already inverted via OP0), `D2 = AND.out`, `D3 = OR.out`. Selectors: `S0 = OP0`, `S1 = OP1`. Wire MUX outputs to OUTPUTs `Y0`, `Y1`.',
+        instruction:
+`Add: INPUT \`OP1\`, 2 BUS_MUX blocks with \`inputCount=4\` (one per output bit).
+
+For each MUX, wire the four data inputs:
+  • D0 ← \`FA.SUM\`   (ADD result)
+  • D1 ← \`FA.SUM\`   (SUB result — same wire; adder is already in subtract mode when OP0=1)
+  • D2 ← \`AND.out\`
+  • D3 ← \`OR.out\`
+
+Wire the selectors (shared by both MUXes):
+  • S0 ← \`OP0\`
+  • S1 ← \`OP1\`
+
+Wire MUX outputs to OUTPUTs:
+  • \`MUX0 → Y0\`
+  • \`MUX1 → Y1\``,
         hints: [
           'BUS_MUX with inputCount=4 pin layout: data inputs `D0`(0), `D1`(1), `D2`(2), `D3`(3); selectors `S0`(4) = LSB, `S1`(5) = MSB. Output `Y`(0). The selector pair (S1,S0) picks Dn where n = (S1<<1) | S0.',
           'OP encoding maps directly to the MUX selectors. OP=00 → MUX picks D0 (ADD path). OP=01 → D1 (SUB — but D1 is wired to the same FA.SUM as D0, because the adder is already in subtract mode when OP0=1). OP=10 → D2 (AND). OP=11 → D3 (OR).',
