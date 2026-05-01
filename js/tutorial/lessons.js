@@ -815,7 +815,40 @@ Wire:
 Wire:
   • \`BRANCH_A → OR.in0\`
   • \`BRANCH_B → OR.in1\`
-  • \`OR → OUT\``,
+  • \`OR → OUT\`
+
+Test: toggle SEL — OUT switches between A (when SEL=0) and B (when SEL=1) instantly. Change A or B with SEL held — OUT only follows the selected one; the other is "muted" by its closed AND gate.
+
+──────────────────────────────────────────────────────
+This circuit is the foundation of:
+──────────────────────────────────────────────────────
+  • ALU output select  — 4:1 MUX picks ADD/SUB/AND/OR per output
+                          bit (you'll build this in 2-bit ALU step 4).
+  • Write-back MUX     — picks between ALU result, RAM output, and
+                          immediate for the register-file write port
+                          (cpu-build step 5 wires this exact MUX).
+  • Forwarding paths   — pipelined CPUs use 4:1 MUXes per ALU input
+                          to pick the freshest source: RF read,
+                          EX/MEM forward, or MEM/WB forward (MIPS
+                          5-stage demos).
+  • PC source select   — every cycle the PC picks between sequential
+                          (PC+1) and a jump target (BEQ/BNE/JMP);
+                          internally that decision is a MUX.
+  • Decoder reverse    — N-to-1 MUX is functionally equivalent to a
+                          decoder + N gating ANDs + OR. They are two
+                          views of the same circuit (Decoder 2-to-4
+                          builds the dual).
+  • Conditional move   — many ISAs have a "MOV reg, src1, src2, cond"
+                          instruction that synthesizes directly to
+                          a MUX.
+  • HDL ternary        — the \`? :\` operator in Verilog / SystemVerilog
+                          synthesizes one-to-one to a MUX.
+  • Bus arbitration    — multiple bus masters routed to a single
+                          shared bus through a MUX selected by an
+                          arbiter signal.
+  • Crossbar switches  — an N×N grid of MUXes routing N inputs to N
+                          outputs (used in network switches and
+                          inside multi-core CPU caches).`,
         hints: [
           'OR\'s pin order matches AND: in0 top, in1 bottom, out right.',
           'You can now toggle SEL with A and B held at different values and watch OUT switch between them in real time. That is exactly what a MUX does in hardware — instant, no clock involved.',
