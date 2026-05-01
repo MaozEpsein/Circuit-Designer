@@ -15,12 +15,21 @@
  *   { type: 'manual' }                       — learner self-verifies
  */
 
+// Tabs 1–4 are placeholders kept for the existing l01..l20 lessons —
+// they will eventually be replaced by step-by-step rebuilds in the new
+// "Build Step-by-Step" track and then deleted. Do not invest in their
+// content. Build a CPU is the canonical example to follow.
 export const TRACKS = [
-  { id: 'basics',        label: 'Basics' },
-  { id: 'combinational', label: 'Combinational' },
-  { id: 'sequential',    label: 'Sequential' },
-  { id: 'fsm-cpu',       label: 'FSM & CPU' },
+  { id: 'basics',        label: 'Tab 1' },
+  { id: 'combinational', label: 'Tab 2' },
+  { id: 'sequential',    label: 'Tab 3' },
+  { id: 'fsm-cpu',       label: 'Tab 4' },
   { id: 'cpu-build',     label: 'Build a CPU' },
+  // Topic-specific tabs that mirror the cpu-build pedagogy (one
+  // concept per step, each step preloads the previous solution via
+  // startsFrom). Each rebuilt classic gets its own tab named after
+  // what it builds — not a generic "Build Step-by-Step" bucket.
+  { id: 'mux-2to1', label: 'MUX 2:1' },
 ];
 
 export const LESSONS = [
@@ -541,7 +550,7 @@ export const LESSONS = [
     summary: 'Every CPU needs to remember which instruction is next. The PC (Program Counter) holds that address and ticks forward on every clock edge — the heartbeat of execution.',
     steps: [
       {
-        instruction: 'Build a 4-bit Program Counter you can drive by hand. Place a PC block (Memory tab) and configure it for 4 bits. Wire an EN input (input pin 2), an RST input (input pin 3), and a CLOCK to its CLK pin (input 4). Wire the PC output to an OUTPUT named COUNT. Then explore: with EN=1, RST=0, press STEP repeatedly — COUNT advances 0 → 1 → 2 → ... → 15 → 0 (wrap). Toggle RST=1 for one cycle → COUNT snaps to 0. Set EN=0 → counter freezes. Watch the value live in WAVEFORM.',
+        instruction: 'Place a PC (Memory tab), set `bitWidth=4`. Wire INPUTs to `EN`(pin 2) and `RST`(pin 3), CLOCK to `CLK`(pin 4). Wire `PC → OUTPUT COUNT`. STEP: COUNT 0→15→0. Toggle RST=1 → 0. Toggle EN=0 → freeze.',
         hints: [
           'PC pin layout (per the simulation engine): JUMP_ADDR(0), JUMP(1), EN(2), CLR(3), CLK(4). Leave pins 0 and 1 disconnected for this lesson — we are not jumping yet.',
           'EN defaults to 1 if disconnected. Wiring an explicit INPUT to pin 2 lets you freeze the counter, which is a real-world feature (used to stall the CPU).',
@@ -560,24 +569,34 @@ export const LESSONS = [
     summary: 'Programs live in memory. The PC indexes them. Hook the PC you built last lesson into a ROM, watch each address fetch a different instruction — this is the FETCH stage of fetch-decode-execute.',
     steps: [
       {
-        instruction: 'Goal: extend the PC circuit so the PC indexes a ROM full of instructions, and watch each address fetch a different one. The fastest way: just click "Show solution" — it builds the entire circuit and pre-loads the ROM with the program shown below. Then press STEP repeatedly and watch DATA cycle through the instructions: 0xD105 → 0xD203 → 0x0312 → 0xF000 → 0x0000 (memory beyond address 3 is zero). To inspect or edit the program manually: right-click the loaded ROM. The editor will open directly on the ASM tab — that is where ASM code is parsed. If you switch to the C tab and paste ASM there, the C compiler will reject it (you will see "Unexpected character" errors). Stay on ASM. Manual circuit construction (without Show solution): place a ROM (Memory tab), open Properties, set addrBits=4, dataBits=16, asyncRead=true; wire PC → ROM input 0; add a DATA output reading from the ROM.',
+        instruction: 'STEP repeatedly and watch DATA cycle through 10 different instructions, ending at HALT (`0xF000`) at address 9. To edit, right-click the ROM (opens on the ASM tab — keep ASM, never paste into C).',
         codeBlock: {
           language: 'asm',
-          title: 'ROM program (already loaded by Show solution). Manual paste? ASM tab only — never C.',
+          title: 'ROM program (already loaded by Show solution). 10 varied instructions exercising every major opcode class. Manual paste? ASM tab only — never C.',
           code:
-`; Adds 5 + 3, stores the result in R3.
-; This program rides with us through the rest of the CPU build track.
+`; A "tasting menu" of the ISA — every major opcode class shows up
+; at least once so DATA cycles through visibly different patterns
+; as the PC walks 0..9. None of it actually executes yet (no IR /
+; CU / RF / ALU / RAM exist until lessons 3-6); we are only watching
+; the FETCH stage deliver each instruction word.
 
-LI  R1, 5
-LI  R2, 3
-ADD R3, R1, R2
-HALT`,
+LI    R1, 5         ; 0xD105  — immediate load
+LI    R2, 3         ; 0xD203  — immediate load
+ADD   R3, R1, R2    ; 0x0312  — R-type arithmetic
+SUB   R4, R1, R2    ; 0x1412  — R-type arithmetic
+AND   R5, R1, R2    ; 0x2512  — R-type logic
+XOR   R6, R1, R2    ; 0x4612  — R-type logic
+CMP   R1, R2        ; 0x7012  — sets flags, no register write
+STORE R3, R0        ; 0x9030  — memory write (mem[R0] ← R3)
+LOAD  R7, R0        ; 0x8700  — memory read  (R7 ← mem[R0])
+HALT                ; 0xF000  — stop`,
         },
         hints: [
           'ROM pin layout: ADDR(0), RE(1), CLK(2). With async-read enabled, RE defaults to 1 and CLK is unused — ROM acts purely combinationally.',
           'PC is 4-bit → 16 addressable instructions. ROM addrBits=4 matches exactly. dataBits=16 because every CPU instruction in this design is 16 bits wide.',
           'Open the MEM panel to inspect ROM contents while you STEP. The ASM tab in the ROM editor (right-click ROM → opens editor) shows the same bytes as readable mnemonics.',
-          'Why HALT first sits at address 3? Because programs always end with a HALT, and the assembler places it at the next free address. From address 4 onward, the ROM is zero (encodes as ADD R0,R0,R0 — a no-op when R0 is forced to 0).',
+          'HALT lives at address 9 (the last opcode in the program). Addresses 10..15 are zero, which decodes as `ADD R0,R0,R0` — a harmless no-op (R0 is hard-wired to 0, so writes to it are dropped).',
+          'Watch DATA closely: the high nibble (top 4 bits) is the OPCODE. You will see `D, D, 0, 1, 2, 4, 7, 9, 8, F` walk by — that is the CU\'s eye view of the program, before the CU even exists.',
         ],
         validate: { type: 'manual' },
       },
@@ -624,7 +643,7 @@ HALT                ; OP=15 → HALT=1`,
     summary: 'Carry forward PC + ROM from lesson 2. Add an IR (Instruction Register) that captures each fetched instruction and exposes its fields, and a CU (Control Unit) that decodes the OP field into control signals. Nothing changes state yet — no Register File, no ALU, no RAM. The ROM is loaded with a special demo program that exercises 13 different opcodes back-to-back, so you can watch every CU output flip as the right instruction arrives. Steps 4–7 will plug those control signals into real components.',
     steps: [
       {
-        instruction: 'Click "Show solution". The circuit extends lesson 2: PC and ROM stay where they were; ROM now feeds an IR (which splits the 16-bit instruction into OP/RD/RS1/RS2), and IR.OP feeds the CU. All seven CU outputs are wired to LEDs on the right: ALU_OP (2 bits), RG_WE, MM_WE, MM_RE, JMP, HALT, IMM. A diagnostic OP LED above the IR shows the raw 4-bit opcode coming out of ROM.\n\nThe ROM is pre-loaded with a 13-instruction demo program (see below) chosen to make every CU output light up at least once. Press STEP repeatedly and watch:\n\n• Cycles 1–2 (LI R1,5 / LI R2,3, OP=13): RG_WE=1, IMM lights up with 5 then 3 — the immediate path is alive.\n• Cycles 3–7 (ADD/SUB/AND/OR/XOR, OP=0..4): RG_WE=1; ALU_OP cycles through 0,1,2,3,4 — the CU is telling the (future) ALU exactly what to do.\n• Cycle 8 (CMP, OP=7): ALU_OP=7 but RG_WE=0 — CMP runs the ALU only to set flags, no register write.\n• Cycle 9 (LOAD, OP=8): MM_RE=1 + RG_WE=1 — the CU asks RAM to read and the Register File to receive.\n• Cycle 10 (STORE, OP=9): MM_WE=1, RG_WE=0 — opposite direction; nothing is written into a register.\n• Cycle 11 (JMP, OP=10): JMP=1 — the CU is requesting a PC jump (which won\'t actually happen until step 7).\n• Cycle 12 (NOP, OP=14): every signal low — by design.\n• Cycle 13 (HALT, OP=15): HALT=1 — execution would stop here in a real CPU.\n\nNothing in the circuit is actually computing or storing yet. LOAD/STORE/JMP are decoded into control signals, but no RAM exists to read or write, and the PC has no jump wiring. That is exactly the lesson: the CU is reading the program correctly long before the rest of the CPU arrives. Open WAVEFORM and add OP, ALU_OP, RG_WE, MM_WE, MM_RE, JMP, HALT, IMM to see all 13 cycles at once.',
+        instruction: 'STEP through the 13-instruction demo and watch the CU LEDs (ALU_OP, RG_WE, MM_WE, MM_RE, JMP, HALT, IMM) flip as each opcode arrives. Open WAVEFORM to see all signals over time.',
         codeBlock: {
           language: 'asm',
           title: 'Step-3 demo program (already loaded). Each instruction lights a different combination of CU LEDs.',
@@ -713,7 +732,7 @@ HALT`,
     summary: 'First lesson where running the program actually changes CPU state. Carry forward everything from lesson 3 (PC, ROM, IR, CU, all 7 control LEDs). Add an RF-DP (Register File, dual-port — two simultaneous reads, one write). Now the CU\'s RG_WE drives RF.WE; the IR\'s RD / RS1 / RS2 fields drive the RF\'s three address ports; and the IR\'s RS2 field (which holds the immediate of an LI) doubles as RF.WR_DATA for now (step 5 will add a MUX so ALU results can also be written back). Each LI writes its immediate into the right register. Each CMP reads two registers (visible on the RD1 / RD2 LEDs) but writes nothing — RG_WE stays low for CMP.',
     steps: [
       {
-        instruction: 'Click "Show solution". The full lesson-3 circuit is unchanged — only the RF-DP and two read-port LEDs are added below it. New wiring: IR.RD → RF.WR_ADDR ; IR.RS1 → RF.RD1_ADDR ; IR.RS2 → RF.RD2_ADDR ; IR.RS2 → RF.WR_DATA (RS2 doubles as the immediate value for LI; this is the temporary direct path that the step-5 MUX will replace) ; CU.RG_WE → RF.WE ; CLK → RF.CLK. Two new LEDs are wired to the read ports: RD1 reads what RS1 selected, RD2 reads what RS2 selected.\n\nInitial state (before pressing STEP at all): PC=0, RF all zeros. The ROM begins with two NOPs at addresses 0 and 1 — they do nothing visible, they just let you watch the PC tick along an "empty pipeline" before the real program starts at address 2.\n\nDemo flow (open the MEM panel before stepping — it shows R0..R7 live):\n\n• STEP 1 (PC: 0 → 1, NOP): no register changes. RG_WE=0, all CU LEDs quiet.\n• STEP 2 (PC: 1 → 2, NOP): again nothing.\n• STEP 3 (PC: 2 → 3, LI R1, 5): the first real instruction. RG_WE=1, IMM=5, RD=1 → R1 ← 5. MEM panel shows R1=5.\n• STEP 4 (LI R2, 3): R2 ← 3.\n• STEP 5 (LI R3, 9): R3 ← 9.\n• STEP 6 (LI R4, 1): R4 ← 1.\n• STEP 7 (CMP R1, R2, OP=7): RG_WE=0 → no write. RS1=1, RS2=2 → RD1 LED shows 5, RD2 LED shows 3. The dual read ports are alive even when nothing is being written.\n• STEP 8 (CMP R3, R4): RD1 LED shows 9, RD2 LED shows 1.\n• STEP 9 (HALT): RG_WE=0, HALT=1.\n\nWhat just happened: every line of the program in ROM caused (or chose not to cause) a real, observable change inside the CPU. The CU is still doing the same combinational decoding from lesson 3, but now its outputs are wired into something that remembers.',
+        instruction: 'Open the MEM panel (RF tab). STEP: the four LIs fill R1..R4 (5, 3, 9, 1); the two CMPs light RD1/RD2 without writing.',
         codeBlock: {
           language: 'asm',
           title: 'Step-4 demo program (already loaded). Two leading NOPs warm up the PC; four LI\'s fill the registers; two CMP\'s exercise the read ports.',
@@ -797,7 +816,7 @@ HALT`,
     summary: 'Carry forward everything from lesson 4. Add an ALU (so RD1, RD2, and CU.ALU_OP turn into a real arithmetic result) and a BUS_MUX that selects what gets written back into the Register File. CU.IMM is now wired to the MUX selector — for LI the MUX picks the immediate field of the instruction, for ADD/SUB/etc. the MUX picks the ALU result. The temporary direct wire from c04 (IR.RS2 → RF.WR_DATA) is removed and replaced by the MUX output. With this single architectural change, the CPU goes from "remembers immediates" to "actually computes".',
     steps: [
       {
-        instruction: 'Click "Show solution". The lesson-4 circuit is preserved entirely; we add three components: an ALU, a 2-input BUS_MUX, and an ALU_R LED. The one wire from c04 that gets replaced: IR.RS2 → RF.WR_DATA was the temporary "immediate-only" path. It is now gone. In its place: ALU.Y → MUX.D0 ; IR.RS2 → MUX.D1 ; CU.IMM → MUX.SEL ; MUX.Y → RF.WR_DATA. Other new wires: RF.RD1 → ALU.A ; RF.RD2 → ALU.B ; CU.ALU_OP → ALU.OP ; ALU.Z → CU.Z ; ALU.C → CU.C (the flag wires are placed now so step 7 can use them for branches without rerouting).\n\nDemo flow (open the MEM panel):\n\n• STEP 1 (NOP, PC: 0→1): nothing.\n• STEP 2 (NOP, PC: 1→2): nothing.\n• STEP 3 (LI R1, 5): CU.IMM=1, MUX picks IR.RS2=5. R1 ← 5.\n• STEP 4 (LI R2, 3): R2 ← 3.\n• STEP 5 (ADD R3, R1, R2): CU.IMM=0, MUX picks ALU.Y. RF reads R1=5 and R2=3 on the read ports → ALU.A=5, ALU.B=3, ALU.OP=0 (ADD) → ALU_R LED shows 8 → R3 ← 8. The first computed write.\n• STEP 6 (SUB R4, R1, R2): ALU.OP=1 → 5−3=2 → R4 ← 2.\n• STEP 7 (AND R5, R1, R2): ALU.OP=2 → 5&3=1 → R5 ← 1.\n• STEP 8 (XOR R6, R1, R2): ALU.OP=4 → 5^3=6 → R6 ← 6.\n• STEP 9 (HALT).\n\nWatch the ALU_R LED change between cycles even when no write happens — the ALU is purely combinational, so it always shows whatever ALU.OP/A/B currently say. When CU.IMM=1 (LI cycles), the MUX ignores the ALU and the LED is just a curiosity. When CU.IMM=0, the LED is the value about to land in the destination register.',
+        instruction: 'STEP: the two LIs use the IMM path (CU.IMM=1, MUX picks IR.RS2). ADD/SUB/AND/XOR use the ALU path (CU.IMM=0, MUX picks ALU.Y) — R3=8, R4=2, R5=1, R6=6.',
         codeBlock: {
           language: 'asm',
           title: 'Step-5 demo program (already loaded). LI exercises the IMM path; ADD/SUB/AND/XOR exercise the ALU path through the same MUX.',
@@ -894,7 +913,7 @@ HALT`,
     summary: 'Carry forward the c05 datapath. Add a data RAM (the second memory in the CPU — separate from the instruction ROM that has been there since lesson 2) and a small MEM_MUX that selects what the WB_MUX\'s compute-path input sees: either the ALU result (for ADD/SUB/...) or the RAM output (for LOAD). The selector is CU.MM_RE. With this added, STORE finally moves data out of registers into RAM, and LOAD finally pulls data back in. The CPU now has both a working ALU and working data memory.',
     steps: [
       {
-        instruction: 'Click "Show solution". Three new components are added: a RAM, a 2-input MEM_MUX, and a MEM_OUT LED. The c05 wire `ALU.Y → WB_MUX.D0` is removed — replaced by the MEM_MUX path. New wires: RF.RD2 → RAM.ADDR (the address register for LOAD/STORE in this ISA is RS2) ; RF.RD1 → RAM.DATA (STORE\'s data comes from RS1) ; CU.MM_WE → RAM.WE ; CU.MM_RE → RAM.RE ; CLK → RAM.CLK ; ALU.Y → MEM_MUX.D0 ; RAM.OUT → MEM_MUX.D1 ; CU.MM_RE → MEM_MUX.SEL ; MEM_MUX.Y → WB_MUX.D0 ; RAM.OUT → MEM_OUT LED.\n\nDemo flow (open the MEM panel — switch between the RF tab and the RAM/DMEM tab to watch both):\n\n• STEPs 1–2 (NOPs): nothing.\n• STEPs 3–5 (LI R1=5, R2=8, R3=15): three data values land in R1..R3.\n• STEPs 6–8 (LI R4=1, R5=2, R6=3): three addresses land in R4..R6.\n• STEP 9 (STORE R1, R4): RAM[1] ← 5. The DMEM tab now shows address 1 holding 0x05.\n• STEP 10 (STORE R2, R5): RAM[2] ← 8.\n• STEP 11 (STORE R3, R6): RAM[3] ← 15. All three RAM cells are now populated.\n• STEP 12 (LOAD R7, R4): MEM_OUT LED shows 5. R7 ← 5.\n• STEP 13 (LOAD R7, R5): MEM_OUT LED switches to 8. R7 ← 8.\n• STEP 14 (LOAD R7, R6): MEM_OUT LED switches to 15. R7 ← 15.\n• STEP 15 (HALT).\n\nTwo memories, one CPU. The ROM holds the program forever (read-only); the RAM holds the data the program manipulates (read-write). This is exactly the Harvard architecture, and is also what the user-mode of any modern OS feels like — code segment vs. data segment.',
+        instruction: 'Open the MEM panel (toggle RF / DMEM tabs). STEP: STOREs fill RAM[1..3] with 5, 8, 15; LOADs pull each value back into R7 (visible on the MEM_OUT LED).',
         codeBlock: {
           language: 'asm',
           title: 'Step-6 demo program (already loaded). 3 STOREs to mem[1..3], then 3 LOADs reading them back into R7.',
@@ -973,7 +992,7 @@ HALT`,
     summary: 'Carry forward the entire c06 datapath. Add the two wires that close the PC feedback loop: IR.RD → PC.JUMP_ADDR (the jump target encoded in the instruction\'s RD field) and CU.JMP → PC.JMP. With these, JMP and BEQ/BNE actually move the PC sideways instead of letting it tick monotonically forward — and the CPU can loop, branch, and run real programs. The JMP LED returns since the signal now drives a real wire. BEQ/BNE are ATOMIC compare-and-branch: in one cycle the ALU compares Rs1 to Rs2 and the CU consumes the fresh Z flag to decide the jump — there is no two-instruction CMP-then-test sequence, and no risk of an intervening op clobbering the flag.',
     steps: [
       {
-        instruction: 'Click "Show solution". Two new wires close the loop: IR.RD → PC.JUMP_ADDR and CU.JMP → PC.JMP. The JMP LED is added back to the column above CU.\n\nDemo flow (open the MEM panel; watch R1 in the RF tab; watch PC up top):\n\n• STEPs 1–2 (NOPs): warmup.\n• STEP 3 (LI R1, 4): R1 ← 4.\n• STEP 4 (LI R2, 1): R2 ← 1.\n• STEP 5 (SUB R1, R1, R2): R1 ← 3.\n• STEP 6 (BEQ R1, R0, 7): atomic — ALU does CMP R1,R0 → Z=0 → CU.JMP=0 → PC ticks to 6. JMP LED stays low.\n• STEP 7 (JMP 4): unconditional → CU.JMP=1 → PC ← 4 (the SUB address). JMP LED lights.\n• STEP 8 (back at SUB): R1 ← 2.\n• STEP 9 (BEQ R1, R0, 7): R1≠0 → no jump, fall through.\n• STEP 10 (JMP 4): jump back.\n• STEP 11 (SUB): R1 ← 1.\n• STEP 12 (BEQ): R1≠0 → fall through.\n• STEP 13 (JMP 4): jump back.\n• STEP 14 (SUB): R1 ← 0.\n• STEP 15 (BEQ R1, R0, 7): the atomic compare fires Z=1 in the same cycle → PC ← 7. The loop exits.\n• STEP 16 (HALT): HALT LED on. Done.\n\n14 cycles of execution to count down from 4. The CPU is now Turing-complete enough to run any small program — it has memory, arithmetic, conditional flow, and loops.',
+        instruction: 'STEP through the countdown. SUB decrements R1; BEQ R1,R0,7 falls through while R1≠0 and fires when R1=0; JMP 4 closes the loop. PC visits 4→5→6 four times before exiting to HALT at 7.',
         codeBlock: {
           language: 'asm',
           title: 'Step-7 demo program (already loaded). 4-iteration countdown using SUB + BEQ + JMP.',
@@ -1065,7 +1084,7 @@ HALT`,
     summary: 'No new hardware. The CPU built across lessons 1–7 is functionally complete, and this lesson proves it by running Fibonacci. The same circuit you wired up — every wire untouched — computes F(2) through F(6) and stores them in RAM. The whole point of this step is to feel the completeness: a real algorithm that any programmer would recognize, executing on the gates you connected.',
     steps: [
       {
-        instruction: 'Click "Show solution". The circuit is identical to lesson 7 — every wire from c01 through c07 is exactly where you left it. The ROM is pre-loaded with a Fibonacci program. STEP through it and watch the RF / DMEM panels:\n\nWhat happens (after the warmup NOPs, the setup phase fills R1=0, R2=1, R3=0, R4=1, R5=5, then the loop runs 5 times):\n\n• Iteration 1: R6 = 0+1 = 1.  mem[0]=1.  R1=1, R2=1.\n• Iteration 2: R6 = 1+1 = 2.  mem[1]=2.  R1=1, R2=2.\n• Iteration 3: R6 = 1+2 = 3.  mem[2]=3.  R1=2, R2=3.\n• Iteration 4: R6 = 2+3 = 5.  mem[3]=5.  R1=3, R2=5.\n• Iteration 5: R6 = 3+5 = 8.  mem[4]=8.  R5=0 → BEQ R5,R0 taken → HALT.\n\nFinal RAM: mem[0..4] = 1, 2, 3, 5, 8 — that is F(2), F(3), F(4), F(5), F(6). Fibonacci, on your gates.\n\n══════════════════════════════════════════════════════\nFULL ISA — every instruction this CPU now executes:\n══════════════════════════════════════════════════════\n\n  ARITHMETIC / LOGIC (writes Rd):\n    ADD  Rd, Rs1, Rs2    Rd = Rs1 + Rs2\n    SUB  Rd, Rs1, Rs2    Rd = Rs1 - Rs2\n    AND  Rd, Rs1, Rs2    Rd = Rs1 & Rs2\n    OR   Rd, Rs1, Rs2    Rd = Rs1 | Rs2\n    XOR  Rd, Rs1, Rs2    Rd = Rs1 ^ Rs2\n    SHL  Rd, Rs1, Rs2    Rd = Rs1 << Rs2\n    SHR  Rd, Rs1, Rs2    Rd = Rs1 >> Rs2\n\n  COMPARE (no register write — used internally by BEQ/BNE):\n    CMP  Rs1, Rs2        sets Z if equal, C if Rs1 > Rs2\n\n  IMMEDIATE LOAD:\n    LI   Rd, imm         Rd = imm  (imm is 8-bit; in this lesson 0..15 fits in RS2)\n    MOV  Rd, Rs          synonym for "OR Rd, Rs, R0"  (R0 is always 0)\n\n  MEMORY:\n    LOAD  Rd, Raddr      Rd = RAM[Raddr]\n    STORE Rdata, Raddr   RAM[Raddr] = Rdata\n\n  CONTROL FLOW:\n    JMP  imm             unconditional: PC = imm\n    BEQ  Rs1, Rs2, imm   atomic: if Rs1 == Rs2 then PC = imm   (one cycle)\n    BNE  Rs1, Rs2, imm   atomic: if Rs1 != Rs2 then PC = imm   (one cycle)\n\n  HOUSEKEEPING:\n    NOP                  do nothing for one cycle\n    HALT                 stop execution\n\nAlgorithms that fit comfortably on this CPU (≤16 instructions, ≤256-valued data): array sum, search-for-key in RAM, repeated-addition multiplication, parity, popcount (count of set bits), block copy, countdown / count-up loops, Fibonacci sequence (the program above), simple bit manipulation — anything driven by equality tests.\n\nAlgorithms that need more hardware: function calls (no CALL/RET — would need a STACK), values larger than 255 (8-bit data path), programs over 16 instructions (4-bit PC), ordering tests (R1 < R2, R1 > R2 — this ISA only has BEQ/BNE; ordering would require BLT/BGE which we did not budget an opcode slot for).',
+        instruction: 'STEP through the program (open MEM → DMEM tab) and watch RAM[0..4] fill with `1, 2, 3, 5, 8` over 5 loop iterations. BEQ R5,R0 fires when the counter hits 0, halting at PC=15.',
         codeBlock: {
           language: 'asm',
           title: 'Fibonacci — computes F(2)..F(6) into RAM[0..4]. Final result: 1, 2, 3, 5, 8.',
@@ -1088,6 +1107,7 @@ JMP 7                   ;       else loop
 HALT`,
         },
         hints: [
+          'Full ISA reference (every instruction this CPU now executes):\n\n  ARITHMETIC / LOGIC (writes Rd):\n    ADD  Rd, Rs1, Rs2    Rd = Rs1 + Rs2\n    SUB  Rd, Rs1, Rs2    Rd = Rs1 - Rs2\n    AND  Rd, Rs1, Rs2    Rd = Rs1 & Rs2\n    OR   Rd, Rs1, Rs2    Rd = Rs1 | Rs2\n    XOR  Rd, Rs1, Rs2    Rd = Rs1 ^ Rs2\n    SHL  Rd, Rs1, Rs2    Rd = Rs1 << Rs2\n    SHR  Rd, Rs1, Rs2    Rd = Rs1 >> Rs2\n\n  COMPARE (no register write — used internally by BEQ/BNE):\n    CMP  Rs1, Rs2        sets Z if equal, C if Rs1 > Rs2\n\n  IMMEDIATE LOAD:\n    LI   Rd, imm         Rd = imm  (imm is 8-bit; here 0..15 fits in RS2)\n    MOV  Rd, Rs          synonym for "OR Rd, Rs, R0" (R0 is always 0)\n\n  MEMORY:\n    LOAD  Rd, Raddr      Rd = RAM[Raddr]\n    STORE Rdata, Raddr   RAM[Raddr] = Rdata\n\n  CONTROL FLOW:\n    JMP  imm             unconditional: PC = imm\n    BEQ  Rs1, Rs2, imm   atomic: if Rs1 == Rs2 then PC = imm   (one cycle)\n    BNE  Rs1, Rs2, imm   atomic: if Rs1 != Rs2 then PC = imm   (one cycle)\n\n  HOUSEKEEPING:\n    NOP                  do nothing for one cycle\n    HALT                 stop execution\n\nFits on this CPU: array sum, key search in RAM, repeated-addition multiplication, parity, popcount, block copy, countdown / count-up loops, Fibonacci, bit manipulation — anything driven by equality tests.\n\nNeeds more hardware: function calls (no CALL/RET → no STACK), values >255 (8-bit data path), programs >16 instructions (4-bit PC), ordering tests `<` `>` (would need BLT/BGE — no opcode slot).',
           'Try a multiplier instead — 3 × 4 = 12, ending with R3 = 12. Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R1, 4         ; multiplicand\nLI  R2, 3         ; counter\nLI  R3, 0         ; result\nLI  R4, 1         ; one\nADD R3, R3, R1    ; LOOP: result += multiplicand\nSUB R2, R2, R4    ;       counter--\nBEQ R2, R0, 10    ;       atomic: if counter==0 → END\nJMP 6             ;       else loop\nHALT              ; END',
           'Try a linear search — find the address of the first 1 in mem[0..3] (preload mem[2]=1, others=0; result lands in R3 = 2). Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R3, 0         ; index\nLI  R4, 1         ; +1 step\nLI  R5, 1         ; key we are looking for\nLOAD R6, R3       ; LOOP: R6 = mem[index]\nBEQ R6, R5, 11    ;       atomic: if RAM[i]==key → FOUND\nADD R3, R3, R4    ;       index++\nJMP 5             ;       loop\nHALT              ; FOUND (PC=11)\n\n— this hint demonstrates BEQ between two registers (not just register-vs-zero), and shows the new atomic compare-and-branch saving a cycle versus the legacy CMP-then-JZ pattern.',
           'Why not GCD here? Euclid by subtraction needs to know which of R1, R2 is larger so it can subtract the smaller from the bigger — that requires testing the C flag (R1 > R2), which used to be JC. When we made BEQ/BNE atomic and reused opcode 12 for BNE, the C-flag branch went away. The teaching CPU is now equality-only by design; ordering tests would need a BLT/BGE opcode that we did not budget a slot for.',
@@ -1095,6 +1115,154 @@ HALT`,
           'You have built a functioning RISC CPU from gates up. Every wire in the reference image now has a counterpart in your circuit, and every instruction in the ISA actually executes correctly through it. Sum, multiply, GCD, Fibonacci — all on the same datapath without changing a single wire. That is exactly what makes a CPU a CPU instead of a hard-wired calculator: the program in ROM, not the silicon, decides what it computes.',
         ],
         validate: { type: 'manual' },
+      },
+    ],
+  },
+
+  // ─── Track: MUX 2:1 ──────────────────────────────────────────
+  // Mirror the cpu-build pedagogy on a small, self-contained topic.
+  // Each step is one new component / one new concept; each step
+  // pre-loads the previous step's solution via startsFrom so the
+  // build literally accumulates on the canvas.
+  //
+  // Goal: assemble OUT = (NOT SEL AND A) OR (SEL AND B) one piece
+  // at a time. Each step has its own truth-table validator so the
+  // learner gets immediate feedback before the next piece is added.
+  {
+    id: 'mux-s1',
+    track: 'mux-2to1',
+    title: '1 · Inverting SEL — "We need both polarities"',
+    summary: 'A multiplexer picks one of two inputs based on a SEL bit. To do that we need both SEL and its inverse — the inverse is what enables the A-branch when SEL=0. Start by placing SEL through a NOT gate and watching its output flip.',
+    steps: [
+      {
+        instruction: 'Place INPUT `SEL`, NOT gate, OUTPUT `NOT_SEL`. Wire `SEL → NOT → NOT_SEL`.',
+        hints: [
+          'Inputs alpha-sorted for the validator: SEL → NOT_SEL.',
+          'A NOT gate has one input pin (0) and one output pin (0).',
+          'No need for a clock yet — this is a pure combinational circuit. SEL is driven by hand; NOT_SEL updates instantly.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs: SEL → Outputs: NOT_SEL
+          expected: [
+            [0, 1],
+            [1, 0],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'mux-s2',
+    track: 'mux-2to1',
+    startsFrom: 'mux-s1',
+    title: '2 · The A-branch — "Open when SEL=0"',
+    summary: 'Add the first half of the MUX: a single AND gate that lets A through only when NOT_SEL=1 (i.e. SEL=0). When SEL=1 the gate clamps to 0 — the A-branch is "closed". This is the core MUX trick: an AND used as a controllable switch.',
+    steps: [
+      {
+        instruction: 'Add INPUT `A`, AND gate, OUTPUT `BRANCH_A`. Wire `A → AND.in0`, `NOT_SEL → AND.in1`, `AND → BRANCH_A`.',
+        hints: [
+          'Pin order on AND (and most 2-input gates): in0 = top, in1 = bottom, out = right.',
+          'Inputs alpha-sorted for the validator: A, SEL → BRANCH_A. (NOT_SEL is internal — the validator does not look at intermediate outputs.)',
+          'Notice how A=1, SEL=1 still gives BRANCH_A=0 — even though A is high, the valve is closed because NOT_SEL is low.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: A, SEL → Outputs: BRANCH_A, NOT_SEL
+          // Note: NOT_SEL is still on the canvas from step 1, so the
+          // validator sees it as an output. Sort outputs alphabetically:
+          // BRANCH_A, NOT_SEL.
+          expected: [
+            [0, 0,  0, 1],
+            [0, 1,  0, 0],
+            [1, 0,  1, 1],
+            [1, 1,  0, 0],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'mux-s3',
+    track: 'mux-2to1',
+    startsFrom: 'mux-s2',
+    title: '3 · The B-branch — "Open when SEL=1, mirror of A"',
+    summary: 'Mirror the A-branch with SEL as the control instead of NOT_SEL. Now the two branches are perfectly complementary — at any moment exactly one is "open" and one is "closed", because SEL and NOT_SEL are bitwise opposites. This is the key insight that lets the next step combine them safely with OR.',
+    steps: [
+      {
+        instruction: 'Add INPUT `B`, AND gate, OUTPUT `BRANCH_B`. Wire `B → AND.in0`, `SEL → AND.in1`, `AND → BRANCH_B`.',
+        hints: [
+          'Symmetry check: this AND looks just like the A-branch from Step 2, but its second input is SEL (not NOT_SEL). One letter different, opposite behaviour.',
+          'Watch BRANCH_A and BRANCH_B together. The pair (BRANCH_A, BRANCH_B) is one of (0,0), (1,0), or (0,1) — never (1,1). The (0,0) case means the selected input itself is 0; the (1,1) case is impossible.',
+          'Inputs alpha-sorted: A, B, SEL → outputs alpha: BRANCH_A, BRANCH_B, NOT_SEL.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: A, B, SEL → Outputs alpha: BRANCH_A, BRANCH_B, NOT_SEL
+          expected: [
+            [0, 0, 0,   0, 0, 1],
+            [0, 0, 1,   0, 0, 0],
+            [0, 1, 0,   0, 0, 1],
+            [0, 1, 1,   0, 1, 0],
+            [1, 0, 0,   1, 0, 1],
+            [1, 0, 1,   0, 0, 0],
+            [1, 1, 0,   1, 0, 1],
+            [1, 1, 1,   0, 1, 0],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'mux-s4',
+    track: 'mux-2to1',
+    startsFrom: 'mux-s3',
+    title: '4 · Merge with OR — "It is now a MUX"',
+    summary: 'The two branches are mutually exclusive (at most one is 1 at a time), so OR-ing them simply picks "the one that is on". That is the entire MUX. The legacy single-step lesson l07-mux-2to1 builds the same circuit in one shot — this rebuild walks the why, gate by gate.',
+    // Pop-up shown when the learner finishes the last step. Recaps
+    // what was built and where the same pattern appears elsewhere in
+    // the system. Lessons without `completion` exit silently as before.
+    completion: {
+      title: '🎉 You built a 2:1 Multiplexer',
+      body: `<p><strong>What you put together over the four steps:</strong></p>
+<ul>
+  <li><strong>Step 1 — NOT SEL.</strong> A single inverter that gives you the opposite of SEL. You needed it because the A-branch must be enabled exactly when SEL=0.</li>
+  <li><strong>Step 2 — A-branch (A AND NOT_SEL).</strong> An AND gate used as a controllable valve: A passes through only while NOT_SEL is high.</li>
+  <li><strong>Step 3 — B-branch (B AND SEL).</strong> The mirror image: B passes through only while SEL is high. The two branches are perfectly complementary — never both 1 at the same time.</li>
+  <li><strong>Step 4 — OR merge.</strong> Because the branches are mutually exclusive, OR safely "picks whichever one is on". The whole 2:1 MUX is just <code>OUT = (A AND NOT SEL) OR (B AND SEL)</code>.</li>
+</ul>
+<p><strong>Why this matters beyond this lesson:</strong> the MUX you just built is the same primitive that:</p>
+<ul>
+  <li>sits inside an ALU to pick between ADD/SUB/AND/OR results,</li>
+  <li>sits at the write-back stage to pick between RAM output, ALU output, and immediate values,</li>
+  <li>sits at every forwarding path in a pipelined CPU (you saw 4:1 versions of it in the MIPS 5-stage demos),</li>
+  <li>and is the foundation of <em>every</em> "selector" in digital logic — bus muxes, instruction decoders, address decoders, register-file read ports.</li>
+</ul>
+<p>Whenever the rest of the course says "a MUX picks one of N values", this is the gate-level reality.</p>`,
+    },
+    steps: [
+      {
+        instruction: 'Add OR gate, OUTPUT `OUT`. Wire `BRANCH_A → OR.in0`, `BRANCH_B → OR.in1`, `OR → OUT`.',
+        hints: [
+          'OR\'s pin order matches AND: in0 top, in1 bottom, out right.',
+          'You can now toggle SEL with A and B held at different values and watch OUT switch between them in real time. That is exactly what a MUX does in hardware — instant, no clock involved.',
+          'Inputs alpha: A, B, SEL → outputs alpha: BRANCH_A, BRANCH_B, NOT_SEL, OUT. The OUT column is the same 8-row table as the legacy l07-mux-2to1 lesson.',
+          'After this, if you want a clean MUX without the diagnostic LEDs, right-click each of BRANCH_A / BRANCH_B / NOT_SEL and delete — the circuit will continue to function because the LEDs were sinks, not part of the data path.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: A, B, SEL → Outputs alpha: BRANCH_A, BRANCH_B, NOT_SEL, OUT
+          expected: [
+            [0, 0, 0,   0, 0, 1, 0],
+            [0, 0, 1,   0, 0, 0, 0],
+            [0, 1, 0,   0, 0, 1, 0],
+            [0, 1, 1,   0, 1, 0, 1],
+            [1, 0, 0,   1, 0, 1, 1],
+            [1, 0, 1,   0, 0, 0, 0],
+            [1, 1, 0,   1, 0, 1, 1],
+            [1, 1, 1,   0, 1, 0, 1],
+          ],
+        },
       },
     ],
   },

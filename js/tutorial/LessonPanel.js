@@ -66,6 +66,15 @@ export class LessonPanel {
           </div>
         </div>
       </div>
+      <div id="tut-completion" class="hidden">
+        <div class="tut-completion-box">
+          <div class="tut-completion-title" id="tut-completion-title"></div>
+          <div class="tut-completion-text" id="tut-completion-text"></div>
+          <div class="tut-confirm-actions">
+            <button class="tut-btn" data-act="completion-continue">Continue →</button>
+          </div>
+        </div>
+      </div>
     `;
     document.body.appendChild(el);
     this.root = el;
@@ -95,12 +104,24 @@ export class LessonPanel {
     } else if (act === 'next') {
       const lesson = this.engine.currentLesson();
       if (lesson && this.engine.stepIndex >= lesson.steps.length - 1) {
+        // Last step. Mark completed first; then either show the lesson's
+        // optional `completion` recap modal (which delays the exit) or
+        // exit straight to the catalog as before.
         this.engine.next();          // marks completed
-        this.engine.exit();
-        this.view = 'catalog';
+        if (lesson.completion) {
+          this._showCompletion(lesson.completion);
+        } else {
+          this.engine.exit();
+          this.view = 'catalog';
+        }
       } else {
         this.engine.next();
       }
+    } else if (act === 'completion-continue') {
+      this._hideCompletion();
+      this.engine.exit();
+      this.view = 'catalog';
+      this.render();
     } else if (act === 'prev') {
       this.engine.prev();
     } else if (act === 'hint') {
@@ -154,6 +175,23 @@ export class LessonPanel {
   }
   _hideConfirm() {
     const c = this.root.querySelector('#tut-confirm');
+    if (c) c.classList.add('hidden');
+  }
+
+  _showCompletion(payload) {
+    const root  = this.root.querySelector('#tut-completion');
+    const title = this.root.querySelector('#tut-completion-title');
+    const text  = this.root.querySelector('#tut-completion-text');
+    if (!root || !title || !text) return;
+    title.textContent = payload.title || 'Lesson complete';
+    // Body is intentionally HTML so lessons can use <ul>, <strong>,
+    // <code>, <p>, etc. Only authored by us in lessons.js — never
+    // user input — so direct innerHTML is acceptable here.
+    text.innerHTML = payload.body || '';
+    root.classList.remove('hidden');
+  }
+  _hideCompletion() {
+    const c = this.root.querySelector('#tut-completion');
     if (c) c.classList.add('hidden');
   }
 

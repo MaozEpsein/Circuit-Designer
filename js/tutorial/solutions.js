@@ -713,18 +713,29 @@ function _c02s1() {
   // a disassembly — same code as in the lesson's codeBlock, so the learner
   // can compare side-by-side.
   const _asmSource =
-`; Adds 5 + 3, stores the result in R3.
-; This program rides with us through the rest of the CPU build track.
+`; A "tasting menu" of the ISA — every major opcode class shows up
+; at least once so DATA cycles through visibly different patterns
+; as the PC walks 0..9. None of it actually executes yet (no IR /
+; CU / RF / ALU / RAM exist until lessons 3-6).
 
-LI  R1, 5
-LI  R2, 3
-ADD R3, R1, R2
+LI    R1, 5
+LI    R2, 3
+ADD   R3, R1, R2
+SUB   R4, R1, R2
+AND   R5, R1, R2
+XOR   R6, R1, R2
+CMP   R1, R2
+STORE R3, R0
+LOAD  R7, R0
 HALT`;
   const rom  = _block(COMPONENT_TYPES.ROM, 620, 380, {
     addrBits:  4,
     dataBits:  16,
     asyncRead: true,
-    memory:    { 0: 0xD105, 1: 0xD203, 2: 0x0312, 3: 0xF000 },
+    memory:    {
+      0: 0xD105, 1: 0xD203, 2: 0x0312, 3: 0x1412, 4: 0x2512,
+      5: 0x4612, 6: 0x7012, 7: 0x9030, 8: 0x8700, 9: 0xF000,
+    },
     label:     'IMEM',
     _asmSource,
     _sourceView: 'asm', // force ROM editor to open on the ASM tab — paste-safe
@@ -1791,6 +1802,107 @@ function _l20s1() {
 }
 
 
+// ── Build Step-by-Step: 2:1 MUX (4 staged steps) ─────────────
+// Coordinates mirror the existing _l07s1 layout so the final step
+// matches the legacy single-shot lesson visually. Each step is a
+// pure addition over the previous — no nodes are removed between
+// steps. Diagnostic LEDs (NOT_SEL, BRANCH_A, BRANCH_B) stay on the
+// canvas through step 4 so the learner can see every internal value.
+
+// Step 1: SEL → NOT → NOT_SEL.
+function _muxs1() {
+  const sel  = _input(150, 460, 'SEL');
+  const nsel = _gate('NOT', 320, 460);
+  const nsel_out = _output(500, 460, 'NOT_SEL');
+  return {
+    nodes: [sel, nsel, nsel_out],
+    wires: [
+      _wire(sel.id,  nsel.id,     0),
+      _wire(nsel.id, nsel_out.id, 0),
+    ],
+  };
+}
+
+// Step 2: + A, AND (A & NOT_SEL), BRANCH_A.
+function _muxs2() {
+  const a    = _input(150, 220, 'A');
+  const sel  = _input(150, 460, 'SEL');
+  const nsel = _gate('NOT', 320, 460);
+  const nsel_out = _output(500, 460, 'NOT_SEL');
+  const and1 = _gate('AND', 500, 280);
+  const branchA = _output(700, 280, 'BRANCH_A');
+  return {
+    nodes: [a, sel, nsel, nsel_out, and1, branchA],
+    wires: [
+      _wire(sel.id,  nsel.id,     0),
+      _wire(nsel.id, nsel_out.id, 0),
+      _wire(a.id,    and1.id,     0),
+      _wire(nsel.id, and1.id,     1),
+      _wire(and1.id, branchA.id,  0),
+    ],
+  };
+}
+
+// Step 3: + B, AND (B & SEL), BRANCH_B.
+function _muxs3() {
+  const a    = _input(150, 220, 'A');
+  const b    = _input(150, 340, 'B');
+  const sel  = _input(150, 460, 'SEL');
+  const nsel = _gate('NOT', 320, 460);
+  const nsel_out = _output(500, 460, 'NOT_SEL');
+  const and1 = _gate('AND', 500, 280);
+  const branchA = _output(700, 280, 'BRANCH_A');
+  const and2 = _gate('AND', 500, 400);
+  const branchB = _output(700, 400, 'BRANCH_B');
+  return {
+    nodes: [a, b, sel, nsel, nsel_out, and1, branchA, and2, branchB],
+    wires: [
+      _wire(sel.id,  nsel.id,     0),
+      _wire(nsel.id, nsel_out.id, 0),
+      _wire(a.id,    and1.id,     0),
+      _wire(nsel.id, and1.id,     1),
+      _wire(and1.id, branchA.id,  0),
+      _wire(b.id,    and2.id,     0),
+      _wire(sel.id,  and2.id,     1),
+      _wire(and2.id, branchB.id,  0),
+    ],
+  };
+}
+
+// Step 4: + OR (BRANCH_A | BRANCH_B), OUT — full MUX.
+// AND outputs fan out: each drives both its diagnostic LED AND the
+// OR. That's why no rewiring is needed; the previous LEDs simply
+// gain a parallel sink.
+function _muxs4() {
+  const a    = _input(150, 220, 'A');
+  const b    = _input(150, 340, 'B');
+  const sel  = _input(150, 460, 'SEL');
+  const nsel = _gate('NOT', 320, 460);
+  const nsel_out = _output(500, 460, 'NOT_SEL');
+  const and1 = _gate('AND', 500, 280);
+  const branchA = _output(700, 280, 'BRANCH_A');
+  const and2 = _gate('AND', 500, 400);
+  const branchB = _output(700, 400, 'BRANCH_B');
+  const or1  = _gate('OR', 900, 340);
+  const out  = _output(1100, 340, 'OUT');
+  return {
+    nodes: [a, b, sel, nsel, nsel_out, and1, branchA, and2, branchB, or1, out],
+    wires: [
+      _wire(sel.id,  nsel.id,     0),
+      _wire(nsel.id, nsel_out.id, 0),
+      _wire(a.id,    and1.id,     0),
+      _wire(nsel.id, and1.id,     1),
+      _wire(and1.id, branchA.id,  0),
+      _wire(b.id,    and2.id,     0),
+      _wire(sel.id,  and2.id,     1),
+      _wire(and2.id, branchB.id,  0),
+      _wire(and1.id, or1.id,      0),
+      _wire(and2.id, or1.id,      1),
+      _wire(or1.id,  out.id,      0),
+    ],
+  };
+}
+
 const REGISTRY = {
   'l01-first-and:0':       _l01s1,
   'l01-first-and:1':       _l01s2,
@@ -1823,6 +1935,11 @@ const REGISTRY = {
   'c06-ram:0':               _c06s1,
   'c07-jmp:0':               _c07s1,
   'c08-showcase:0':          _c08s1,
+  // Build Step-by-Step
+  'mux-s1:0':                _muxs1,
+  'mux-s2:0':                _muxs2,
+  'mux-s3:0':                _muxs3,
+  'mux-s4:0':                _muxs4,
 };
 
 export function hasSolution(lessonId, stepIndex) {
