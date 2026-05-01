@@ -16,16 +16,18 @@
  */
 
 // Tabs are ordered by learning curve, smallest concept first:
-//   1. MUX 2:1            — pure combinational, 4 gates total
-//   2. 2-bit ALU          — combinational + the "MUX picks one of N"
-//                            mental model from MUX 2:1, scaled up
-//   3. Traffic Light FSM  — first taste of sequential (D-FFs + state)
-//   4. Build a CPU        — everything above, glued together
+//   1. MUX 2:1            — pure combinational, "selector picks one input"
+//   2. Decoder 2-to-4     — the mirror of MUX: "address activates one output"
+//   3. 2-bit ALU          — combinational + the "MUX picks one of N"
+//                            mental model scaled up to 4 functional units
+//   4. Traffic Light FSM  — first taste of sequential (D-FFs + state)
+//   5. Build a CPU        — everything above, glued together
 // Every tab uses the same staged-build pedagogy: one concept per step,
 // each step preloads the previous solution via startsFrom, the build
 // literally accumulates on the canvas.
 export const TRACKS = [
   { id: 'mux-2to1',      label: 'MUX 2:1' },
+  { id: 'decoder-2to4',  label: 'Decoder 2-to-4' },
   { id: 'alu-2bit',      label: '2-bit ALU' },
   { id: 'traffic-light', label: 'Traffic Light FSM' },
   { id: 'cpu-build',     label: 'Build a CPU' },
@@ -833,6 +835,213 @@ Wire:
             [1, 1, 0,   1, 0, 1, 1],
             [1, 1, 1,   0, 1, 0, 1],
           ],
+        },
+      },
+    ],
+  },
+
+  // ─── Track: Decoder 2-to-4 ──────────────────────────────────
+  // The mirror image of MUX 2:1. Where MUX picks one of N inputs by
+  // selector, decoder activates one of N outputs by address. Same
+  // staged-build pedagogy:
+  //   1. Inverters (NOT_S0, NOT_S1) — both polarities of the address.
+  //   2. Y0 — the first AND-as-pattern-matcher.
+  //   3. Y1, Y2, Y3 — three more matchers, all in parallel.
+  //   4. Address-decoded read — wire DATA0..DATA3 through gating ANDs
+  //      and a final OR. We just built a 4-cell × 1-bit memory. This
+  //      is the structure inside every RAM, ROM, and register file.
+  {
+    id: 'dec-s1',
+    track: 'decoder-2to4',
+    title: '1 · Inverters — "Both polarities of the address"',
+    summary: 'A 2-bit address has two bits, S0 and S1. To activate exactly one of four outputs, every output AND will need either S0 or NOT(S0) on one input, and either S1 or NOT(S1) on the other. So the very first thing the decoder needs is the inverse of each address bit — same trick we used in MUX 2:1.',
+    steps: [
+      {
+        instruction:
+`Place: INPUTs \`S0\`, \`S1\`, 2 NOT gates, 2 OUTPUTs (\`NOT_S0\`, \`NOT_S1\`).
+
+Wire:
+  • \`S0 → NOT → NOT_S0\`
+  • \`S1 → NOT → NOT_S1\``,
+        hints: [
+          'A NOT gate has one input pin (0) and one output pin (0).',
+          'The address bus is 2 bits wide → 2^2 = 4 possible addresses (00, 01, 10, 11). Each address will activate exactly one of the four outputs we add in steps 2 and 3.',
+          'Why both polarities? Because every "address detector" AND needs to test the bit value AND its opposite of the other bit — e.g. address 01 means "S1=0 AND S0=1", which needs NOT_S1 and S0 directly.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: S0, S1 → Outputs alpha: NOT_S0, NOT_S1
+          expected: [
+            [0, 0,  1, 1],
+            [0, 1,  1, 0],
+            [1, 0,  0, 1],
+            [1, 1,  0, 0],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'dec-s2',
+    track: 'decoder-2to4',
+    startsFrom: 'dec-s1',
+    title: '2 · Y0 — "AND as a pattern matcher"',
+    summary: 'Wire the first AND that fires only on address 00. The pattern is \`NOT_S1 AND NOT_S0\` — both bits low. AND is acting here as a 2-bit matcher: it goes high only when its two inputs both match the pattern it is "watching for".',
+    steps: [
+      {
+        instruction:
+`Add: 1 AND gate, OUTPUT \`Y0\`.
+
+Wire:
+  • \`NOT_S1 → AND.in0\`
+  • \`NOT_S0 → AND.in1\`
+  • \`AND → Y0\`
+
+Test: toggle S0/S1 through the four addresses. Y0 lights only on address 00.`,
+        hints: [
+          'AND as a "pattern matcher" is the core idea behind every decoder. Each output AND watches for one specific bit pattern on its inputs and only fires for that pattern.',
+          'Y0 watches for "S1=0 AND S0=0" — the address-00 pattern. The remaining three outputs (Y1, Y2, Y3) will watch for the other three address patterns in step 3.',
+          'Inputs alpha: S0, S1 → outputs alpha: NOT_S0, NOT_S1, Y0.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: S0, S1 → Outputs alpha: NOT_S0, NOT_S1, Y0
+          expected: [
+            [0, 0,  1, 1, 1],
+            [0, 1,  1, 0, 0],
+            [1, 0,  0, 1, 0],
+            [1, 1,  0, 0, 0],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'dec-s3',
+    track: 'decoder-2to4',
+    startsFrom: 'dec-s2',
+    title: '3 · Y1, Y2, Y3 — "Three more matchers in parallel"',
+    summary: 'Mirror Y0 three more times, each one watching for a different address pattern. All four ANDs run in parallel on every cycle, but exactly one of them fires per address — the others stay 0. The decoder is complete.',
+    steps: [
+      {
+        instruction:
+`Add: 3 AND gates, 3 OUTPUTs (\`Y1\`, \`Y2\`, \`Y3\`).
+
+Wire each AND for its address:
+  • Y1 = \`NOT_S1 AND S0\`     (address 01)
+  • Y2 = \`S1 AND NOT_S0\`     (address 10)
+  • Y3 = \`S1 AND S0\`         (address 11)
+
+Test: cycle through the four addresses 00 → 01 → 10 → 11. Exactly one Y lights per address.`,
+        hints: [
+          'The full address-to-output map: 00→Y0, 01→Y1, 10→Y2, 11→Y3. The output number is just the binary value of the address bits.',
+          'All four ANDs run combinationally on every cycle. At any moment exactly one is 1 and the other three are 0 — they are mutually exclusive because the address can only be one value at a time.',
+          'Open WAVEFORM and add Y0..Y3 plus S0, S1 to see the pattern: as the address counts up, the active Y line walks across.',
+          'This is the canonical "1-hot" output: a vector of N bits where exactly one is high. 1-hot encoding is everywhere in hardware — it is the cleanest way to "select" one of N options without ambiguity.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: S0, S1 → Outputs alpha: NOT_S0, NOT_S1, Y0, Y1, Y2, Y3
+          expected: [
+            [0, 0,  1, 1,  1, 0, 0, 0],
+            [0, 1,  1, 0,  0, 0, 1, 0],
+            [1, 0,  0, 1,  0, 1, 0, 0],
+            [1, 1,  0, 0,  0, 0, 0, 1],
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'dec-s4',
+    track: 'decoder-2to4',
+    startsFrom: 'dec-s3',
+    title: '4 · Address-Decoded Read — "We just built a 4-cell memory"',
+    summary: 'Combine the 1-hot outputs with 4 data bits and an OR. Each Yn gates its matching DATAn through; only the selected gate passes data through; OR collapses the four into one output. Set the address — read DATA[address]. This is exactly how RAM, ROM, and register files work inside.',
+    completion: {
+      title: '🎉 You built a 2-to-4 Decoder (and a tiny memory)',
+      body: `<p><strong>What you put together over the four steps:</strong></p>
+<ul>
+  <li><strong>Step 1 — Inverters.</strong> Both polarities of every address bit, so each output AND can test for the right pattern.</li>
+  <li><strong>Step 2 — Y0 alone.</strong> A single AND used as a "pattern matcher" — fires only when both inputs match the address-00 pattern.</li>
+  <li><strong>Step 3 — Y1, Y2, Y3 in parallel.</strong> Three more matchers, one per address. Together: a "1-hot" vector — exactly one wire high per cycle.</li>
+  <li><strong>Step 4 — Memory cell.</strong> 4 data bits + 4 gating ANDs + 1 OR = "READ_OUT = DATA[address]". A 4-word × 1-bit RAM.</li>
+</ul>
+<p><strong>Why this matters beyond this lesson:</strong> the decoder you just built is the addressing circuit inside <em>every</em> memory and selector in <em>every</em> CPU. Specifically, this exact pattern (decoder + per-cell ANDs + OR) appears in:</p>
+<ul>
+  <li><strong>RAM</strong> — N-bit address decodes to one of 2^N rows, the selected row is read or written.</li>
+  <li><strong>ROM</strong> — same as RAM but the cells are fixed at fab time. The ROM you used in cpu-build (PC indexes 16 instructions) has a 4-to-16 decoder doing exactly this job.</li>
+  <li><strong>Register File</strong> — 3-bit register address decodes to one of 8 register slots; the selected register's bits flow out through ANDs and ORs to the read port. The dual-port RF you wired in cpu-build step 4 is two of these decoders running in parallel.</li>
+  <li><strong>Instruction Decoder</strong> — the OP field of an instruction is decoded into 1-hot control signals that activate the right control wires (RG_WE, MM_WE, ALU_OP, etc.). The CU you wired in cpu-build step 3 is built around exactly this.</li>
+  <li><strong>MUX</strong> — an N-to-1 MUX is a decoder + N gating ANDs + an OR. The 4:1 MUXes in the 2-bit ALU are functionally equivalent to this lesson's step 4. Decoder and MUX are not separate circuits — they are the same circuit seen from opposite directions.</li>
+  <li><strong>Address bus on every chip</strong> — DRAM banks, peripheral selects on a microcontroller bus, cache-line lookup, network packet routing tables. Anywhere you see "address picks one of many", a decoder is doing the work.</li>
+</ul>
+<p>One small lesson, the mechanism behind every memory and every selector in every digital system.</p>`,
+    },
+    steps: [
+      {
+        instruction:
+`Add: 4 INPUTs (\`DATA0\`, \`DATA1\`, \`DATA2\`, \`DATA3\`), 4 AND gates, 1 OR gate, OUTPUT \`READ_OUT\`.
+
+Wire each Yn to gate its matching DATAn (each AND has 2 inputs):
+  • \`Y0 AND DATA0\`
+  • \`Y1 AND DATA1\`
+  • \`Y2 AND DATA2\`
+  • \`Y3 AND DATA3\`
+
+OR all four gating outputs together → \`READ_OUT\`.
+
+Test:
+  • Set DATA0=1, DATA1=0, DATA2=1, DATA3=1.
+  • Sweep the address (S1, S0). READ_OUT follows DATA[address] exactly: 00→1, 01→0, 10→1, 11→1.
+
+──────────────────────────────────────────────────────
+This circuit is the foundation of:
+──────────────────────────────────────────────────────
+  • RAM             — address decodes to a row; selected row is read.
+  • ROM             — same as RAM, cells fixed at fab time.
+                     The ROM in cpu-build (PC → 16 instructions)
+                     has a 4-to-16 decoder doing exactly this.
+  • Register File   — register address decodes to one of N slots.
+                     The dual-port RF in cpu-build step 4 is two
+                     of these decoders running in parallel.
+  • Instruction CU  — opcode decodes to 1-hot control signals.
+                     The CU in cpu-build step 3 is this pattern.
+  • MUX (N-to-1)    — decoder + N gating ANDs + OR. The 4:1 MUXes
+                     in the 2-bit ALU are functionally identical
+                     to what you just built.
+  • Address bus     — DRAM banks, microcontroller peripheral selects,
+                     cache-line lookup, packet routing tables —
+                     anywhere "address picks one of many".`,
+        hints: [
+          'The pattern is universal: decoder turns a compact address into a 1-hot vector; gating ANDs let exactly one path through; OR collapses the (mostly-zero) gated values into one output.',
+          'Truth table is large (64 rows: 6 inputs × 7 outputs) but the rule is simple: READ_OUT = DATA[(S1<<1) | S0]. The other six outputs (NOT_S0, NOT_S1, Y0..Y3) ignore DATA entirely.',
+          'Notice that 3 of the 4 gating ANDs always output 0 — only the AND fed by the active Yn passes its DATA through. The OR is "safe" because the others are guaranteed to be 0 (one-hot).',
+          'A real RAM cell is more than this — it adds a write port (WE-gated), latches per cell, and bidirectional bit lines. But the addressing structure is identical.',
+        ],
+        validate: {
+          type: 'truthTable',
+          // Inputs alpha: DATA0, DATA1, DATA2, DATA3, S0, S1
+          // Outputs alpha: NOT_S0, NOT_S1, READ_OUT, Y0, Y1, Y2, Y3
+          expected: (() => {
+            const rows = [];
+            for (let combo = 0; combo < 64; combo++) {
+              const D0 = (combo >> 5) & 1;
+              const D1 = (combo >> 4) & 1;
+              const D2 = (combo >> 3) & 1;
+              const D3 = (combo >> 2) & 1;
+              const S0 = (combo >> 1) & 1;
+              const S1 =  combo       & 1;
+              const addr = (S1 << 1) | S0;
+              const READ_OUT = [D0, D1, D2, D3][addr];
+              const Y0 = (S1 === 0 && S0 === 0) ? 1 : 0;
+              const Y1 = (S1 === 0 && S0 === 1) ? 1 : 0;
+              const Y2 = (S1 === 1 && S0 === 0) ? 1 : 0;
+              const Y3 = (S1 === 1 && S0 === 1) ? 1 : 0;
+              rows.push([D0, D1, D2, D3, S0, S1,  S0 ? 0 : 1, S1 ? 0 : 1, READ_OUT, Y0, Y1, Y2, Y3]);
+            }
+            return rows;
+          })(),
         },
       },
     ],

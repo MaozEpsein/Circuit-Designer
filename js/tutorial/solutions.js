@@ -1298,6 +1298,175 @@ function _tls4() {
   };
 }
 
+// ── Track: Decoder 2-to-4 (4 staged steps) ───────────────────
+// The mirror of MUX 2:1 — same selector pattern viewed from the
+// output side. Coordinates are stable across steps so each build
+// is a pure additive diff.
+
+// Step 1: S0/S1 → 2 NOTs → NOT_S0 / NOT_S1.
+function _decs1() {
+  const s0   = _input(120, 140, 'S0');
+  const s1   = _input(120, 240, 'S1');
+  const ns0  = _gate('NOT', 320, 140);
+  const ns1  = _gate('NOT', 320, 240);
+  const ns0o = _output(520, 140, 'NOT_S0');
+  const ns1o = _output(520, 240, 'NOT_S1');
+  return {
+    nodes: [s0, s1, ns0, ns1, ns0o, ns1o],
+    wires: [
+      _wire(s0.id,  ns0.id, 0),
+      _wire(s1.id,  ns1.id, 0),
+      _wire(ns0.id, ns0o.id, 0),
+      _wire(ns1.id, ns1o.id, 0),
+    ],
+  };
+}
+
+// Step 2: + Y0 = NOT_S1 AND NOT_S0.
+function _decs2() {
+  const s0   = _input(120, 140, 'S0');
+  const s1   = _input(120, 240, 'S1');
+  const ns0  = _gate('NOT', 320, 140);
+  const ns1  = _gate('NOT', 320, 240);
+  const ns0o = _output(520, 140, 'NOT_S0');
+  const ns1o = _output(520, 240, 'NOT_S1');
+  const aY0  = _gate('AND', 580, 360);
+  const Y0   = _output(780, 360, 'Y0');
+  return {
+    nodes: [s0, s1, ns0, ns1, ns0o, ns1o, aY0, Y0],
+    wires: [
+      _wire(s0.id,  ns0.id, 0),
+      _wire(s1.id,  ns1.id, 0),
+      _wire(ns0.id, ns0o.id, 0),
+      _wire(ns1.id, ns1o.id, 0),
+      // Y0 = NOT_S1 AND NOT_S0
+      _wire(ns1.id, aY0.id, 0),
+      _wire(ns0.id, aY0.id, 1),
+      _wire(aY0.id, Y0.id,  0),
+    ],
+  };
+}
+
+// Step 3: + Y1, Y2, Y3 — three more matchers in parallel.
+function _decs3() {
+  const s0   = _input(120, 140, 'S0');
+  const s1   = _input(120, 240, 'S1');
+  const ns0  = _gate('NOT', 320, 140);
+  const ns1  = _gate('NOT', 320, 240);
+  const ns0o = _output(520, 140, 'NOT_S0');
+  const ns1o = _output(520, 240, 'NOT_S1');
+  const aY0  = _gate('AND', 580, 360);
+  const aY1  = _gate('AND', 580, 440);
+  const aY2  = _gate('AND', 580, 520);
+  const aY3  = _gate('AND', 580, 600);
+  const Y0   = _output(780, 360, 'Y0');
+  const Y1   = _output(780, 440, 'Y1');
+  const Y2   = _output(780, 520, 'Y2');
+  const Y3   = _output(780, 600, 'Y3');
+  return {
+    nodes: [s0, s1, ns0, ns1, ns0o, ns1o, aY0, aY1, aY2, aY3, Y0, Y1, Y2, Y3],
+    wires: [
+      _wire(s0.id,  ns0.id, 0),
+      _wire(s1.id,  ns1.id, 0),
+      _wire(ns0.id, ns0o.id, 0),
+      _wire(ns1.id, ns1o.id, 0),
+      // Y0 = NOT_S1 AND NOT_S0   (address 00)
+      _wire(ns1.id, aY0.id, 0),
+      _wire(ns0.id, aY0.id, 1),
+      _wire(aY0.id, Y0.id,  0),
+      // Y1 = NOT_S1 AND S0       (address 01)
+      _wire(ns1.id, aY1.id, 0),
+      _wire(s0.id,  aY1.id, 1),
+      _wire(aY1.id, Y1.id,  0),
+      // Y2 = S1 AND NOT_S0       (address 10)
+      _wire(s1.id,  aY2.id, 0),
+      _wire(ns0.id, aY2.id, 1),
+      _wire(aY2.id, Y2.id,  0),
+      // Y3 = S1 AND S0           (address 11)
+      _wire(s1.id,  aY3.id, 0),
+      _wire(s0.id,  aY3.id, 1),
+      _wire(aY3.id, Y3.id,  0),
+    ],
+  };
+}
+
+// Step 4: + 4 DATA inputs + 4 gating ANDs + OR + READ_OUT.
+// READ_OUT = DATA[(S1<<1) | S0] — a 4-cell × 1-bit memory.
+function _decs4() {
+  const s0   = _input(120, 140, 'S0');
+  const s1   = _input(120, 240, 'S1');
+  const d0   = _input(120, 380, 'DATA0');
+  const d1   = _input(120, 460, 'DATA1');
+  const d2   = _input(120, 540, 'DATA2');
+  const d3   = _input(120, 620, 'DATA3');
+  const ns0  = _gate('NOT', 320, 140);
+  const ns1  = _gate('NOT', 320, 240);
+  const ns0o = _output(520, 140, 'NOT_S0');
+  const ns1o = _output(520, 240, 'NOT_S1');
+  const aY0  = _gate('AND', 580, 360);
+  const aY1  = _gate('AND', 580, 440);
+  const aY2  = _gate('AND', 580, 520);
+  const aY3  = _gate('AND', 580, 600);
+  const Y0   = _output(780, 360, 'Y0');
+  const Y1   = _output(780, 440, 'Y1');
+  const Y2   = _output(780, 520, 'Y2');
+  const Y3   = _output(780, 600, 'Y3');
+  // Per-cell gating ANDs (Yn AND DATAn)
+  const g0   = _gate('AND', 940, 380);
+  const g1   = _gate('AND', 940, 460);
+  const g2   = _gate('AND', 940, 540);
+  const g3   = _gate('AND', 940, 620);
+  // Final OR (4-input). Build with chained 2-input ORs since OR_4 is
+  // not a primitive in this simulator.
+  const or01 = _gate('OR', 1100, 420);
+  const or23 = _gate('OR', 1100, 580);
+  const orF  = _gate('OR', 1240, 500);
+  const ro   = _output(1420, 500, 'READ_OUT');
+  return {
+    nodes: [
+      s0, s1, d0, d1, d2, d3,
+      ns0, ns1, ns0o, ns1o,
+      aY0, aY1, aY2, aY3, Y0, Y1, Y2, Y3,
+      g0, g1, g2, g3, or01, or23, orF, ro,
+    ],
+    wires: [
+      _wire(s0.id,  ns0.id, 0),
+      _wire(s1.id,  ns1.id, 0),
+      _wire(ns0.id, ns0o.id, 0),
+      _wire(ns1.id, ns1o.id, 0),
+      _wire(ns1.id, aY0.id, 0),
+      _wire(ns0.id, aY0.id, 1),
+      _wire(aY0.id, Y0.id,  0),
+      _wire(ns1.id, aY1.id, 0),
+      _wire(s0.id,  aY1.id, 1),
+      _wire(aY1.id, Y1.id,  0),
+      _wire(s1.id,  aY2.id, 0),
+      _wire(ns0.id, aY2.id, 1),
+      _wire(aY2.id, Y2.id,  0),
+      _wire(s1.id,  aY3.id, 0),
+      _wire(s0.id,  aY3.id, 1),
+      _wire(aY3.id, Y3.id,  0),
+      // Per-cell gating ANDs
+      _wire(aY0.id, g0.id, 0),
+      _wire(d0.id,  g0.id, 1),
+      _wire(aY1.id, g1.id, 0),
+      _wire(d1.id,  g1.id, 1),
+      _wire(aY2.id, g2.id, 0),
+      _wire(d2.id,  g2.id, 1),
+      _wire(aY3.id, g3.id, 0),
+      _wire(d3.id,  g3.id, 1),
+      // OR tree to one READ_OUT
+      _wire(g0.id,  or01.id, 0),
+      _wire(g1.id,  or01.id, 1),
+      _wire(g2.id,  or23.id, 0),
+      _wire(g3.id,  or23.id, 1),
+      _wire(or01.id, orF.id, 0),
+      _wire(or23.id, orF.id, 1),
+      _wire(orF.id,  ro.id,  0),
+    ],
+  };
+}
+
 // ── 2-bit ALU (5 staged steps) ──────────────────────────────
 // Pin layouts in use:
 //   FULL_ADDER: inputs A(0), B(1), CIN(2); outputs SUM(0), COUT(1).
@@ -1600,6 +1769,11 @@ const REGISTRY = {
   'mux-s2:0':                _muxs2,
   'mux-s3:0':                _muxs3,
   'mux-s4:0':                _muxs4,
+  // Decoder 2-to-4
+  'dec-s1:0':                _decs1,
+  'dec-s2:0':                _decs2,
+  'dec-s3:0':                _decs3,
+  'dec-s4:0':                _decs4,
   // Traffic Light FSM
   'tl-s1:0':                 _tls1,
   'tl-s2:0':                 _tls2,
