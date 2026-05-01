@@ -2747,6 +2747,10 @@
   color: #d8f0e0;
   font-size: 14px;
   line-height: 1.65;
+  /* Preserve newlines in author text so multi-step instructions
+     render as a visual list. Existing single-paragraph instructions
+     are unaffected. */
+  white-space: pre-wrap;
 }
 
 .tut-code {
