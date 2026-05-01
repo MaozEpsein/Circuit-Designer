@@ -174,7 +174,7 @@ export function synthesizeOutcomes(instructions, loops) {
       out.push({ pc: ins.pc, name: ins.name, taken: true, target: ins.target ?? null });
       continue;
     }
-    // Conditional (JZ/JC) — back-edge of a loop?
+    // Conditional (BEQ/BNE) — back-edge of a loop?
     const headPc = loopByTailPc.get(ins.pc);
     if (headPc !== undefined) {
       for (let i = 0; i < LOOP_ITERS - 1; i++) {

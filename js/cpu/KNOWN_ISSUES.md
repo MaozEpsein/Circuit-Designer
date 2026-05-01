@@ -76,8 +76,9 @@ A re-attempted fix should pass all of:
 2. `examples/tests/test-fwd.mjs` — 16 assertions
 3. `examples/tests/test-mips-5stage-complete.mjs` — 6 assertions
 4. The 8 conformance tests run inline in the session (ADD,
-   SUB/AND/OR/XOR, SHL/SHR, CMP+JZ taken, CMP+JZ not-taken,
-   JMP, FWD back-to-back, LD/SW round-trip).
+   SUB/AND/OR/XOR, SHL/SHR, BEQ taken, BEQ not-taken,
+   JMP, FWD back-to-back, LD/SW round-trip). BEQ replaced the
+   former CMP+JZ pair when the ISA gained atomic compare-and-branch.
 5. **New test** for the actual fix:
    `LI R1,5; STORE R1,R0; NOPs; LOAD R2,R0; ADD R3,R2,R0` →
    final RF should have `R3 == 5`. Today this returns `R3 == 0`.

@@ -9,7 +9,9 @@
  *   [11:8]   RD    — destination register (4 bits)
  *   [7:4]    RS1   — source register 1 (4 bits)
  *   [3:0]    RS2   — source register 2 (4 bits)
- *   [11:0]   ADDR  — branch target, overlaps RD/RS1/RS2 for JMP/JZ/JC
+ *   [11:0]   ADDR  — branch target, overlaps RD/RS1/RS2 for JMP only.
+ *                    BEQ/BNE keep [11:8] as the 4-bit absolute target and
+ *                    use RS1/RS2 as the compare operands.
  *
  * The `reads` / `writes` arrays reference the field names above. A register
  * number of 0 is treated as r0 (hard-wired zero in classical MIPS); hazards
@@ -39,8 +41,8 @@ export const DEFAULT_ISA = {
     0x8: { name: 'LOAD',  reads: ['rs2'],       writes: ['rd'], isLoad:   true },
     0x9: { name: 'STORE', reads: ['rs1','rs2'], writes: []                     },
     0xA: { name: 'JMP',   reads: [],            writes: [],     isBranch: true },
-    0xB: { name: 'JZ',    reads: [],            writes: [],     isBranch: true },
-    0xC: { name: 'JC',    reads: [],            writes: [],     isBranch: true },
+    0xB: { name: 'BEQ',   reads: ['rs1','rs2'], writes: [],     isBranch: true },
+    0xC: { name: 'BNE',   reads: ['rs1','rs2'], writes: [],     isBranch: true },
     0xD: { name: 'MOV',   reads: ['rs1'],       writes: ['rd']                 },
     0xE: { name: 'NOP',   reads: [],            writes: []                     },
     0xF: { name: 'HALT',  reads: [],            writes: [],     isHalt:   true },

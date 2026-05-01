@@ -31,9 +31,9 @@ const pcs = log.map(e => e.pc);
 console.log(`  Branch-flush log PCs: [${pcs.join(', ')}]`);
 
 check('exactly 3 flushes recorded', log.length === 3);
-check('flush #1 at PC=5  (JZ taken)',  pcs[0] === 5);
-check('flush #2 at PC=10 (JZ taken)',  pcs[1] === 10);
-check('flush #3 at PC=13 (JMP taken)', pcs[2] === 13);
+check('flush #1 at PC=5  (BEQ taken)',  pcs[0] === 5);
+check('flush #2 at PC=10 (BEQ taken)',  pcs[1] === 10);
+check('flush #3 at PC=13 (JMP taken)',  pcs[2] === 13);
 
 const rf = ffStates.get('rf').regs;
 check('R5 = 0 (all POISON squashed)', rf[5] === 0);

@@ -2802,13 +2802,21 @@ function _initRomBuilderDropdowns() {
     for (let r = 0; r < 16; r++) sel.innerHTML += `<option value="R${r}">R${r}</option>`;
   }
 
-  // Update visibility based on opcode format
+  // Update visibility based on opcode format. 'br' = BEQ/BNE (Rs1, Rs2, addr).
   opSel.onchange = () => {
     const fmt = getOpcodeFormat(opSel.value);
-    rdSel.style.display  = fmt >= 2 ? '' : 'none';
-    rs1Sel.style.display = fmt >= 2 ? '' : 'none';
-    rs2Sel.style.display = fmt >= 3 ? '' : 'none';
-    if (fmt === 1) { rdSel.style.display = ''; rdSel.innerHTML = ''; for (let i = 0; i < 16; i++) rdSel.innerHTML += `<option value="${i}">${i}</option>`; }
+    const isBr = fmt === 'br';
+    rdSel.style.display  = (fmt >= 2 || isBr) ? '' : 'none';
+    rs1Sel.style.display = (fmt >= 2 || isBr) ? '' : 'none';
+    rs2Sel.style.display = (fmt >= 3 || isBr) ? '' : 'none';
+    if (fmt === 1 || isBr) {
+      rdSel.style.display = '';
+      rdSel.innerHTML = '';
+      for (let i = 0; i < 16; i++) rdSel.innerHTML += `<option value="${i}">${i}</option>`;
+    } else {
+      rdSel.innerHTML = '';
+      for (let r = 0; r < 16; r++) rdSel.innerHTML += `<option value="R${r}">R${r}</option>`;
+    }
   };
   opSel.onchange();
 }
@@ -2886,6 +2894,8 @@ document.getElementById('btn-rom-insert')?.addEventListener('click', () => {
     line += ' ' + document.getElementById('rom-builder-rd').value + ', ' + document.getElementById('rom-builder-rs1').value;
   } else if (fmt === 3) {
     line += ' ' + document.getElementById('rom-builder-rd').value + ', ' + document.getElementById('rom-builder-rs1').value + ', ' + document.getElementById('rom-builder-rs2').value;
+  } else if (fmt === 'br') {
+    line += ' ' + document.getElementById('rom-builder-rs1').value + ', ' + document.getElementById('rom-builder-rs2').value + ', ' + document.getElementById('rom-builder-rd').value;
   }
 
   const val = assemble(line);
@@ -3102,8 +3112,8 @@ const DEFAULT_CONTROL_TABLE = [
   { name: 'LOAD',  aluOp: 0, regWe: 1, memWe: 0, memRe: 1, jmp: 0, halt: 0 },
   { name: 'STORE', aluOp: 0, regWe: 0, memWe: 1, memRe: 0, jmp: 0, halt: 0 },
   { name: 'JMP',   aluOp: 0, regWe: 0, memWe: 0, memRe: 0, jmp: 1, halt: 0 },
-  { name: 'JZ',    aluOp: 0, regWe: 0, memWe: 0, memRe: 0, jmp: -1, halt: 0 }, // -1 = conditional Z
-  { name: 'JC',    aluOp: 0, regWe: 0, memWe: 0, memRe: 0, jmp: -2, halt: 0 }, // -2 = conditional C
+  { name: 'BEQ',   aluOp: 7, regWe: 0, memWe: 0, memRe: 0, jmp: -1, halt: 0 }, // atomic: aluOp=7 → CMP runs in same cycle as the conditional jump
+  { name: 'BNE',   aluOp: 7, regWe: 0, memWe: 0, memRe: 0, jmp: -3, halt: 0 }, // atomic: aluOp=7 → CMP runs in same cycle as the conditional jump
   { name: 'LI',    aluOp: 0, regWe: 1, memWe: 0, memRe: 0, jmp: 0, halt: 0, immSel: 1 },
   { name: 'NOP',   aluOp: 0, regWe: 0, memWe: 0, memRe: 0, jmp: 0, halt: 0 },
   { name: 'HALT',  aluOp: 0, regWe: 0, memWe: 0, memRe: 0, jmp: 0, halt: 1 },
@@ -3405,7 +3415,7 @@ const EXAMPLES = [
   {
     id: 'pipeline-demo-loop',
     title: '4. Loops, Induction & Steady-State',
-    desc: '5-instruction ROM with a backward JZ at 0x03 → 0x00. The LOOPS section reports one loop of 4 body instructions with R1 as the detected induction variable (self-update ADD R1, R1, R2). PROGRAM HAZARDS includes a RAW tagged STEADY — R1 is written at 0x01 and read by 0x00 on the next iteration across the back-edge. The PIPELINE DIAGRAM visualises the loop body over cycles. Covers: LoopAnalyzer, cross-iteration steady-state hazards, induction-register inference.',
+    desc: '5-instruction ROM with a backward BEQ at 0x03 → 0x00. The LOOPS section reports one loop of 4 body instructions with R1 as the detected induction variable (self-update ADD R1, R1, R2). PROGRAM HAZARDS includes a RAW tagged STEADY — R1 is written at 0x01 and read by 0x00 on the next iteration across the back-edge. The PIPELINE DIAGRAM visualises the loop body over cycles. Covers: LoopAnalyzer, cross-iteration steady-state hazards, induction-register inference.',
     tags: ['pipeline', 'loop', 'induction-variable', 'steady-state', 'RAW'],
     file: 'examples/circuits/pipeline-demo-loop.json',
   },
@@ -3440,8 +3450,8 @@ const EXAMPLES = [
   {
     id: 'mips-5stage-branch-flush-demo',
     title: '9b. MIPS 5-Stage — Live Branch-Flush Counter ⭐',
-    desc: 'Purpose-built to exercise the runtime branch-flush counter. Same complete 5-stage pipeline (HDU + FWD + MUX-before-IR squash + OR-into-ID/EX.FLUSH), but the IMEM is loaded with a program that takes THREE branches back-to-back: JZ at PC=5, JZ at PC=10, and an unconditional JMP at PC=13. Open the Pipeline panel and run AUTO CLK — the RUNTIME section will show "Branch flushes (live): 3 — at PC=5, 10, 13" and the POISON instructions in between (LI R5, 99 at PCs 6,7,11,12,14) all get squashed to NOP, so R5 stays 0.',
-    tags: ['pipeline', 'mips', '5-stage', 'branch', 'flush', 'JZ', 'JMP', 'control-hazard', 'runtime', 'live'],
+    desc: 'Purpose-built to exercise the runtime branch-flush counter. Same complete 5-stage pipeline (HDU + FWD + MUX-before-IR squash + OR-into-ID/EX.FLUSH), but the IMEM is loaded with a program that takes THREE branches back-to-back: BEQ R1,R0,8 at PC=5 (atomic compare-and-branch — R1=0 so it fires), BEQ R0,R0,13 at PC=10 (always-taken), and an unconditional JMP at PC=13. Open the Pipeline panel and run AUTO CLK — the RUNTIME section will show "Branch flushes (live): 3 — at PC=5, 10, 13" and the POISON instructions in between (LI R5, 99 at PCs 6,7,11,12,14) all get squashed to NOP, so R5 stays 0.',
+    tags: ['pipeline', 'mips', '5-stage', 'branch', 'flush', 'BEQ', 'JMP', 'control-hazard', 'runtime', 'live'],
     file: 'examples/circuits/mips-5stage-branch-flush-demo.json',
   },
   {
@@ -3458,14 +3468,14 @@ const EXAMPLES = [
   {
     id: 'branch-predictor-01-loop',
     title: '1. Predictor State — Backward Loop (Phase 1)',
-    desc: 'Demo for the BRANCH PREDICTOR section in the PIP panel. The program has one backward JZ at 0x03 → 0x00; the loop body unrolls 6 iterations (5 × taken + 1 × not-taken). Open the PIP panel, scroll to BRANCH PREDICTOR, and switch between Static-NT / Static-BTFN / 1-bit / 2-bit. Watch the State column converge for 2-bit (Strongly T) and the per-row hit/miss badges (✓/✗) flip as you switch. Phase 1 focus is the read-only state table.',
+    desc: 'Demo for the BRANCH PREDICTOR section in the PIP panel. The program has one backward BEQ at 0x03 → 0x00; the loop body unrolls 6 iterations (5 × taken + 1 × not-taken). Open the PIP panel, scroll to BRANCH PREDICTOR, and switch between Static-NT / Static-BTFN / 1-bit / 2-bit. Watch the State column converge for 2-bit (Strongly T) and the per-row hit/miss badges (✓/✗) flip as you switch. Phase 1 focus is the read-only state table.',
     tags: ['predictor', 'branch', 'loop', '2-bit', 'state-table'],
     file: 'examples/circuits/branch-predictor-01-loop.json',
   },
   {
     id: 'branch-predictor-02-loop6',
     title: '2. Loop Unroll & Mispredict Flush (Phase 2)',
-    desc: 'Same loop circuit, but now the Gantt itself is driven by the chosen predictor. The loop body unrolls into 6 separate iteration rows (badge "#N/6"). Each back-edge JZ shows ✓ (HIT) or ✗ (MISS) — on a MISS, two FLUSH cells appear in hot pink-red ("MISPRED" tooltip). Switch predictors in the dropdown: Static-NT mispredicts every taken iter (5 misses); 2-bit converges after one bad guess and only mispredicts at the loop exit (2 misses total). Cycle count drops visibly with a smarter predictor.',
+    desc: 'Same loop circuit, but now the Gantt itself is driven by the chosen predictor. The loop body unrolls into 6 separate iteration rows (badge "#N/6"). Each back-edge BEQ shows ✓ (HIT) or ✗ (MISS) — on a MISS, two FLUSH cells appear in hot pink-red ("MISPRED" tooltip). Switch predictors in the dropdown: Static-NT mispredicts every taken iter (5 misses); 2-bit converges after one bad guess and only mispredicts at the loop exit (2 misses total). Cycle count drops visibly with a smarter predictor.',
     tags: ['predictor', 'branch', 'loop', 'mispredict', 'unroll', 'gantt'],
     file: 'examples/circuits/branch-predictor-02-loop6.json',
   },

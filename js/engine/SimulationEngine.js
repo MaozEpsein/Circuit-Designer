@@ -102,10 +102,10 @@ function _evalCU(node, op, z, c) {
       halt   = row.halt  ? 1 : 0;
       immSel = row.immSel ? 1 : 0;
       if (row.jmp === 1) jmp = 1;
-      else if (row.jmp === -1) jmp = z;       // JZ
-      else if (row.jmp === -2) jmp = c;       // JC
-      else if (row.jmp === -3) jmp = z ? 0 : 1; // JNZ
-      else if (row.jmp === -4) jmp = c ? 0 : 1; // JNC
+      else if (row.jmp === -1) jmp = z;       // BEQ (Z-conditional jump; pair with aluOp=7 for atomic CMP+branch)
+      else if (row.jmp === -2) jmp = c;       // legacy JC (extended ISA only — not in the 16-op default set)
+      else if (row.jmp === -3) jmp = z ? 0 : 1; // BNE (Z-not-set conditional jump; pair with aluOp=7)
+      else if (row.jmp === -4) jmp = c ? 0 : 1; // legacy JNC (extended ISA only)
     }
   } else {
     switch (op & 0xF) {
@@ -114,7 +114,9 @@ function _evalCU(node, op, z, c) {
       case 4: aluOp=4;regWe=1;break; case 5: aluOp=5;regWe=1;break;
       case 6: aluOp=6;regWe=1;break; case 7: aluOp=7;break;
       case 8: regWe=1;memRe=1;break; case 9: memWe=1;break;
-      case 10:jmp=1;break; case 11:jmp=z;break; case 12:jmp=c;break;
+      case 10:jmp=1;break;
+      case 11:aluOp=7;jmp=z;break;       // BEQ — CMP Rs1,Rs2; branch if equal (Z=1)
+      case 12:aluOp=7;jmp=z?0:1;break;   // BNE — CMP Rs1,Rs2; branch if not equal
       case 13:regWe=1;immSel=1;break; case 14:break; case 15:halt=1;break;
     }
   }

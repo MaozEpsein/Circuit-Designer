@@ -1,5 +1,5 @@
 {
-  "_comment": "Live branch-flush demo. Same 5-stage pipeline with the MUX-before-IR + OR-into-ID/EX.FLUSH wiring, but loaded with a program that takes THREE branches in a row so the Pipeline Panel's RUNTIME → Branch flushes (live) row visibly grows: 'Branch flushes (live): 3 — at PC=5, 10, 13'. Program: LI R1,0 → CMP R1,R0 (Z=1) → JZ 8 [taken, PC=5] → poison NOPs → CMP R0,R0 (Z=1) → JZ 13 [taken, PC=10] → poison → JMP 15 [taken, PC=13] → poison → HALT. All 'POISON' LI R5,99 instructions are squashed to NOP by the flush, so R5 stays 0.",
+  "_comment": "Live branch-flush demo. Same 5-stage pipeline with the MUX-before-IR + OR-into-ID/EX.FLUSH wiring, but loaded with a program that takes THREE branches in a row so the Pipeline Panel's RUNTIME → Branch flushes (live) row visibly grows: 'Branch flushes (live): 3 — at PC=5, 10, 13'. Program: LI R1,0 → CMP R1,R0 (Z=1) → BEQ R1,R0,8 [taken, PC=5] → poison NOPs → CMP R0,R0 (Z=1) → BEQ R0,R0,13 [taken, PC=10] → poison → JMP 15 [taken, PC=13] → poison → HALT. BEQ/BNE are atomic compare-and-branch (one word each); in the single-cycle CPU the compare and the branch happen in the same cycle. In this 5-stage pipeline the CU evaluates BEQ in ID one cycle before the ALU re-runs the compare in EX, so the branch decision uses the previously latched Z flag — a deliberate seeding CMP is left at PC=3 and PC=8 so the flag is set when each BEQ enters ID. All 'POISON' LI R5,99 instructions are squashed to NOP by the flush, so R5 stays 0.",
   "nodes": [
     { "type": "CLOCK", "id": "clk",  "label": "CLK", "value": 0, "x": -940, "y": -220 },
 
@@ -13,7 +13,7 @@
         "2":  57344,
         "3":  28688,
         "4":  57344,
-        "5":  47104,
+        "5":  47120,
         "6":  54627,
         "7":  54627,
         "8":  28672,

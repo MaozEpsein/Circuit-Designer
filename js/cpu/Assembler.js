@@ -6,29 +6,35 @@
  *
  * Opcodes match the CU definition:
  *   0=ADD  1=SUB  2=AND  3=OR  4=XOR  5=SHL  6=SHR  7=CMP
- *   8=LOAD 9=STORE 10=JMP 11=JZ 12=JC 13=MOV/LI 14=NOP 15=HALT
+ *   8=LOAD 9=STORE 10=JMP 11=BEQ 12=BNE 13=MOV/LI 14=NOP 15=HALT
+ *
+ * BEQ/BNE are atomic compare-and-branch: in one cycle the ALU does CMP
+ * Rs1,Rs2 and the CU consumes the fresh Z flag to decide the branch.
+ * Encoding:  [OP][addr4][RS1][RS2]  — same width as JMP, just RS1/RS2
+ * are now meaningful instead of don't-care.
  */
 
 const OP_TABLE = {
   'ADD': 0, 'SUB': 1, 'AND': 2, 'OR': 3, 'XOR': 4,
   'SHL': 5, 'SHR': 6, 'CMP': 7, 'LOAD': 8, 'STORE': 9,
-  'JMP': 10, 'JZ': 11, 'JC': 12, 'MOV': 13, 'LI': 13, 'NOP': 14, 'HALT': 15,
+  'JMP': 10, 'BEQ': 11, 'BNE': 12, 'MOV': 13, 'LI': 13, 'NOP': 14, 'HALT': 15,
 };
 
 const OP_NAMES = Object.fromEntries(Object.entries(OP_TABLE).map(([k, v]) => [v, k]));
 
-// How many register operands each opcode uses
+// How many register operands each opcode uses.
+// Special string markers: 'br' = BEQ/BNE format (Rs1, Rs2, addr).
 const OP_FORMAT = {
   0: 3, 1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, // ALU: RD, RS1, RS2
-  7: 2,   // CMP: RS1, RS2 (no RD write)
-  8: 2,   // LOAD: RD, ADDR(RS2)
-  9: 2,   // STORE: RS1(data), RS2(addr)
-  10: 1,  // JMP: IMM (in RD field)
-  11: 1,  // JZ: IMM
-  12: 1,  // JC: IMM
-  13: 2,  // MOV: RD, RS1
-  14: 0,  // NOP
-  15: 0,  // HALT
+  7: 2,    // CMP: RS1, RS2 (no RD write)
+  8: 2,    // LOAD: RD, ADDR(RS2)
+  9: 2,    // STORE: RS1(data), RS2(addr)
+  10: 1,   // JMP: IMM (in RD field)
+  11: 'br',// BEQ Rs1, Rs2, addr — addr in RD, Rs1/Rs2 in their fields
+  12: 'br',// BNE Rs1, Rs2, addr
+  13: 2,   // MOV: RD, RS1
+  14: 0,   // NOP
+  15: 0,   // HALT
 };
 
 /**
@@ -105,9 +111,14 @@ export function assemble(line) {
       rs1 = parseReg(parts[2] || '');
     }
   } else if (fmt === 1) {
-    // JMP/JZ/JC: immediate value in RD field
+    // JMP: immediate value in RD field
     const val = parseInt(parts[1] || '0') & 0xF;
     rd = val;
+  } else if (fmt === 'br') {
+    // BEQ/BNE Rs1, Rs2, addr — atomic compare-and-branch.
+    rs1 = parseReg(parts[1] || '');
+    rs2 = parseReg(parts[2] || '');
+    rd  = parseInt(parts[3] || '0') & 0xF;
   }
   // fmt === 0: NOP/HALT — all zeros
 
@@ -138,6 +149,7 @@ export function disassemble(instr) {
     return `${name} R${rd}, R${rs1}`;
   }
   if (fmt === 1) return `${name} ${rd}`;
+  if (fmt === 'br') return `${name} R${rs1}, R${rs2}, ${rd}`;
   return name;
 }
 
@@ -166,8 +178,8 @@ export function disassembleToC(instr) {
     case 8:  return `R${rd} = mem[R${rs2}];`;
     case 9:  return `mem[R${rs2}] = R${rs1};`;
     case 10: return `// jmp ${rd};`;
-    case 11: return `// jz ${rd};`;
-    case 12: return `// jc ${rd};`;
+    case 11: return `if (R${rs1} == R${rs2}) goto L${rd};`;
+    case 12: return `if (R${rs1} != R${rs2}) goto L${rd};`;
     case 13: return `R${rd} = ${(rs1 << 4) | rs2};`;
     case 14: return ``; // NOP → blank line
     case 15: return `halt;`;

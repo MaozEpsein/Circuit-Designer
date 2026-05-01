@@ -2652,15 +2652,15 @@ function _drawCuNode(node, val, hovered) {
   ctx.fillText('UNIT', node.x, node.y);
 
   // Opcode names for reference
-  const opNames = ['ADD','SUB','AND','OR','XOR','SHL','SHR','CMP','LD','ST','JMP','JZ','JC','LI','NOP','HLT'];
+  const opNames = ['ADD','SUB','AND','OR','XOR','SHL','SHR','CMP','LD','ST','JMP','BEQ','BNE','LI','NOP','HLT'];
   ctx.fillStyle = '#6a5030';
   ctx.font = '7px JetBrains Mono, monospace';
   ctx.fillText(opNames[val & 0xF] || '?', node.x, node.y + 16);
 
   // Input labels — dim Z/C if no conditional jumps use them
   const ct0 = node.controlTable;
-  const usesZ = !ct0 || ct0.some(r => r && (r.jmp === -1 || r.jmp === -3)); // JZ or JNZ
-  const usesC = !ct0 || ct0.some(r => r && (r.jmp === -2 || r.jmp === -4)); // JC or JNC
+  const usesZ = !ct0 || ct0.some(r => r && (r.jmp === -1 || r.jmp === -3)); // BEQ or BNE (Z-conditional)
+  const usesC = !ct0 || ct0.some(r => r && (r.jmp === -2 || r.jmp === -4)); // legacy C-flag conditional jumps (extended ISA)
   ctx.textAlign = 'right';
   const inSpread = 22;
   const inStartY = node.y - inSpread;

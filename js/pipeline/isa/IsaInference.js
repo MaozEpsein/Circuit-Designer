@@ -45,8 +45,8 @@ const DEFAULT_CONTROL_TABLE = [
   { name: 'LOAD',  regWe: 1, memRe: 1 },
   { name: 'STORE', memWe: 1 },
   { name: 'JMP',   jmp: 1 },
-  { name: 'JZ',    jmp: -1 },
-  { name: 'JC',    jmp: -2 },
+  { name: 'BEQ',   aluOp: 7, jmp: -1 },
+  { name: 'BNE',   aluOp: 7, jmp: -3 },
   { name: 'MOV',   regWe: 1, immSel: 1 },
   { name: 'NOP',   },
   { name: 'HALT',  halt: 1 },
@@ -166,6 +166,10 @@ function _deriveOpcodeMeta(row, idx) {
   }
   if (row.jmp && row.jmp !== 0) {
     meta.isBranch = true;
+    // Atomic compare-and-branch (BEQ/BNE): the ALU runs in CMP mode in the
+    // same row as the conditional jump, so the branch genuinely consumes
+    // rs1 and rs2 as register reads (real hazard sources).
+    if (row.aluOp) meta.reads = ['rs1', 'rs2'];
     return meta;
   }
   if (row.memRe) {

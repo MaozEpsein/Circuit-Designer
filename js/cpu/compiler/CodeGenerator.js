@@ -307,99 +307,35 @@ export class CodeGenerator {
   // ── Condition Jump ───────────────────────────────────────
 
   _genConditionJump(expr, label, jumpIfFalse) {
-    if (expr.type === NT.BINARY && ['==', '!=', '>', '<', '>=', '<='].includes(expr.op)) {
-      const leftReg = this._genExpr(expr.left);
-      const rightReg = this._genExpr(expr.right);
-      this._emit(`CMP R${leftReg}, R${rightReg}`);
-      this._freeTemp(leftReg);
-      this._freeTemp(rightReg);
-
-      const skip = () => {
-        const s = this._newLabel('skip');
-        return s;
-      };
-
-      // jumpIfFalse = true means: jump to `label` if condition is FALSE
-      // Our CPU: CMP sets Z (equal) and C (greater)
-      if (expr.op === '==') {
-        if (jumpIfFalse) {
-          // NOT equal → JZ skips over the JMP
-          const s = skip();
-          this._emit(`JZ __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        } else {
-          this._emit(`JZ __LABEL_${label}__`);
-        }
-      } else if (expr.op === '!=') {
-        if (jumpIfFalse) {
-          this._emit(`JZ __LABEL_${label}__`);
-        } else {
-          const s = skip();
-          this._emit(`JZ __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        }
-      } else if (expr.op === '>') {
-        if (jumpIfFalse) {
-          const s = skip();
-          this._emit(`JC __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        } else {
-          this._emit(`JC __LABEL_${label}__`);
-        }
-      } else if (expr.op === '<') {
-        if (jumpIfFalse) {
-          this._emit(`JC __LABEL_${label}__`);
-          this._emit(`JZ __LABEL_${label}__`);
-        } else {
-          const s = skip();
-          this._emit(`JC __LABEL_${s}__`);
-          this._emit(`JZ __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        }
-      } else if (expr.op === '>=') {
-        if (jumpIfFalse) {
-          const s = skip();
-          this._emit(`JC __LABEL_${s}__`);
-          this._emit(`JZ __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        } else {
-          this._emit(`JC __LABEL_${label}__`);
-          this._emit(`JZ __LABEL_${label}__`);
-        }
-      } else if (expr.op === '<=') {
-        if (jumpIfFalse) {
-          const s = skip();
-          this._emit(`JZ __LABEL_${s}__`);
-          this._emit(`JC __LABEL_${label}__`);
-          this._emitLabel(s);
-        } else {
-          this._emit(`JZ __LABEL_${label}__`);
-          const s = skip();
-          this._emit(`JC __LABEL_${s}__`);
-          this._emit(`JMP __LABEL_${label}__`);
-          this._emitLabel(s);
-        }
+    if (expr.type === NT.BINARY) {
+      // Atomic compare-and-branch path. The ISA only supports equality
+      // (BEQ) and inequality (BNE) — ordering operators were removed
+      // when JC was repurposed for BNE (no atomic way to test the C flag).
+      if (expr.op === '==' || expr.op === '!=') {
+        const leftReg  = this._genExpr(expr.left);
+        const rightReg = this._genExpr(expr.right);
+        // BEQ branches when Rs1 == Rs2; BNE when Rs1 != Rs2.
+        const takeWhenEqual = (expr.op === '==') ? !jumpIfFalse : jumpIfFalse;
+        const mnemonic = takeWhenEqual ? 'BEQ' : 'BNE';
+        this._emit(`${mnemonic} R${leftReg}, R${rightReg}, __LABEL_${label}__`);
+        this._freeTemp(leftReg);
+        this._freeTemp(rightReg);
+        return;
       }
-      return;
+      if (['>', '<', '>=', '<='].includes(expr.op)) {
+        this.errors.push(
+          `Operator '${expr.op}' is not supported in this ISA — use '==' or '!=' (the CPU only has BEQ/BNE).`
+        );
+        return;
+      }
     }
 
-    // General case: evaluate to register, compare with 0
+    // General case: evaluate to register, branch on (reg == R0).
+    // BEQ reg,R0 fires when reg is zero (boolean false); BNE when non-zero.
     const reg = this._genExpr(expr);
-    this._emit(`CMP R${reg}, R0`);
+    const mnemonic = jumpIfFalse ? 'BEQ' : 'BNE';
+    this._emit(`${mnemonic} R${reg}, R0, __LABEL_${label}__`);
     this._freeTemp(reg);
-    if (jumpIfFalse) {
-      this._emit(`JZ __LABEL_${label}__`);
-    } else {
-      const s = this._newLabel('skip');
-      this._emit(`JZ __LABEL_${s}__`);
-      this._emit(`JMP __LABEL_${label}__`);
-      this._emitLabel(s);
-    }
   }
 
   // ── Expression Generation ────────────────────────────────
@@ -507,12 +443,12 @@ export class CodeGenerator {
       this._emit(`LI R${resultReg}, 255`);
       this._emit(`XOR R${resultReg}, R${operandReg}, R${resultReg}`);
     } else if (node.op === '!') {
-      // Logical NOT: if operand == 0, result = 1, else 0
-      this._emit(`CMP R${operandReg}, R0`);
+      // Logical NOT: if operand == 0, result = 1, else 0.
+      // Atomic BEQ replaces the legacy CMP+JZ pair.
       const trueLabel = this._newLabel('not');
       const endLabel = this._newLabel('endnot');
       this._emit(`ADD R${resultReg}, R0, R0`);
-      this._emit(`JZ __LABEL_${trueLabel}__`);
+      this._emit(`BEQ R${operandReg}, R0, __LABEL_${trueLabel}__`);
       this._emit(`JMP __LABEL_${endLabel}__`);
       this._emitLabel(trueLabel);
       this._emit(`LI R${resultReg}, 1`);

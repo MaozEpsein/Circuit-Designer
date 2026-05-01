@@ -12,10 +12,10 @@
  *   R3 = R1;             → MOV R3, R1
  *   mem[R0] = R1;        → STORE R1, R0
  *   R5 = mem[R2];        → LOAD R5, R2
- *   if (R1 == R2) goto label;  → CMP R1, R2 + JZ label
- *   if (R1 != R2) goto label;  → CMP R1, R2 + JNZ label (if available)
- *   if (R1 > R2) goto label;   → CMP R1, R2 + JC label
+ *   if (R1 == R2) goto label;  → BEQ R1, R2, label    (atomic, 1 word)
+ *   if (R1 != R2) goto label;  → BNE R1, R2, label    (atomic, 1 word)
  *   goto label;           → JMP label
+ *   (ordering ops > < >= <= are not supported by this ISA.)
  *   halt;                 → HALT
  *   nop;                  → NOP
  *   label:                → address marker
@@ -176,17 +176,14 @@ function _parseLine(line, lineNum) {
 }
 
 function _parseIf(condition, label) {
-  // if (R1 == R2) → CMP + JZ
-  // if (R1 != R2) → CMP + JNZ (we use JMP workaround if JNZ not available)
-  // if (R1 > R2)  → CMP + JC
-
+  // Only equality/inequality are supported — the ISA's BEQ/BNE are
+  // atomic compare-and-branch and there is no atomic ordering branch.
   const eqMatch = condition.match(/^(R\d+)\s*==\s*(R\d+)$/i);
   if (eqMatch) {
     const rs1 = _parseReg(eqMatch[1]);
     const rs2 = _parseReg(eqMatch[2]);
     return [
-      { asm: `CMP ${rs1}, ${rs2}` },
-      { asm: `JZ __LABEL__`, labelRef: label },
+      { asm: `BEQ ${rs1}, ${rs2}, __LABEL__`, labelRef: label },
     ];
   }
 
@@ -194,24 +191,13 @@ function _parseIf(condition, label) {
   if (neqMatch) {
     const rs1 = _parseReg(neqMatch[1]);
     const rs2 = _parseReg(neqMatch[2]);
-    // JNZ not in default 16 opcodes, use CMP + JZ to skip + JMP
     return [
-      { asm: `CMP ${rs1}, ${rs2}` },
-      { asm: `JZ __LABEL__`, labelRef: '_skip_' + label },
-      { asm: `JMP __LABEL__`, labelRef: label },
+      { asm: `BNE ${rs1}, ${rs2}, __LABEL__`, labelRef: label },
     ];
-    // Note: _skip_ label won't resolve — need special handling
-    // For simplicity, just emit CMP + 2 jumps, user needs to handle
   }
 
-  const gtMatch = condition.match(/^(R\d+)\s*>\s*(R\d+)$/i);
-  if (gtMatch) {
-    const rs1 = _parseReg(gtMatch[1]);
-    const rs2 = _parseReg(gtMatch[2]);
-    return [
-      { asm: `CMP ${rs1}, ${rs2}` },
-      { asm: `JC __LABEL__`, labelRef: label },
-    ];
+  if (/[<>]=?/.test(condition)) {
+    throw new Error(`Ordering operator in "${condition}" is not supported — use '==' or '!='`);
   }
 
   throw new Error(`Cannot parse condition: "${condition}"`);

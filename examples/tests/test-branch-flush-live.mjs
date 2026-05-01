@@ -1,5 +1,5 @@
 // Smoke-test the engine's live branch-flush log surfaced via
-// ffStates.get('__branch_flushes__'). Builds a tiny program with a JZ
+// ffStates.get('__branch_flushes__'). Builds a tiny program with a BEQ
 // in IMEM and asserts that exactly one entry lands in the log at the
 // expected PC.
 import { readFileSync } from 'node:fs';
@@ -11,14 +11,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const file = resolve(__dirname, '..', 'circuits', 'mips-5stage-complete.json');
 const scene = JSON.parse(readFileSync(file, 'utf8'));
 
-// Override IMEM with a branch program:
+// Override IMEM with a branch program. The 5-stage pipeline evaluates
+// the CU in ID and the ALU one cycle later in EX, so atomic BEQ uses
+// the *previously* latched Z flag. We seed it with an explicit CMP a
+// few cycles earlier so the BEQ at PC=6 fires on its first issue.
 //   0: LI R1,5         (0xD105)
 //   1: NOP / 2: NOP
-//   3: CMP R0,R0       (0x7000) — sets Z=1
+//   3: CMP R0,R0       (0x7000) — sets Z=1 (R0==R0)
 //   4: NOP / 5: NOP
-//   6: JZ 8            (0xB800)
-//   7: LI R5,99        (0xD563) — POISON
-//   8: LI R3,42        (0xD32A) — target
+//   6: BEQ R0,R0,8     (0xB800) — branches on the latched Z=1
+//   7: LI R5,99        (0xD563) — POISON, must be squashed
+//   8: LI R3,42        (0xD32A) — branch target
 //   9: HALT            (0xF000)
 const rom = scene.nodes.find(n => n.id === 'rom');
 rom.memory = {
@@ -46,7 +49,7 @@ const log = ffStates.get('__branch_flushes__') || [];
 console.log(`  Branch-flush log:`, JSON.stringify(log));
 
 check('log has exactly 1 entry', log.length === 1);
-check('flush recorded at PC=6 (the JZ slot)', log.length > 0 && log[0].pc === 6,
+check('flush recorded at PC=6 (the BEQ slot)', log.length > 0 && log[0].pc === 6,
       log.length > 0 ? `got PC=${log[0].pc}` : '');
 
 const rf = ffStates.get('rf').regs;

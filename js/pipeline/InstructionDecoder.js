@@ -68,8 +68,10 @@ export function disassemble(instr) {
     case 'LOAD':  return `LOAD ${r(instr.rd)}, [${r(instr.rs2)}]`;
     case 'STORE': return `STORE [${r(instr.rs2)}], ${r(instr.rs1)}`;
     case 'MOV':   return `MOV ${r(instr.rd)}, ${r(instr.rs1)}`;
-    case 'JMP': case 'JZ': case 'JC':
+    case 'JMP':
       return `${n} 0x${instr.addr.toString(16).toUpperCase()}`;
+    case 'BEQ': case 'BNE':
+      return `${n} ${r(instr.rs1)}, ${r(instr.rs2)}, 0x${instr.rd.toString(16).toUpperCase()}`;
     case 'NOP': case 'HALT': return n;
     default:      return `${n} (raw 0x${instr.raw.toString(16).toUpperCase().padStart(4,'0')})`;
   }

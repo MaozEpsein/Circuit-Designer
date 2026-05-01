@@ -1,6 +1,12 @@
 // Standalone verification for examples/circuits/mips-gcd.json.
 // Checks: (1) JSON structural integrity, (2) wiring of core components,
-// (3) correctness of the GCD program by running an ISA-level simulator.
+// (3) correctness of the demo program by running an ISA-level simulator.
+//
+// The bundled program computes Σ(1..N) for N=R3 using BEQ as the loop
+// exit (R3 was 5 originally, expected sum = 15). The "gcd" filename is
+// kept for backwards compatibility with README links and external usage;
+// the program itself was migrated when the ISA dropped JC (the C-flag
+// branch needed for ordering tests in the original Euclid algorithm).
 //
 // Run:  node examples/tests/test-mips-gcd.mjs
 
@@ -139,8 +145,20 @@ function runProgram(memory, { maxCycles = 500, dataBits = 16, pcBits = 6 } = {})
         break;
       }
       case 10: nextPC = rd; break;                                          // JMP
-      case 11: if (zFlag === 1) nextPC = rd; break;                          // JZ  (BEQ)
-      case 12: if (cFlag === 1) nextPC = rd; break;                          // JC  (BGT)
+      case 11: {                                                             // BEQ Rs1, Rs2, addr — atomic
+        const a = regs[rs1], b = regs[rs2];
+        zFlag = a === b ? 1 : 0;
+        cFlag = a > b  ? 1 : 0;
+        if (zFlag === 1) nextPC = rd;
+        break;
+      }
+      case 12: {                                                             // BNE Rs1, Rs2, addr — atomic
+        const a = regs[rs1], b = regs[rs2];
+        zFlag = a === b ? 1 : 0;
+        cFlag = a > b  ? 1 : 0;
+        if (zFlag === 0) nextPC = rd;
+        break;
+      }
       case 13: regs[rd] = imm8 & MASK; break;                                // LI
       case 14: break;                                                         // NOP
       case 15: return { regs, pc, cycles, halted: true };                    // HALT
@@ -152,31 +170,28 @@ function runProgram(memory, { maxCycles = 500, dataBits = 16, pcBits = 6 } = {})
   return { regs, pc, cycles, halted: false, error: 'max cycles' };
 }
 
-// Expected: gcd(12, 8) = 4 — the result lives in R1 at HALT.
+// Expected: Σ(1..5) = 15. The result lives in R1 at HALT; R2 reaches R3=N.
 const dataBits = rf.dataBits;
 const pcBits = pc.bitWidth;
 const result = runProgram(rom.memory, { dataBits, pcBits });
-check('program halts cleanly', result.halted, `after ${result.cycles} cycles`);
-check('gcd(12, 8) = 4 in R1',  result.regs[1] === 4, `got R1=${result.regs[1]}`);
-check('R2 reaches 0',           result.regs[2] === 0, `got R2=${result.regs[2]}`);
-check('PC at HALT instruction', result.pc === 10,     `got PC=${result.pc}`);
+check('program halts cleanly',      result.halted,           `after ${result.cycles} cycles`);
+check('Σ(1..5) = 15 in R1',         result.regs[1] === 15,   `got R1=${result.regs[1]}`);
+check('counter R2 reaches N=5',     result.regs[2] === 5,    `got R2=${result.regs[2]}`);
+check('PC at HALT instruction',     result.pc === 10,        `got PC=${result.pc}`);
 
-// Verify a second input pair — sanity that it's a real GCD, not a 12/8 coincidence.
+// Sanity: change N (R3) to a different value and re-verify the closed form.
 const memAlt = { ...rom.memory };
-memAlt[0] = 0xD100 | 18;  // LI R1, 18
-memAlt[1] = 0xD200 | 24;  // LI R2, 24
+memAlt[2] = 0xD300 | 7;   // LI R3, 7
 const result2 = runProgram(memAlt, { dataBits, pcBits });
-check('gcd(18, 24) = 6',        result2.regs[1] === 6, `got R1=${result2.regs[1]}`);
+check('Σ(1..7) = 28',               result2.regs[1] === 28,  `got R1=${result2.regs[1]}`);
 
-// 16-bit stress test: GCD of 210 and 126. Both fit in 8-bit LI so the same ROM
-// format works. At 8-bit data this would overflow on intermediate SUBs beyond 255
-// (it doesn't here — max intermediate is 210 — but proves the wider datapath
-// behaves identically on values that used to be edge-of-range).
+// 16-bit stress test: a larger N exercises more iterations and shows the
+// 16-bit datapath holding the running sum without truncation (Σ(1..20) = 210
+// — would overflow an 8-bit accumulator).
 const memBig = { ...rom.memory };
-memBig[0] = 0xD100 | 210;  // LI R1, 210
-memBig[1] = 0xD200 | 126;  // LI R2, 126
+memBig[2] = 0xD300 | 20;  // LI R3, 20
 const result3 = runProgram(memBig, { dataBits, pcBits });
-check('gcd(210, 126) = 42',     result3.regs[1] === 42, `got R1=${result3.regs[1]}`);
+check('Σ(1..20) = 210',             result3.regs[1] === 210, `got R1=${result3.regs[1]}`);
 
 // ── Summary ─────────────────────────────────────────────────
 console.log('\n' + (failed === 0 ? 'ALL CHECKS PASSED' : `${failed} CHECK(S) FAILED`));

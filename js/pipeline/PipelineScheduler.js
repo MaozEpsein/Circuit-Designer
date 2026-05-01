@@ -10,7 +10,7 @@
  *
  * Without a predictor (e.g. analyzer was constructed without one), the
  * scheduler falls back to the linear PC walk and the textbook "JMP=2 flush,
- * JZ/JC=0" heuristic — backward-compatible with Phase 1.
+ * BEQ/BNE=0" heuristic — backward-compatible with Phase 1.
  *
  * Output shape:
  *   {
@@ -219,10 +219,11 @@ function _buildRow(ins, rows, stallsByConsumer, extras) {
     isBranch:    !!ins.isBranch,
     isHalt:      !!ins.isHalt,
     isLoad:      !!ins.isLoad,
-    // Legacy `speculative` badge: the JZ/JC marker we used pre-Phase-15.
-    // With loop expansion we know taken/NT exactly, so the badge is only
-    // meaningful for conditional branches *outside* unrolled loops.
-    speculative: (ins.name === 'JZ' || ins.name === 'JC') && !extras.iterIdx,
+    // Legacy `speculative` badge: the conditional-branch marker we used
+    // pre-Phase-15. With loop expansion we know taken/NT exactly, so the
+    // badge is only meaningful for conditional branches *outside* unrolled
+    // loops.
+    speculative: (ins.name === 'BEQ' || ins.name === 'BNE') && !extras.iterIdx,
     iterIdx:     extras.iterIdx,
     iterTotal:   extras.iterTotal,
     loopId:      extras.loopId,

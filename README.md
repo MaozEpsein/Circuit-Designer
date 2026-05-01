@@ -77,7 +77,7 @@ AND, OR, XOR, NAND, NOR, XNOR, NOT, Buffer, Tri-state Buffer
 - Two editing modes: **HEX** (direct) and **Assembly** (human-readable)
 - **Quick Builder** — select opcode + registers from dropdowns, click INSERT
 - Auto-uppercase while typing
-- 16 supported instructions: ADD, SUB, AND, OR, XOR, SHL, SHR, CMP, LOAD, STORE, JMP, JZ, JC, MOV, NOP, HALT
+- 16 supported instructions: ADD, SUB, AND, OR, XOR, SHL, SHR, CMP, LOAD, STORE, JMP, BEQ, BNE, MOV, NOP, HALT
 - Full round-trip: Assembly → HEX → Assembly
 
 ### Debugging & Analysis
@@ -168,8 +168,8 @@ CLK → PC → ROM → IR → CU → ALU ↔ Register File
 | 8 | LOAD | RD, RS2 | RD = RAM[RS2] |
 | 9 | STORE | RS1, RS2 | RAM[RS2] = RS1 |
 | 10 | JMP | addr | PC = addr |
-| 11 | JZ | addr | if Z: PC = addr |
-| 12 | JC | addr | if C: PC = addr |
+| 11 | BEQ | RS1, RS2, addr | atomic CMP RS1,RS2; if equal then PC = addr (one cycle) |
+| 12 | BNE | RS1, RS2, addr | atomic CMP RS1,RS2; if not equal then PC = addr (one cycle) |
 | 13 | MOV | RD, RS1 | RD = RS1 |
 | 14 | NOP | — | No operation |
 | 15 | HALT | — | Stop execution |

@@ -821,7 +821,7 @@ HALT`,
           'BUS_MUX pin layout: inputs D0(0), D1(1), ..., D(n-1), SEL (last). With the default inputCount=2: D0(0), D1(1), SEL(2). Output: Y (0). With SEL=0 the MUX passes D0; with SEL=1 it passes D1. We wire D0=ALU.Y and D1=IR.RS2, so CU.IMM=0 picks the ALU and CU.IMM=1 picks the immediate — exactly matching the meaning of the IMM signal.',
           'ALU pin layout: inputs A(0), B(1), OP(2). Outputs: R(0)=result, Z(1)=zero flag, C(2)=carry/borrow flag. ALU_OP comes from the CU and is multi-bit (encoded 0=ADD, 1=SUB, 2=AND, 3=OR, 4=XOR, 5=SHL, 6=SHR, 7=CMP).',
           'Why the MUX, not just an OR? Because OR mixes both signals all the time — junk in. A MUX is a clean selector: only one input "wins" per cycle, and CU.IMM decides which. This is the textbook "write-back stage" MUX of every RISC datapath.',
-          'The Z and C wires from ALU back to CU look pointless this lesson — they are. We place them now because step 7 (JZ / JC / branch) reads them to decide whether to take a conditional jump. Free now, no rerouting later.',
+          'The Z and C wires from ALU back to CU look pointless this lesson — they are. We place them now because step 7 (BEQ/BNE — atomic compare-and-branch) reads them to decide whether to take a conditional jump. Free now, no rerouting later.',
           'CMP is the special case: it runs through the ALU like any compute instruction (and updates Z/C), but RG_WE stays low, so the MUX output is computed and ignored — nothing is written. This is exactly how a real RISC distinguishes "compute and store" from "compute and only update flags".',
         ],
         validate: { type: 'manual' },
@@ -944,56 +944,58 @@ HALT`,
         1:  0xE000,   // NOP
         2:  0xD104,   // LI    R1, 4   (countdown counter)
         3:  0xD201,   // LI    R2, 1   (decrement amount)
-        4:  0x1112,   // SUB   R1, R1, R2  ← LOOP target. Z=1 when R1==0.
-        5:  0xB700,   // JZ    7        if Z, jump to HALT (addr 7)
-        6:  0xA400,   // JMP   4        else loop back to SUB
+        4:  0x1112,   // SUB   R1, R1, R2  ← LOOP target.
+        5:  0xB710,   // BEQ   R1, R0, 7  atomic: if R1==0 → HALT (addr 7)
+        6:  0xA400,   // JMP   4          else loop back to SUB
         7:  0xF000,   // HALT
       },
       asmSource:
-`; Step 7 demo — JMP / JZ.
+`; Step 7 demo — JMP / BEQ.
 ; A 4-iteration countdown loop:
 ;   R1 starts at 4; each iteration subtracts 1.
-;   The ALU sets Z=1 exactly when the subtraction yields zero.
-;   JZ uses Z to fall out of the loop into HALT.
+;   BEQ R1, R0, 7 is ATOMIC compare-and-branch: in one cycle the
+;   ALU does CMP R1, R0 and the CU jumps to addr 7 if the result is
+;   equal (i.e. R1 reached 0). No reliance on a stale flag from a
+;   prior instruction — the comparison and the branch are one word.
 ;   JMP (unconditional) closes the loop back to the SUB.
 
 NOP
 NOP
 LI  R1, 4
 LI  R2, 1
-SUB R1, R1, R2     ; LOOP:
-JZ  7              ; if R1==0, jump to HALT
-JMP 4              ; else loop back to SUB
+SUB R1, R1, R2        ; LOOP:
+BEQ R1, R0, 7         ; if R1==0, jump to HALT
+JMP 4                 ; else loop back to SUB
 HALT`,
       sourceView: 'asm',
     },
     title: '7 · JMP & Branch — "The CPU loops"',
-    summary: 'Carry forward the entire c06 datapath. Add the two wires that close the PC feedback loop: IR.RD → PC.JUMP_ADDR (the jump target encoded in the instruction\'s RD field) and CU.JMP → PC.JMP. With these, JMP / JZ / JC actually move the PC sideways instead of letting it tick monotonically forward — and the CPU can loop, branch, and run real programs. The JMP LED returns since the signal now drives a real wire. (The Z and C flag wires from ALU back to CU were already placed in step 5; this step is the moment they pay off — JZ/JC read them to decide whether the jump is taken.)',
+    summary: 'Carry forward the entire c06 datapath. Add the two wires that close the PC feedback loop: IR.RD → PC.JUMP_ADDR (the jump target encoded in the instruction\'s RD field) and CU.JMP → PC.JMP. With these, JMP and BEQ/BNE actually move the PC sideways instead of letting it tick monotonically forward — and the CPU can loop, branch, and run real programs. The JMP LED returns since the signal now drives a real wire. BEQ/BNE are ATOMIC compare-and-branch: in one cycle the ALU compares Rs1 to Rs2 and the CU consumes the fresh Z flag to decide the jump — there is no two-instruction CMP-then-test sequence, and no risk of an intervening op clobbering the flag.',
     steps: [
       {
-        instruction: 'Click "Show solution". Two new wires close the loop: IR.RD → PC.JUMP_ADDR and CU.JMP → PC.JMP. The JMP LED is added back to the column above CU.\n\nDemo flow (open the MEM panel; watch R1 in the RF tab; watch PC up top):\n\n• STEPs 1–2 (NOPs): warmup.\n• STEP 3 (LI R1, 4): R1 ← 4.\n• STEP 4 (LI R2, 1): R2 ← 1.\n• STEP 5 (SUB R1, R1, R2): R1 ← 3. ALU.Z = 0.\n• STEP 6 (JZ 7): Z=0 → CU.JMP=0 → PC continues to 6 (the next instruction). JMP LED stays low.\n• STEP 7 (JMP 4): unconditional → CU.JMP=1 → PC ← 4 (the SUB address). JMP LED lights.\n• STEP 8 (back at SUB): R1 ← 2. Z=0.\n• STEP 9 (JZ 7): Z=0, no jump, fall through.\n• STEP 10 (JMP 4): jump back.\n• STEP 11 (SUB): R1 ← 1.\n• STEP 12 (JZ 7): Z=0, fall through.\n• STEP 13 (JMP 4): jump back.\n• STEP 14 (SUB): R1 ← 0. Z=1. The first time the flag fires.\n• STEP 15 (JZ 7): Z=1 → CU.JMP=1 → PC ← 7. The loop exits.\n• STEP 16 (HALT): HALT LED on. Done.\n\n14 cycles of execution to count down from 4. The CPU is now Turing-complete enough to run any small program — it has memory, arithmetic, conditional flow, and loops.',
+        instruction: 'Click "Show solution". Two new wires close the loop: IR.RD → PC.JUMP_ADDR and CU.JMP → PC.JMP. The JMP LED is added back to the column above CU.\n\nDemo flow (open the MEM panel; watch R1 in the RF tab; watch PC up top):\n\n• STEPs 1–2 (NOPs): warmup.\n• STEP 3 (LI R1, 4): R1 ← 4.\n• STEP 4 (LI R2, 1): R2 ← 1.\n• STEP 5 (SUB R1, R1, R2): R1 ← 3.\n• STEP 6 (BEQ R1, R0, 7): atomic — ALU does CMP R1,R0 → Z=0 → CU.JMP=0 → PC ticks to 6. JMP LED stays low.\n• STEP 7 (JMP 4): unconditional → CU.JMP=1 → PC ← 4 (the SUB address). JMP LED lights.\n• STEP 8 (back at SUB): R1 ← 2.\n• STEP 9 (BEQ R1, R0, 7): R1≠0 → no jump, fall through.\n• STEP 10 (JMP 4): jump back.\n• STEP 11 (SUB): R1 ← 1.\n• STEP 12 (BEQ): R1≠0 → fall through.\n• STEP 13 (JMP 4): jump back.\n• STEP 14 (SUB): R1 ← 0.\n• STEP 15 (BEQ R1, R0, 7): the atomic compare fires Z=1 in the same cycle → PC ← 7. The loop exits.\n• STEP 16 (HALT): HALT LED on. Done.\n\n14 cycles of execution to count down from 4. The CPU is now Turing-complete enough to run any small program — it has memory, arithmetic, conditional flow, and loops.',
         codeBlock: {
           language: 'asm',
-          title: 'Step-7 demo program (already loaded). 4-iteration countdown using SUB + JZ + JMP.',
+          title: 'Step-7 demo program (already loaded). 4-iteration countdown using SUB + BEQ + JMP.',
           code:
-`; Step 7 demo — JMP / JZ.
+`; Step 7 demo — JMP / BEQ.
 ; A 4-iteration countdown loop:
 ;   R1 starts at 4; each iteration subtracts 1.
-;   JZ uses ALU.Z to fall out into HALT when R1==0.
+;   BEQ atomically compares R1 to R0 (=0) and falls into HALT.
 
 NOP
 NOP
 LI  R1, 4
 LI  R2, 1
 SUB R1, R1, R2
-JZ  7
+BEQ R1, R0, 7
 JMP 4
 HALT`,
         },
         hints: [
           'PC pin layout (rediscovered): JUMP_ADDR(0), JMP(1), EN(2), CLR(3), CLK(4). When JMP=1 on a rising edge, PC ← JUMP_ADDR; otherwise PC ← PC + 1. The PC has been ready for this since lesson 1; it just had no wires going to those pins until now.',
-          'Why is the jump target in IR.RD? Because the assembler encodes single-operand jumps as op|target|0|0 — the target lands in the RD field. RD is normally the destination register, but for JMP/JZ/JC there is no destination register, so RD doubles as the immediate target address. Compact encoding, common in small ISAs.',
-          'The CU computes JMP as: 1 for unconditional JMP, ALU.Z for JZ, ALU.C for JC, 0 otherwise. The Z and C wires placed back in step 5 finally pay off here — without them, conditional jumps would be impossible.',
+          'Why is the jump target in IR.RD? Because the assembler encodes JMP as op|target|0|0 — the target lands in the RD field. For BEQ/BNE the target stays in RD too, but RS1 and RS2 carry the registers being compared (BEQ Rs1, Rs2, target → [OP][target][Rs1][Rs2]). Same compact 16-bit word, more punch.',
+          'How does BEQ/BNE work in one cycle? The CU activates the ALU in CMP mode (alu_op=7) AND raises the JMP signal at the same time. The simulator runs the ALU first, latches the fresh Z flag, then re-evaluates the CU using that flag — all within one rising edge — so the PC sees the correct branch decision when it commits.',
           'There is a subtle order-of-operations issue worth noticing: when JMP=1, the PC must skip the normal increment and load JUMP_ADDR instead. The simulator handles this in Phase 4 specifically so that the CU\'s JMP signal reaches the PC before the PC latches its next value.',
           'With this lesson the build track is functionally complete. The CPU now has: instruction fetch, decode, register file, ALU, data memory, immediate path, and conditional/unconditional branches. Every wire on the reference image has a counterpart in your circuit.',
         ],
@@ -1022,7 +1024,7 @@ HALT`,
         10: 0x3120,   // OR  R1, R2, R0 ;       R1 = R2  (R0 stays 0 → MOV)
         11: 0x3260,   // OR  R2, R6, R0 ;       R2 = R6
         12: 0x1554,   // SUB R5, R5, R4 ;       count--
-        13: 0xBF00,   // JZ  15         ;       if count==0 → HALT
+        13: 0xBF50,   // BEQ R5, R0, 15 ;       atomic: if count==0 → HALT
         14: 0xA700,   // JMP 7          ;       else loop
         15: 0xF000,   // HALT
       },
@@ -1038,6 +1040,8 @@ HALT`,
 ;
 ; "OR Rd, Rs, R0" is the trick this ISA uses for "MOV Rd, Rs"
 ; (since R0 is 0, OR with 0 just copies the other operand).
+; "BEQ R5, R0, 15" is one-word atomic compare-and-branch — the ALU
+; runs CMP R5,R0 and the CU jumps to 15 in the same cycle.
 
 NOP
 NOP
@@ -1052,7 +1056,7 @@ ADD R3, R3, R4          ;       index++
 OR  R1, R2, R0          ;       R1 = R2
 OR  R2, R6, R0          ;       R2 = R6
 SUB R5, R5, R4          ;       count--
-JZ  15                  ;       if done, halt
+BEQ R5, R0, 15          ;       if done, halt
 JMP 7                   ;       else loop
 HALT`,
       sourceView: 'asm',
@@ -1061,7 +1065,7 @@ HALT`,
     summary: 'No new hardware. The CPU built across lessons 1–7 is functionally complete, and this lesson proves it by running Fibonacci. The same circuit you wired up — every wire untouched — computes F(2) through F(6) and stores them in RAM. The whole point of this step is to feel the completeness: a real algorithm that any programmer would recognize, executing on the gates you connected.',
     steps: [
       {
-        instruction: 'Click "Show solution". The circuit is identical to lesson 7 — every wire from c01 through c07 is exactly where you left it. The ROM is pre-loaded with a Fibonacci program. STEP through it and watch the RF / DMEM panels:\n\nWhat happens (after the warmup NOPs, the setup phase fills R1=0, R2=1, R3=0, R4=1, R5=5, then the loop runs 5 times):\n\n• Iteration 1: R6 = 0+1 = 1.  mem[0]=1.  R1=1, R2=1.\n• Iteration 2: R6 = 1+1 = 2.  mem[1]=2.  R1=1, R2=2.\n• Iteration 3: R6 = 1+2 = 3.  mem[2]=3.  R1=2, R2=3.\n• Iteration 4: R6 = 2+3 = 5.  mem[3]=5.  R1=3, R2=5.\n• Iteration 5: R6 = 3+5 = 8.  mem[4]=8.  R5=0 → JZ taken → HALT.\n\nFinal RAM: mem[0..4] = 1, 2, 3, 5, 8 — that is F(2), F(3), F(4), F(5), F(6). Fibonacci, on your gates.\n\n══════════════════════════════════════════════════════\nFULL ISA — every instruction this CPU now executes:\n══════════════════════════════════════════════════════\n\n  ARITHMETIC / LOGIC (writes Rd, sets Z & C flags):\n    ADD  Rd, Rs1, Rs2    Rd = Rs1 + Rs2\n    SUB  Rd, Rs1, Rs2    Rd = Rs1 - Rs2\n    AND  Rd, Rs1, Rs2    Rd = Rs1 & Rs2\n    OR   Rd, Rs1, Rs2    Rd = Rs1 | Rs2\n    XOR  Rd, Rs1, Rs2    Rd = Rs1 ^ Rs2\n    SHL  Rd, Rs1, Rs2    Rd = Rs1 << Rs2\n    SHR  Rd, Rs1, Rs2    Rd = Rs1 >> Rs2\n\n  COMPARE (sets Z & C, no register write):\n    CMP  Rs1, Rs2        Z=1 if equal, C=1 if Rs1 > Rs2\n\n  IMMEDIATE LOAD:\n    LI   Rd, imm         Rd = imm  (imm is 8-bit; in this lesson 0..15 fits in RS2)\n    MOV  Rd, Rs          synonym for "OR Rd, Rs, R0"  (R0 is always 0)\n\n  MEMORY:\n    LOAD  Rd, Raddr      Rd = RAM[Raddr]\n    STORE Rdata, Raddr   RAM[Raddr] = Rdata\n\n  CONTROL FLOW:\n    JMP  imm             unconditional: PC = imm\n    JZ   imm             if Z=1 then PC = imm\n    JC   imm             if C=1 then PC = imm\n\n  HOUSEKEEPING:\n    NOP                  do nothing for one cycle\n    HALT                 stop execution\n\nAlgorithms that fit comfortably on this CPU (≤16 instructions, ≤256-valued data): array sum, min / max search, repeated-addition multiplication, GCD by subtraction (Euclid), parity, popcount (count of set bits), block copy, countdown / count-up loops, Fibonacci sequence (the program above), simple bit manipulation.\n\nAlgorithms that need more hardware: function calls (no CALL/RET — would need a STACK), values larger than 255 (8-bit data path), programs over 16 instructions (4-bit PC), single-instruction "branch on register equality" like BNE / BEQ (achievable in 2 instructions: CMP + JZ).',
+        instruction: 'Click "Show solution". The circuit is identical to lesson 7 — every wire from c01 through c07 is exactly where you left it. The ROM is pre-loaded with a Fibonacci program. STEP through it and watch the RF / DMEM panels:\n\nWhat happens (after the warmup NOPs, the setup phase fills R1=0, R2=1, R3=0, R4=1, R5=5, then the loop runs 5 times):\n\n• Iteration 1: R6 = 0+1 = 1.  mem[0]=1.  R1=1, R2=1.\n• Iteration 2: R6 = 1+1 = 2.  mem[1]=2.  R1=1, R2=2.\n• Iteration 3: R6 = 1+2 = 3.  mem[2]=3.  R1=2, R2=3.\n• Iteration 4: R6 = 2+3 = 5.  mem[3]=5.  R1=3, R2=5.\n• Iteration 5: R6 = 3+5 = 8.  mem[4]=8.  R5=0 → BEQ R5,R0 taken → HALT.\n\nFinal RAM: mem[0..4] = 1, 2, 3, 5, 8 — that is F(2), F(3), F(4), F(5), F(6). Fibonacci, on your gates.\n\n══════════════════════════════════════════════════════\nFULL ISA — every instruction this CPU now executes:\n══════════════════════════════════════════════════════\n\n  ARITHMETIC / LOGIC (writes Rd):\n    ADD  Rd, Rs1, Rs2    Rd = Rs1 + Rs2\n    SUB  Rd, Rs1, Rs2    Rd = Rs1 - Rs2\n    AND  Rd, Rs1, Rs2    Rd = Rs1 & Rs2\n    OR   Rd, Rs1, Rs2    Rd = Rs1 | Rs2\n    XOR  Rd, Rs1, Rs2    Rd = Rs1 ^ Rs2\n    SHL  Rd, Rs1, Rs2    Rd = Rs1 << Rs2\n    SHR  Rd, Rs1, Rs2    Rd = Rs1 >> Rs2\n\n  COMPARE (no register write — used internally by BEQ/BNE):\n    CMP  Rs1, Rs2        sets Z if equal, C if Rs1 > Rs2\n\n  IMMEDIATE LOAD:\n    LI   Rd, imm         Rd = imm  (imm is 8-bit; in this lesson 0..15 fits in RS2)\n    MOV  Rd, Rs          synonym for "OR Rd, Rs, R0"  (R0 is always 0)\n\n  MEMORY:\n    LOAD  Rd, Raddr      Rd = RAM[Raddr]\n    STORE Rdata, Raddr   RAM[Raddr] = Rdata\n\n  CONTROL FLOW:\n    JMP  imm             unconditional: PC = imm\n    BEQ  Rs1, Rs2, imm   atomic: if Rs1 == Rs2 then PC = imm   (one cycle)\n    BNE  Rs1, Rs2, imm   atomic: if Rs1 != Rs2 then PC = imm   (one cycle)\n\n  HOUSEKEEPING:\n    NOP                  do nothing for one cycle\n    HALT                 stop execution\n\nAlgorithms that fit comfortably on this CPU (≤16 instructions, ≤256-valued data): array sum, search-for-key in RAM, repeated-addition multiplication, parity, popcount (count of set bits), block copy, countdown / count-up loops, Fibonacci sequence (the program above), simple bit manipulation — anything driven by equality tests.\n\nAlgorithms that need more hardware: function calls (no CALL/RET — would need a STACK), values larger than 255 (8-bit data path), programs over 16 instructions (4-bit PC), ordering tests (R1 < R2, R1 > R2 — this ISA only has BEQ/BNE; ordering would require BLT/BGE which we did not budget an opcode slot for).',
         codeBlock: {
           language: 'asm',
           title: 'Fibonacci — computes F(2)..F(6) into RAM[0..4]. Final result: 1, 2, 3, 5, 8.',
@@ -1079,13 +1083,14 @@ ADD R3, R3, R4          ;       index++
 OR  R1, R2, R0          ;       R1 = R2  (MOV via OR with R0)
 OR  R2, R6, R0          ;       R2 = R6
 SUB R5, R5, R4          ;       count--
-JZ  15                  ;       if count==0, halt
+BEQ R5, R0, 15          ;       if count==0, halt
 JMP 7                   ;       else loop
 HALT`,
         },
         hints: [
-          'Try a multiplier instead — 3 × 4 = 12, ending with R3 = 12. Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R1, 4         ; multiplicand\nLI  R2, 3         ; counter\nLI  R3, 0         ; result\nLI  R4, 1         ; one\nADD R3, R3, R1    ; LOOP: result += multiplicand\nSUB R2, R2, R4    ;       counter--\nJZ  10            ;       if counter==0 → END\nJMP 6             ;       else loop\nHALT              ; END',
-          'Try GCD by Euclid — gcd(15, 6) = 3, ending with R1 = R2 = 3. Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R1, 15\nLI  R2, 6\nCMP R1, R2        ; LOOP: Z=1 if equal, C=1 if R1 > R2\nJZ  11            ;       if equal, done\nJC  9             ;       if R1 > R2, go to a -= b\nSUB R2, R2, R1    ;       else b -= a\nJMP 4             ;       loop\nSUB R1, R1, R2    ;       a -= b\nJMP 4             ;       loop\nHALT              ; END',
+          'Try a multiplier instead — 3 × 4 = 12, ending with R3 = 12. Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R1, 4         ; multiplicand\nLI  R2, 3         ; counter\nLI  R3, 0         ; result\nLI  R4, 1         ; one\nADD R3, R3, R1    ; LOOP: result += multiplicand\nSUB R2, R2, R4    ;       counter--\nBEQ R2, R0, 10    ;       atomic: if counter==0 → END\nJMP 6             ;       else loop\nHALT              ; END',
+          'Try a linear search — find the address of the first 1 in mem[0..3] (preload mem[2]=1, others=0; result lands in R3 = 2). Right-click ROM → ASM tab → replace with:\n\nNOP\nNOP\nLI  R3, 0         ; index\nLI  R4, 1         ; +1 step\nLI  R5, 1         ; key we are looking for\nLOAD R6, R3       ; LOOP: R6 = mem[index]\nBEQ R6, R5, 11    ;       atomic: if RAM[i]==key → FOUND\nADD R3, R3, R4    ;       index++\nJMP 5             ;       loop\nHALT              ; FOUND (PC=11)\n\n— this hint demonstrates BEQ between two registers (not just register-vs-zero), and shows the new atomic compare-and-branch saving a cycle versus the legacy CMP-then-JZ pattern.',
+          'Why not GCD here? Euclid by subtraction needs to know which of R1, R2 is larger so it can subtract the smaller from the bigger — that requires testing the C flag (R1 > R2), which used to be JC. When we made BEQ/BNE atomic and reused opcode 12 for BNE, the C-flag branch went away. The teaching CPU is now equality-only by design; ordering tests would need a BLT/BGE opcode that we did not budget a slot for.',
           'The "OR Rd, Rs, R0" trick used in Fibonacci is a common idiom in small RISC ISAs that lack a dedicated MOV. R0 is hard-zero, OR with zero is identity, so the result is "copy Rs into Rd". Modern MIPS and RISC-V both use this exact convention — the assembler hides it behind a "MOV" pseudo-instruction.',
           'You have built a functioning RISC CPU from gates up. Every wire in the reference image now has a counterpart in your circuit, and every instruction in the ISA actually executes correctly through it. Sum, multiply, GCD, Fibonacci — all on the same datapath without changing a single wire. That is exactly what makes a CPU a CPU instead of a hard-wired calculator: the program in ROM, not the silicon, decides what it computes.',
         ],

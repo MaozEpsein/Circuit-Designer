@@ -1327,17 +1327,19 @@ function _c07s1() {
   const pc    = _block(COMPONENT_TYPES.PC, 380, 320, { bitWidth: 4 });
   const pcOut = _output(620, 200, 'PC');
   const _asmSource =
-`; Step 7 demo — JMP / JZ.
+`; Step 7 demo — JMP / BEQ.
 ; A 4-iteration countdown loop:
 ;   R1 starts at 4; each iteration subtracts 1.
-;   JZ uses ALU.Z to fall out into HALT when R1==0.
+;   BEQ R1, R0, 7 atomically compares R1 to R0 and jumps to HALT
+;   in the SAME cycle as the compare — no two-instruction sequence,
+;   no flag-clobber risk.
 
 NOP
 NOP
 LI  R1, 4
 LI  R2, 1
 SUB R1, R1, R2
-JZ  7
+BEQ R1, R0, 7
 JMP 4
 HALT`;
   const rom = _block(COMPONENT_TYPES.ROM, 620, 380, {
@@ -1347,7 +1349,7 @@ HALT`;
     memory:    {
       0: 0xE000, 1: 0xE000,
       2: 0xD104, 3: 0xD201,
-      4: 0x1112, 5: 0xB700, 6: 0xA400,
+      4: 0x1112, 5: 0xB710, 6: 0xA400,
       7: 0xF000,
     },
     label:     'IMEM',
@@ -1489,7 +1491,7 @@ ADD R3, R3, R4
 OR  R1, R2, R0
 OR  R2, R6, R0
 SUB R5, R5, R4
-JZ  15
+BEQ R5, R0, 15          ; atomic compare-and-branch
 JMP 7
 HALT`;
   const rom = _block(COMPONENT_TYPES.ROM, 620, 380, {
@@ -1501,7 +1503,7 @@ HALT`;
       2:  0xD100, 3:  0xD201, 4:  0xD300, 5:  0xD401, 6:  0xD505,
       7:  0x0612, 8:  0x9063, 9:  0x0334,
       10: 0x3120, 11: 0x3260, 12: 0x1554,
-      13: 0xBF00, 14: 0xA700, 15: 0xF000,
+      13: 0xBF50, 14: 0xA700, 15: 0xF000,
     },
     label:     'IMEM',
     _asmSource,
