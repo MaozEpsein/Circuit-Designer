@@ -1068,10 +1068,22 @@ HALT`,
         instruction:
 `First set A=3 (A1=1, A0=1) and B=1 (B1=0, B0=1) and leave them there. Then run these four input changes in order, one at a time, and read all 8 LEDs after each:
 
-(1) OP1=0, OP0=0  →  ADD.   Expect Y=0 (3+1 = 4, wraps mod 4).
-(2) OP0=1         →  SUB.   Expect Y=2 (3-1 = 2). SUM_OUT also flips to 2.
-(3) OP0=0, OP1=1  →  AND.   Expect Y=1 (11 AND 01 = 01).
-(4) OP0=1         →  OR.    Expect Y=3 (11 OR  01 = 11).
+
+(1) OP1=0, OP0=0  →  ADD.
+    Expect Y=0  (3+1 = 4, wraps mod 4).
+
+
+(2) OP0=1  →  SUB.
+    Expect Y=2  (3-1 = 2). SUM_OUT also flips to 2.
+
+
+(3) OP0=0, OP1=1  →  AND.
+    Expect Y=1  (11 AND 01 = 01).
+
+
+(4) OP0=1  →  OR.
+    Expect Y=3  (11 OR  01 = 11).
+
 
 The whole point: AND_OUT stays at 1 in all four cases. OR_OUT stays at 3 in all four cases. They never go dark — the gates run every cycle. Y is the only thing that "follows OP", and it just picks one of the values that were already lit on the wires.`,
         codeBlock: {
