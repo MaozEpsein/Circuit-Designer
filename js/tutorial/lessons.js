@@ -1065,7 +1065,18 @@ HALT`,
     },
     steps: [
       {
-        instruction: 'Hold A=3, B=1. Cycle OP through 00 → 01 → 10 → 11 and watch ALL 8 LEDs together. SUM_OUT, AND_OUT, OR_OUT stay lit on the same values throughout — the sub-circuits never sleep. Only Y switches between them, following whichever result the MUX is currently picking.',
+        instruction: 'Hold A=3, B=1. Cycle OP through 00 → 01 → 10 → 11 and watch ALL 8 LEDs together. The table below predicts what you will see — AND_OUT and OR_OUT are constant across all four OPs, SUM_OUT only flips when OP0 changes, and Y is the only thing that follows the MUX selection. The sub-circuits never sleep; only the selector changes.',
+        codeBlock: {
+          language: 'demo',
+          title: 'Expected readings — A=3, B=1, sweeping OP. Note how AND_OUT and OR_OUT never change.',
+          code:
+`OP         AND_OUT   OR_OUT   SUM_OUT    Y
+──────────────────────────────────────────────────────────
+00 (ADD)      1         3         0       0   ← MUX picks SUM (3+1 = 4 mod 4)
+01 (SUB)      1         3         2       2   ← MUX picks SUM (3-1 = 2)
+10 (AND)      1         3         0       1   ← MUX picks AND
+11 (OR)       1         3         2       3   ← MUX picks OR`,
+        },
         hints: [
           'OP encoding: 00=ADD, 01=SUB, 10=AND, 11=OR.',
           'A=3, B=1 case: AND_OUT shows 1 (3&1=01); OR_OUT shows 3 (3|1=11); SUM_OUT shows 0 when OP0=0 (3+1=4 mod 4) or 2 when OP0=1 (3-1=2). All three of those are visible at once. Y picks one.',
