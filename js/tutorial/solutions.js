@@ -1099,6 +1099,13 @@ function _muxs4() {
   const a    = _input(150, 220, 'A');
   const b    = _input(150, 340, 'B');
   const sel  = _input(150, 460, 'SEL');
+  // Pre-load values that make the MUX behaviour visible the moment
+  // "Show solution" runs: A=1 and B=0 are clearly distinguishable, so
+  // a single SEL toggle will make OUT switch between two visibly
+  // different values without the learner having to set anything first.
+  a.fixedValue   = 1;
+  b.fixedValue   = 0;
+  sel.fixedValue = 0;
   const nsel = _gate('NOT', 320, 460);
   const nsel_out = _output(500, 460, 'NOT_SEL');
   const and1 = _gate('AND', 500, 280);

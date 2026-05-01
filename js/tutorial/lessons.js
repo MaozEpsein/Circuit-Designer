@@ -817,7 +817,13 @@ Wire:
   • \`BRANCH_B → OR.in1\`
   • \`OR → OUT\`
 
-Test: toggle SEL — OUT switches between A (when SEL=0) and B (when SEL=1) instantly. Change A or B with SEL held — OUT only follows the selected one; the other is "muted" by its closed AND gate.
+What happens the moment "Show solution" loads — this is where the "selector picks one of two values" feeling lands:
+
+  • Pre-loaded values: A=1, B=0, SEL=0 (so the inputs are visibly different out of the gate).
+  • SEL=0 → OUT immediately shows 1 (the MUX is picking A). Diagnostic LEDs: BRANCH_A=1 (its valve is open), BRANCH_B=0 (its valve is closed by SEL=0).
+  • Toggle SEL=1 → OUT flips to 0 (now picking B). The diagnostic LEDs swap: BRANCH_A=0, BRANCH_B=0 (because B itself is 0).
+  • Toggle B=1 with SEL=1 → OUT updates to 1 instantly (B changed and we're picking B). BRANCH_B lights to confirm.
+  • Toggle A while SEL=1 → OUT does NOT move. A is "muted" — its valve is closed because NOT_SEL=0. That is the MUX guaranteeing that the unselected input cannot leak through.
 
 ──────────────────────────────────────────────────────
 This circuit is the foundation of:
@@ -1024,9 +1030,12 @@ Wire each Yn to gate its matching DATAn (each AND has 2 inputs):
 
 OR all four gating outputs together → \`READ_OUT\`.
 
-Test (DATA0..DATA3 are pre-loaded with 1, 0, 1, 1 — the four "memory cells"):
-  • Sweep the address. READ_OUT follows DATA[address] exactly: address 00 → 1, 01 → 0, 10 → 1, 11 → 1.
-  • Then change any DATA bit while the address holds it. READ_OUT updates instantly — the cell was "rewritten" and the read returns the new value. All 6 inputs are togglable; play freely.
+What happens the moment "Show solution" loads — this is where the memory metaphor clicks:
+
+  • DATA = [1, 0, 1, 1] is pre-loaded into the 4 INPUTs (\`fixedValue\` defaults). Those four bits ARE the four memory cells.
+  • Address starts at 00 → READ_OUT immediately shows 1 (the contents of cell 0).
+  • Toggle S0 / S1 to walk the address 00 → 01 → 10 → 11. READ_OUT follows: 1, 0, 1, 1 — the cell contents, in order.
+  • Toggle any DATA bit while an address holds it → READ_OUT updates instantly. That is "write to a cell" + "read it back" happening in one circuit. Exactly how RAM behaves.
 
 ──────────────────────────────────────────────────────
 This circuit is the foundation of:
