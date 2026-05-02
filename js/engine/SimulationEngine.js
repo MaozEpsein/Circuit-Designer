@@ -936,6 +936,22 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
   // ── PHASE 2: Detect rising clock edges, update FF state ───
   let ffUpdated = false;
 
+  // Snapshot per-instruction sequence numbers BEFORE this phase runs
+  // any FF updates. PIPE_REG.metaSeq propagation needs to read the
+  // upstream stage's PREVIOUS-cycle value — if we read live, all
+  // PIPE_REGs end up with the same seq (chicken-and-egg with FF
+  // updates within one phase). The snapshot is keyed by node.id and
+  // captures whatever seq field that node carried entering the phase.
+  const _seqSnapshot = new Map();
+  for (const node of nodes) {
+    if (node.type === 'IR' || node.type === 'PIPE_REG') {
+      const ms = ffStates.get(node.id);
+      if (!ms) continue;
+      if (node.type === 'IR') _seqSnapshot.set(node.id, ms.curSeq ?? -1);
+      else _seqSnapshot.set(node.id, ms.metaSeq ?? -1);
+    }
+  }
+
   nodes.forEach(node => {
     if (!FF_TYPE_SET.has(node.type)) return;
 
@@ -1166,18 +1182,48 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         // Inputs: D0..Dn-1, STALL, FLUSH, CLK
         const ch = node.channels || 4;
         if (!ms.channels) ms.channels = new Array(ch).fill(0);
+        if (typeof ms.metaSeq !== 'number') ms.metaSeq = -1;
         const stall = _w(dataSlots[ch])     ?? 0;
         const flush = _w(dataSlots[ch + 1]) ?? 0;
         if (flush) {
-          // Clear all channels
+          // Clear all channels + metadata. Sentinel -1 marks a bubble
+          // — engine-internal "no real instruction in this stage"; used
+          // by the per-instruction branch-flush gate at WB.
           for (let i = 0; i < ch; i++) ms.channels[i] = 0;
+          ms.metaSeq = -1;
         } else if (!stall) {
           // Normal latch
           for (let i = 0; i < ch; i++) {
             ms.channels[i] = _w(dataSlots[i]) ?? 0;
           }
+          // Inherit the upstream stage's instruction sequence number.
+          // The "data" channels of a pipeline register can come from
+          // many sources (RF reads, CU outputs, IR fields, immediate
+          // path, etc.) — only IR and another PIPE_REG carry the
+          // canonical instruction-id. Scan all data input slots; pick
+          // the first one whose source is an IR (prefer) or PIPE_REG.
+          // All such donors should agree because they all reflect the
+          // same in-flight instruction at this stage boundary.
+          let upSeq = -1;
+          for (let k = 0; k < ch; k++) {
+            const slot = dataSlots[k];
+            if (!slot) continue;
+            const upNode = nodeMap.get(slot.sourceId);
+            if (!upNode) continue;
+            // Read from the pre-phase snapshot (NOT live ms.metaSeq /
+            // ms.curSeq), so each PIPE_REG sees its upstream as it
+            // was at the START of this cycle's rising edge.
+            if (upNode.type === 'IR' && _seqSnapshot.has(upNode.id)) {
+              upSeq = _seqSnapshot.get(upNode.id);
+              break; // IR is the canonical source — no need to look further
+            }
+            if (upNode.type === 'PIPE_REG' && _seqSnapshot.has(upNode.id) && upSeq === -1) {
+              upSeq = _seqSnapshot.get(upNode.id); // tentative; keep scanning for an IR
+            }
+          }
+          ms.metaSeq = upSeq;
         }
-        // If stall: keep previous values (do nothing)
+        // If stall: keep previous values + previous metaSeq (do nothing).
         ms.q = ms.channels[0] ?? 0;
 
       } else if (node.type === 'IR') {
@@ -1186,7 +1232,16 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const ld    = _w(dataSlots[1]) ?? 1;
         const iWidth = node.instrWidth || 16;
         const mask   = _mask(iWidth);
-        if (ld) ms.q = instr & mask;
+        // Per-instruction sequence number: monotonic, assigned every
+        // time IR latches a new instruction. Carried forward through
+        // the PIPE_REGs (as metaSeq) so the WB-stage write gate can
+        // tell which instructions are speculative (issued AFTER a
+        // branch fired) and which are not (issued BEFORE).
+        if (typeof ms.nextSeq !== 'number') { ms.nextSeq = 0; ms.curSeq = 0; }
+        if (ld) {
+          ms.q = instr & mask;
+          ms.curSeq = ms.nextSeq++;
+        }
 
       } else if (node.type === 'PC') {
         // PC is handled by Phase 4 (needs fresh CU.JMP signal)
