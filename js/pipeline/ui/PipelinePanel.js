@@ -388,9 +388,17 @@ export class PipelinePanel {
       const recent = (s.recent || []).slice(-8)
         .map(a => `${a.hit ? 'H' : 'M'}@${a.addr}`).join(' ');
       const recentStr = recent || 'idle — updates while AUTO CLK runs';
+      // 3C miss breakdown — Hill 1989 classification (compulsory /
+      // capacity / conflict). Only render when there are any misses
+      // so warm-startup caches don't show "0/0/0".
+      const m3 = s.miss3C || { compulsory: 0, capacity: 0, conflict: 0 };
+      const m3total = m3.compulsory + m3.capacity + m3.conflict;
+      const breakdown = m3total > 0
+        ? ` · 3C: ${m3.compulsory} compulsory / ${m3.capacity} capacity / ${m3.conflict} conflict`
+        : '';
       return `<div class="pipe-perf-row">
         <span class="k">${s.label || 'CACHE'}</span>
-        <span class="v">${s.hits} hits · ${s.misses} misses · ${rate}% hit-rate · ${recentStr}</span>
+        <span class="v">${s.hits} hits · ${s.misses} misses · ${rate}% hit-rate${breakdown} · ${recentStr}</span>
       </div>`;
     }).join('');
   }

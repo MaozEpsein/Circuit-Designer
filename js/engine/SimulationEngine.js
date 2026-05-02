@@ -1732,16 +1732,55 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         }
       }
 
+      // 3C miss classification (compulsory / capacity / conflict).
+      // Read seenAddrs and the shadow fully-associative cache BEFORE
+      // updating either, so the classification reflects the state at
+      // the moment of access. The shadow has the same line budget as
+      // the real cache, fully-associative + LRU — that's the canonical
+      // way to tell capacity from conflict (Hill 1989).
+      if (!ms.seenAddrs)         ms.seenAddrs = new Set();
+      if (!ms.shadow)            ms.shadow = [];
+      if (!ms.shadowClock)       ms.shadowClock = 0;
+      if (!ms.stats.miss3C)      ms.stats.miss3C = { compulsory: 0, capacity: 0, conflict: 0 };
+
+      if (!hit) {
+        if (!ms.seenAddrs.has(addr)) {
+          ms.stats.miss3C.compulsory++;
+        } else {
+          const inShadow = ms.shadow.some(e => e.addr === addr);
+          if (inShadow) ms.stats.miss3C.conflict++;
+          else          ms.stats.miss3C.capacity++;
+        }
+      }
+
+      // Update shadow (always, for LRU bookkeeping).
+      const linesCap = node.lines || 4;
+      ms.shadowClock++;
+      const sExisting = ms.shadow.findIndex(e => e.addr === addr);
+      if (sExisting >= 0) {
+        ms.shadow[sExisting].lru = ms.shadowClock;
+      } else if (ms.shadow.length >= linesCap) {
+        let victimIdx = 0;
+        for (let k = 1; k < ms.shadow.length; k++) {
+          if (ms.shadow[k].lru < ms.shadow[victimIdx].lru) victimIdx = k;
+        }
+        ms.shadow[victimIdx] = { addr, lru: ms.shadowClock };
+      } else {
+        ms.shadow.push({ addr, lru: ms.shadowClock });
+      }
+      ms.seenAddrs.add(addr);
+
       // Push a snapshot to the global cache-stats map so the Pipeline
       // panel can render it live. Mirrors the __branch_flushes__
       // pattern: ffStates owns the data, app.js relays via bus event.
       let cacheStats = ffStates.get('__cache_stats__');
       if (!cacheStats) { cacheStats = new Map(); ffStates.set('__cache_stats__', cacheStats); }
       let snap = cacheStats.get(id);
-      if (!snap) { snap = { label: node.label || 'CACHE', hits: 0, misses: 0, recent: [] }; cacheStats.set(id, snap); }
+      if (!snap) { snap = { label: node.label || 'CACHE', hits: 0, misses: 0, recent: [], miss3C: { compulsory: 0, capacity: 0, conflict: 0 } }; cacheStats.set(id, snap); }
       snap.label  = node.label || 'CACHE';
       snap.hits   = ms.stats.hits;
       snap.misses = ms.stats.misses;
+      snap.miss3C = { ...ms.stats.miss3C };
       // Record the most recent N=12 accesses so the panel can show the
       // tail of the workload.
       snap.recent.push({ addr, hit: hit ? 1 : 0, miss: hit ? 0 : 1 });

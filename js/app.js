@@ -663,7 +663,7 @@ function tick() {
   // flush relay: read from ffStates, normalise to an array, emit.
   const cacheMap = state.ffStates.get('__cache_stats__');
   const cacheArr = cacheMap
-    ? [...cacheMap.entries()].map(([id, s]) => ({ id, label: s.label, hits: s.hits, misses: s.misses, recent: [...s.recent] }))
+    ? [...cacheMap.entries()].map(([id, s]) => ({ id, label: s.label, hits: s.hits, misses: s.misses, recent: [...s.recent], miss3C: { ...(s.miss3C || { compulsory: 0, capacity: 0, conflict: 0 }) } }))
     : [];
   bus.emit('runtime:cache-stats', cacheArr);
 
@@ -3707,6 +3707,13 @@ const EXAMPLES = [
     desc: 'Side-by-side comparison: a 2-way set-associative cache and a fully-associative cache (both 4 lines), driven by the same trace 0,4,8,0,4,8,... All three addresses map to set 0 of the 2-way (3 competing tags into 2 ways) ⇒ LRU keeps evicting ⇒ 100% miss. Fully-associative stores all three tags in any way ⇒ after 3 compulsory misses, every later access HITS. Open the Pipeline panel CACHE (LIVE) section to see both hit-rate counters update side by side.',
     tags: ['cache', 'intermediate', 'CACHE', 'fully-associative', 'thrash', 'comparison'],
     file: 'examples/circuits/cache-fully-assoc.json',
+  },
+  {
+    id: 'cache-3c-miss-types',
+    title: '5. Cache — 3C miss breakdown (compulsory / capacity / conflict)',
+    desc: 'Three caches sharing one trace (0,4,8,12,16 cycled): a 4-line direct-mapped, a 4-line fully-associative, and an 8-line fully-associative. The Pipeline panel CACHE (LIVE) section shows each one\'s 3C taxonomy (Hill 1989): the direct-mapped suffers mostly CONFLICT misses, the small fully-associative is bottlenecked by CAPACITY (5 unique addrs > 4 lines), and the larger fully-associative gets only the unavoidable COMPULSORY cold-start misses.',
+    tags: ['cache', 'advanced', 'CACHE', '3C', 'compulsory', 'capacity', 'conflict'],
+    file: 'examples/circuits/cache-3c-miss-types.json',
   },
 ];
 
