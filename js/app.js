@@ -3639,32 +3639,18 @@ const EXAMPLES = [
     file: 'examples/circuits/pipeline-demo-cdc.json',
   },
   {
-    id: 'hdu-demo',
-    title: '7. Hazard Detection Unit (HDU) — load-use stall',
-    desc: 'Standalone HDU sandbox. Four step-driven INPUTs feed the textbook MIPS load-use detector. **Press the ▶ STEP button (top bar) repeatedly, or click AUTO CLK to animate** — each step advances the input scenario one cycle. When IDEX_MemRead=1 and the loaded register (IDEX_Rt) matches one of the next instruction’s sources (IFID_Rs or IFID_Rt), the unit drops PCWrite and IFIDWrite to 0 and raises Bubble to 1 — freezing IF/ID and injecting a NOP into ID/EX. The 5-cycle script: c0 idle, c1 stall (Rt=Rs=5), c2 stall (Rt=Rt=3), c3 no-stall (MR=0), c4 no-stall (no match). The HDU glows red when STALL fires.',
-    tags: ['pipeline', 'hazard', 'HDU', 'load-use', 'stall'],
-    file: 'examples/circuits/hdu-demo.json',
-  },
-  {
     id: 'mips-5stage-complete',
-    title: '9. MIPS 5-Stage — HDU + FWD Complete Pipeline ⭐',
+    title: '7. MIPS 5-Stage — HDU + FWD Complete Pipeline ⭐',
     desc: 'Full textbook 5-stage MIPS pipeline that wires HDU and FWD as discrete components driving real control. Three PIPE_REGs (ID/EX, EX/MEM, MEM/WB) carry data and control between stages. HDU detects load-use and asserts PCWrite=0, IFIDWrite=0, Bubble=1 — freezing PC + IR and flushing ID/EX. FWD outputs are bit-split and drive 4:1 forwarding MUXes before each ALU input, with EX/MEM priority over MEM/WB. The 4-instruction program: c1 LW R5; c2 stall (HDU fires); c3 ADD R6,R5,R3 with MEM/WB forward of R5; c5 ADD R6,R8,R8 (re-write R6); c6 SUB R7,R6,R5 with EX/MEM forward of R6.',
     tags: ['pipeline', 'mips', '5-stage', 'HDU', 'FWD', 'load-use', 'forwarding'],
     file: 'examples/circuits/mips-5stage-complete.json',
   },
   {
     id: 'mips-5stage-branch-flush-demo',
-    title: '9b. MIPS 5-Stage — Live Branch-Flush Counter ⭐',
+    title: '7b. MIPS 5-Stage — Live Branch-Flush Counter ⭐',
     desc: 'Purpose-built to exercise the runtime branch-flush counter. Same complete 5-stage pipeline (HDU + FWD + MUX-before-IR squash + OR-into-ID/EX.FLUSH), but the IMEM is loaded with a program that takes THREE branches back-to-back: BEQ R1,R0,8 at PC=5 (atomic compare-and-branch — R1=0 so it fires), BEQ R0,R0,13 at PC=10 (always-taken), and an unconditional JMP at PC=13. Open the Pipeline panel and run AUTO CLK — the RUNTIME section will show "Branch flushes (live): 3 — at PC=5, 10, 13" and the POISON instructions in between (LI R5, 99 at PCs 6,7,11,12,14) all get squashed to NOP, so R5 stays 0.',
     tags: ['pipeline', 'mips', '5-stage', 'branch', 'flush', 'BEQ', 'JMP', 'control-hazard', 'runtime', 'live'],
     file: 'examples/circuits/mips-5stage-branch-flush-demo.json',
-  },
-  {
-    id: 'fwd-demo',
-    title: '8. Forwarding Unit (FWD) — EX/MEM → ALU bypass',
-    desc: 'Standalone FWD sandbox. Six step-driven INPUTs feed the Patterson & Hennessy priority forwarder. **Press ▶ STEP repeatedly, or click AUTO CLK to animate.** ForwardA / ForwardB take on 00 (use RF), 10 (forward EX/MEM → ALU input), or 01 (forward MEM/WB → ALU input), with EX/MEM winning ties. The 5-cycle script: c0 idle, c1 = EX/MEM→A (Rs match), c2 = MEM/WB→B (Rt match), c3 = priority (both stages match Rs, EX/MEM wins), c4 = no forward (Rd=0). The FWD glows green when any bypass is active and prints the live A/B selector pair.',
-    tags: ['pipeline', 'forwarding', 'FWD', 'bypass', 'EX-MEM'],
-    file: 'examples/circuits/fwd-demo.json',
   },
   // ── Branch Predictor tab — phased demos for the predictor visualizer.
   // Phase 1 (read-only state): observe a predictor's evolving FSM/state
