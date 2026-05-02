@@ -1983,14 +1983,90 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     }
 
     // 4e: RF write + PC jump (on rising edge)
-    // Detect if any CU is signaling JMP — if so, suppress RF write (pipeline flush)
+    // _jmpActive remains a cycle-scoped boolean kept ONLY for the
+    // branch-flush log below — it counts how many cycles a branch
+    // fired, which matches the existing test invariants
+    // (test-branch-flush-{demo,live}.mjs assert log.length).
+    //
+    // _branchSeq is the per-instruction fix for the WB-write gate:
+    // when a CU asserts jmp, it points to a specific instruction
+    // (the branch). That instruction has a sequence number assigned
+    // at IR latch time (see Phase 2 IR/PIPE_REG plumbing). All
+    // instructions issued AFTER the branch have strictly-larger seqs
+    // and ARE speculative; instructions issued BEFORE have smaller
+    // seqs and are committed real work — their writebacks must NOT
+    // be squashed. Multiple CUs (sub-circuits) → take min so the
+    // oldest branch wins (most conservative: suppresses fewest).
     let _jmpActive = false;
+    let _branchSeq = -1;
     for (const node of nodes) {
-      if (node.type === 'CU') {
-        const jmpVal = nodeValues.get(node.id + '__out4') ?? 0;
-        if (jmpVal) _jmpActive = true;
-      }
+      if (node.type !== 'CU') continue;
+      const jmpVal = nodeValues.get(node.id + '__out4') ?? 0;
+      if (!jmpVal) continue;
+      _jmpActive = true;
+      // Find this CU's branch seq: walk its OP input (slot 0) back
+      // to either an IR (single-cycle CPU) or a PIPE_REG (5-stage).
+      const cuInputs = inputs.get(node.id) || [];
+      const opSlot = cuInputs.find(s => s.inputIndex === 0);
+      if (!opSlot) continue;
+      const upNode = nodeMap.get(opSlot.sourceId);
+      if (!upNode) continue;
+      const upMs = ffStates.get(upNode.id);
+      let mySeq = -1;
+      if (upNode.type === 'IR' && upMs && typeof upMs.curSeq === 'number') mySeq = upMs.curSeq;
+      else if (upNode.type === 'PIPE_REG' && upMs && typeof upMs.metaSeq === 'number') mySeq = upMs.metaSeq;
+      if (mySeq < 0) continue;
+      if (_branchSeq < 0 || mySeq < _branchSeq) _branchSeq = mySeq;
     }
+
+    // Helper for WB-stage writeback gate: a write coming out of a
+    // REG_FILE / REG_FILE_DP is speculative (and must be squashed)
+    // ONLY if a branch fired this cycle AND the WB instruction's
+    // seq is strictly greater than the branch's seq (i.e. it was
+    // issued AFTER the branch). Single-cycle CPUs have no PIPE_REG
+    // upstream of the RF write port → fall back to false (no
+    // suppression — same behaviour as before the fix for those).
+    const _wbPipeCache = new Map();
+    const _findWbPipe = (rfNode) => {
+      if (_wbPipeCache.has(rfNode.id)) return _wbPipeCache.get(rfNode.id);
+      // RF write port: REG_FILE_DP WR_DATA = input 3, REG_FILE WR_DATA = input 2.
+      const wrIdx = rfNode.type === 'REG_FILE_DP' ? 3 : 2;
+      const slots = inputs.get(rfNode.id) || [];
+      const wrSlot = slots.find(s => s.inputIndex === wrIdx);
+      let result = null;
+      if (wrSlot) {
+        // BFS back up the wire graph to find the nearest PIPE_REG.
+        // Bounded — if the graph has cycles or no PIPE_REG ancestor,
+        // we fail open (return null → no suppression).
+        const seen = new Set([rfNode.id]);
+        const queue = [wrSlot.sourceId];
+        let steps = 0;
+        while (queue.length && steps++ < 50) {
+          const id = queue.shift();
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const n = nodeMap.get(id);
+          if (!n) continue;
+          if (n.type === 'PIPE_REG') { result = n; break; }
+          // Walk further back through this node's inputs.
+          const ups = inputs.get(id) || [];
+          for (const s of ups) {
+            if (!s.wire?.isClockWire) queue.push(s.sourceId);
+          }
+        }
+      }
+      _wbPipeCache.set(rfNode.id, result);
+      return result;
+    };
+    const _isWbSpeculative = (rfNode) => {
+      if (!_jmpActive || _branchSeq < 0) return false;
+      const pipe = _findWbPipe(rfNode);
+      if (!pipe) return false;       // single-cycle: no WB stage to be speculative
+      const ms = ffStates.get(pipe.id);
+      const wbSeq = ms?.metaSeq ?? -1;
+      if (wbSeq < 0) return false;   // bubble in WB → nothing to suppress
+      return wbSeq > _branchSeq;
+    };
 
     // Live branch-flush log: record (cycle, pc-of-branch) on the rising
     // edge where a taken branch is committed. Detection happens after
@@ -2046,7 +2122,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           const we     = _w2(dataSlots[3]);
           const dMask  = _mask(node.dataBits || 8);
           const regCnt = node.regCount || 8;
-          if (we && !_jmpActive) ms.regs[wrAddr % regCnt] = wrData & dMask;
+          if (we && !_isWbSpeculative(node)) ms.regs[wrAddr % regCnt] = wrData & dMask;
           const rdAddr = _w2(dataSlots[0]);
           ms.q = (ms.regs[rdAddr % regCnt] ?? 0) & dMask;
         } else if (node.type === 'REG_FILE_DP') {
@@ -2058,7 +2134,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           const regCnt = node.regCount || 8;
           if (!ms.regs) ms.regs = node.initialRegs ? [...node.initialRegs] : new Array(regCnt).fill(0);
           const wrIdx = wrAddr % regCnt;
-          if (we && !_jmpActive && !(node.protectR0 && wrIdx === 0)) ms.regs[wrIdx] = wrData & dMask;
+          if (we && !_isWbSpeculative(node) && !(node.protectR0 && wrIdx === 0)) ms.regs[wrIdx] = wrData & dMask;
           const rd1Addr = _w2(dataSlots[0]);
           const rd2Addr = _w2(dataSlots[1]);
           const readR0 = (idx) => (node.protectR0 && (idx % regCnt) === 0) ? 0 : (ms.regs[idx % regCnt] ?? 0);
