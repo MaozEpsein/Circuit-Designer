@@ -3636,6 +3636,13 @@ const EXAMPLES = [
     tags: ['pipeline', 'mips', '5-stage', 'HDU', 'FWD', 'load-use', 'forwarding'],
     file: 'examples/circuits/mips-5stage-complete.json',
   },
+  {
+    id: 'mips-5stage-cache-hierarchy',
+    title: '6. MIPS 5-Stage + L1/L2 Cache Hierarchy + Write-Back ⭐',
+    desc: 'Full 5-stage MIPS pipeline (HDU + FWD + IF/ID flush) with the DMEM path replaced by a cache hierarchy: pipe_exmem → L1 (4 lines, direct, write-through) → L2 (8 lines, fully-associative, write-back) → RAM. The 36-instruction program runs three STORE+LOAD pairs to addresses 7, 3, and 11 — chosen so all three map to the SAME L1 line (since 7&3 = 3&3 = 11&3 = 3). Each fresh STORE conflicts with the previous one and evicts it from L1; the LOAD that follows each STORE always hits in L1. Final registers: R3=99 (mem[7]), R6=50 (mem[3]), R9=25 (mem[11]). Open the Pipeline panel CACHE (LIVE) to watch L1 thrash (3 conflict misses) and L2 absorb every store as a dirty line — RAM stays empty because the write-back L2 has not yet evicted anything. The L1_HIT/L1_MISS/L2_HIT/L2_MISS LEDs show every cycle live.',
+    tags: ['pipeline', 'mips', '5-stage', 'cache', 'L1', 'L2', 'write-back', 'hierarchy'],
+    file: 'examples/circuits/mips-5stage-cache-hierarchy.json',
+  },
   // ── Branch Predictor tab — phased demos for the predictor visualizer.
   // Phase 1 (read-only state): observe a predictor's evolving FSM/state
   // table over a synthesized outcome trace. Schedule unchanged from Pipeline
