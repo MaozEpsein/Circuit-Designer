@@ -985,6 +985,72 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     });
   });
 
+  // ── PHASE 1.5: cache cascade settle BEFORE FF latches ────────
+  // Phase 1's topological sort can't resolve the L1↔L2 data cycle
+  // (L1.MEM_DATA_IN ← L2.DATA_OUT, L1.MEM_ADDR → L2.ADDR). Whichever
+  // cache evaluates first sees stale MEM_DATA_IN (=0 at startup) and
+  // mis-computes its own DATA_OUT on a miss. That stale value then
+  // propagates into wireValues and Phase 2 latches it into PIPE_MEMWB
+  // — silently corrupting every LOAD that misses through a cache
+  // hierarchy. Symptom: tight loops with LOAD-via-CACHE return 0
+  // forever even though the cache stores the right value.
+  // Fix: re-evaluate every cache up to numCaches times (sufficient
+  // for any acyclic depth) so the cycle stabilises BEFORE Phase 2.
+  // Same body as Phase 4c2.5pre (which still runs to handle the
+  // post-state-mutation case for Phase 4c3+ consumers).
+  // The cascade includes any downstream RAM with asyncRead=true:
+  // when the cache's MEM_ADDR shifts during a settle pass, the RAM's
+  // combinational output must re-evaluate too, otherwise the cache
+  // re-reads stale RAM data on the next pass.
+  const _cacheNodesP15 = nodes.filter(n => n.type === 'CACHE');
+  const _ramNodesP15   = nodes.filter(n => n.type === 'RAM' && n.asyncRead);
+  // Inline propagation: pull each downstream wire's value from the
+  // node's freshly-set nodeValues, indexed by sourceOutputIndex.
+  // Identical semantics to the closure-bound `propagate()` defined
+  // later inside Phase 4's block.
+  const _propagateP15 = (id) => {
+    successors.get(id)?.forEach(({ wire }) => {
+      const outIdx = wire.sourceOutputIndex || 0;
+      const val = outIdx >= 1
+        ? (nodeValues.get(id + '__out' + outIdx) ?? nodeValues.get(id) ?? 0)
+        : (nodeValues.get(id) ?? 0);
+      wireValues.set(wire.id, val);
+    });
+  };
+  // Re-eval an asyncRead RAM combinationally with whatever address
+  // is now visible on its input slot (after upstream cache settled).
+  // Mirrors the Phase 1 RAM-asyncRead block (~line 580).
+  const _evalRamAsync = (node) => {
+    const ms = ffStates.get(node.id);
+    if (!ms) return;
+    const inputSlots = inputs.get(node.id) || [];
+    const _readR = (s) => {
+      if (!s) return 0;
+      const outIdx = s.wire.sourceOutputIndex || 0;
+      const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
+      return nodeValues.get(k) ?? 0;
+    };
+    const addrSlot = inputSlots.find(s => s.inputIndex === 0);
+    const reSlot   = inputSlots.find(s => s.inputIndex === 3);
+    const addr = _readR(addrSlot);
+    const re   = reSlot ? _readR(reSlot) : 1;
+    const dMask = _mask(node.dataBits || 4);
+    if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMask;
+    nodeValues.set(node.id, ms.q ?? 0);
+  };
+  for (let pass = 0; pass < _cacheNodesP15.length + 1; pass++) {
+    for (const node of _cacheNodesP15) {
+      const ms = ffStates.get(node.id);
+      if (!ms) continue;
+      _evalCacheCombinational(node, ms, inputs, nodeValues);
+      _propagateP15(node.id);
+    }
+    for (const node of _ramNodesP15) {
+      _evalRamAsync(node);
+      _propagateP15(node.id);
+    }
+  }
+
   // ── PHASE 2: Detect rising clock edges, update FF state ───
   let ffUpdated = false;
 
