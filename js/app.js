@@ -811,6 +811,14 @@ function _updatePropsPanel() {
     propMembitSel.value = node.dataBits || 4;
     propMemaddrRow.style.display = '';
     propMemaddrSel.value = node.addrBits || 3;
+  } else if (node.type === 'CACHE') {
+    // CACHE shares the data-bits/addr-bits rows with RAM. Defaults are
+    // bigger because cache lessons need 256-cell address space (8 bits).
+    propMembitRow.style.display = '';
+    document.getElementById('prop-membit-label').textContent = 'Data Bits';
+    propMembitSel.value = node.dataBits || 8;
+    propMemaddrRow.style.display = '';
+    propMemaddrSel.value = node.addrBits || 8;
   } else if (node.type === 'REG_FILE' || node.type === 'REG_FILE_DP' || node.type === 'FIFO' || node.type === 'STACK') {
     propMembitRow.style.display = '';
     document.getElementById('prop-membit-label').textContent = 'Data Bits';
@@ -870,7 +878,7 @@ document.getElementById('prop-membit-select')?.addEventListener('change', () => 
   if (!node) return;
   const val = parseInt(document.getElementById('prop-membit-select').value);
   const props = {};
-  if (node.type === 'RAM' || node.type === 'ROM' || node.type === 'REG_FILE' || node.type === 'REG_FILE_DP' || node.type === 'FIFO' || node.type === 'STACK') {
+  if (node.type === 'RAM' || node.type === 'ROM' || node.type === 'CACHE' || node.type === 'REG_FILE' || node.type === 'REG_FILE_DP' || node.type === 'FIFO' || node.type === 'STACK') {
     props.dataBits = val;
   } else if (MEMORY_TYPE_SET.has(node.type)) {
     props.bitWidth = val;
@@ -882,7 +890,7 @@ document.getElementById('prop-membit-select')?.addEventListener('change', () => 
 // Memory address bits change
 document.getElementById('prop-memaddr-select')?.addEventListener('change', () => {
   const node = _getSelectedNode();
-  if (!node || (node.type !== 'RAM' && node.type !== 'ROM')) return;
+  if (!node || (node.type !== 'RAM' && node.type !== 'ROM' && node.type !== 'CACHE')) return;
   commands.execute(new SetNodePropsCommand(scene, node.id, { addrBits: parseInt(document.getElementById('prop-memaddr-select').value) }));
   state.ffStates.delete(node.id);
 });
@@ -1942,7 +1950,7 @@ function _refreshMemInspector() {
 
   const memNodes = scene.nodes.filter(n =>
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
-    n.type === 'RAM' || n.type === 'ROM' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
+    n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
     n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG'
   );
 
@@ -1951,7 +1959,7 @@ function _refreshMemInspector() {
     return;
   }
 
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE' };
   let html = '';
 
   for (const node of memNodes) {
@@ -1988,6 +1996,25 @@ function _refreshMemInspector() {
         const cellVal = ms.memory[a] ?? 0;
         const active = cellVal !== 0 ? ' mem-ram-cell-active' : '';
         html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">[${a}]</span>${_formatMemValue(cellVal, bits)}</div>`;
+      }
+      html += `</div>`;
+    }
+
+    // CACHE: show line state (idx | tag | valid | data) plus a one-line
+    // hits/misses summary. The lines array is allocated by the engine
+    // on first eval; tag stays null until Layer 1 fills it on a real miss.
+    if (node.type === 'CACHE' && ms?.lines) {
+      const stats = ms.stats || { hits: 0, misses: 0 };
+      const total = stats.hits + stats.misses;
+      const rate  = total > 0 ? Math.round(100 * stats.hits / total) : 0;
+      html += `<div class="mem-ram-table" style="grid-column:1/-1;">`;
+      html += `<div class="mem-ram-cell" style="grid-column:1/-1;font-size:11px;">hits ${stats.hits} · misses ${stats.misses} · hit-rate ${rate}%</div>`;
+      for (let i = 0; i < ms.lines.length; i++) {
+        const ln = ms.lines[i];
+        const tag = ln.tag === null ? '—' : ln.tag;
+        const data = _formatMemValue(ln.data ?? 0, bits);
+        const active = ln.valid ? ' mem-ram-cell-active' : '';
+        html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">L${i}</span>tag=${tag} v=${ln.valid?1:0} d=${data}</div>`;
       }
       html += `</div>`;
     }
@@ -3493,6 +3520,13 @@ const EXAMPLES = [
     tags: ['advanced', 'CPU', 'Harvard', 'SLTI', 'Loop', 'Store', 'Load'],
     file: 'examples/circuits/cpu-detailed.json',
   },
+  {
+    id: 'cache-passthrough-demo',
+    title: '1. Cache scaffold — pass-through stub',
+    desc: 'Layer 0 of the cache build, driven by a real address trace. PC walks 0..7 on each clock edge; an 8-entry ROM holds the access sequence (5, 7, 5, 9, 5, 11, 5, 13). The selected address flows through the CACHE to a preloaded RAM and back. With the Layer 0 stub eval, every access is pass-through and HIT/MISS stay at 0. The trace deliberately repeats address 5 four times so when Layer 1 ships, the same circuit will show 3 HITs without any wiring change. STEP 8 cycles to watch ADDR walk and DATA_OUT mirror RAM[ADDR]: 50, 70, 50, 90, 50, 110, 50, 130. The Memory Inspector shows the cache lines (all empty in Layer 0).',
+    tags: ['cache', 'beginner', 'CACHE', 'Memory', 'Inspector'],
+    file: 'examples/circuits/cache-passthrough-demo.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');
@@ -3504,6 +3538,7 @@ const EXAMPLES_CATEGORIES = [
   { id: 'advanced',     label: 'Advanced'         },
   { id: 'pipeline',     label: 'Pipeline'         },
   { id: 'predictor',    label: 'Branch Predictor' },
+  { id: 'cache',        label: 'Cache & Memory'   },
 ];
 let _examplesActiveTab = 'beginner';
 

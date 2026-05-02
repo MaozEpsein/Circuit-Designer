@@ -2867,6 +2867,7 @@ function _memoryInputLabel(node, i) {
   if (node.type === 'COUNTER')   return ['EN', 'LOAD', 'DATA', 'CLR', 'CLK'][i] || '';
   if (node.type === 'RAM')       return ['ADDR', 'DATA', 'WE', 'RE', 'CLK'][i] || '';
   if (node.type === 'ROM')       return ['ADDR', 'RE', 'CLK'][i] || '';
+  if (node.type === 'CACHE')     return ['ADDR', 'DATA', 'WE', 'RE', 'CLK', 'MEM_DI'][i] || '';
   if (node.type === 'REG_FILE') return ['RD_A', 'WR_A', 'WR_D', 'WE', 'CLK'][i] || '';
   if (node.type === 'FIFO')     return ['DATA', 'WR', 'RD', 'CLR', 'CLK'][i] || '';
   if (node.type === 'STACK')    return ['DATA', 'PUSH', 'POP', 'CLR', 'CLK'][i] || '';
@@ -2905,7 +2906,7 @@ function _drawMemoryNode(node, val, hovered, ffStates) {
   ctx.shadowBlur = 0;
 
   // Type label
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC' };
   ctx.fillStyle = '#c0a0f0';
   ctx.font = 'bold 11px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
@@ -3616,6 +3617,7 @@ function _getNodeInputCount(node) {
   if (node.type === 'COUNTER') return 5;    // EN, LOAD, DATA, CLR, CLK
   if (node.type === 'RAM') return 5;        // ADDR, DATA, WE, RE, CLK
   if (node.type === 'ROM') return 3;        // ADDR, RE, CLK
+  if (node.type === 'CACHE') return 6;      // ADDR, DATA, WE, RE, CLK, MEM_DATA_IN
   if (node.type === 'REG_FILE') return 5;  // RD_ADDR, WR_ADDR, WR_DATA, WE, CLK
   if (node.type === 'FIFO') return 5;     // DATA, WR, RD, CLR, CLK
   if (node.type === 'STACK') return 5;    // DATA, PUSH, POP, CLR, CLK

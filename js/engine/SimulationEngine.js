@@ -473,6 +473,14 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       if (!ms) {
         ms = { q: 0, prevClkValue: null };
         if (node.type === 'RAM' || node.type === 'ROM') ms.memory = node.memory ? { ...node.memory } : {};
+        if (node.type === 'CACHE') {
+          // Allocate cache lines + stats container. Layer 0 keeps these
+          // bookkeeping fields untouched; Layer 1 fills them with real
+          // tag/valid/data. Stats are a single object so the panel layer
+          // can mutate counters in place across cycles.
+          ms.lines = Array.from({ length: node.lines || 4 }, () => ({ tag: null, valid: 0, data: 0 }));
+          ms.stats = { hits: 0, misses: 0 };
+        }
         if (node.type === 'COUNTER') ms.count = 0;
         if (node.type === 'REG_FILE' || node.type === 'REG_FILE_DP') {
           ms.regs = node.initialRegs ? [...node.initialRegs] : new Array(node.regCount || 8).fill(0);
@@ -523,6 +531,43 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const dMaskAsync = _mask(node.dataBits || 4);
         if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMaskAsync;
         value = ms.q ?? 0;
+      }
+      // CACHE — Layer 0 pass-through stub. Forwards CPU-side ADDR/DATA/
+      // WE/RE to MEM_*; DATA_OUT mirrors MEM_DATA_IN (the value coming
+      // back from the RAM behind the cache); HIT/MISS stay at 0 until
+      // Layer 1 adds real cache logic. Inputs (per pin order):
+      //   0=ADDR, 1=DATA(CPU→cache), 2=WE, 3=RE, 4=CLK, 5=MEM_DATA_IN.
+      // Outputs:
+      //   0=DATA_OUT, 1=HIT, 2=MISS, 3=MEM_ADDR, 4=MEM_DATA_OUT,
+      //   5=MEM_RE, 6=MEM_WE.
+      if (node.type === 'CACHE') {
+        const inputSlotsC = inputs.get(id);
+        const _readSlotC = (s) => {
+          if (!s) return 0;
+          const outIdx = s.wire.sourceOutputIndex || 0;
+          const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
+          return nodeValues.get(k) ?? 0;
+        };
+        const addrSlot   = inputSlotsC.find(s => s.inputIndex === 0);
+        const dataSlotC  = inputSlotsC.find(s => s.inputIndex === 1);
+        const weSlot     = inputSlotsC.find(s => s.inputIndex === 2);
+        const reSlot     = inputSlotsC.find(s => s.inputIndex === 3);
+        const memDiSlot  = inputSlotsC.find(s => s.inputIndex === 5);
+        const addr     = _readSlotC(addrSlot);
+        const dataIn   = _readSlotC(dataSlotC);
+        const we       = _readSlotC(weSlot);
+        const re       = _readSlotC(reSlot);
+        const memDataIn = _readSlotC(memDiSlot);
+        const dMask    = _mask(node.dataBits || 8);
+        // Pass-through: DATA_OUT mirrors what came back from RAM.
+        nodeValues.set(id,             memDataIn & dMask);   // DATA_OUT
+        nodeValues.set(id + '__out1', 0);                    // HIT
+        nodeValues.set(id + '__out2', 0);                    // MISS
+        nodeValues.set(id + '__out3', addr);                 // MEM_ADDR
+        nodeValues.set(id + '__out4', dataIn & dMask);       // MEM_DATA_OUT
+        nodeValues.set(id + '__out5', re ? 1 : 0);           // MEM_RE
+        nodeValues.set(id + '__out6', we ? 1 : 0);           // MEM_WE
+        value = memDataIn & dMask;
       }
       // IR: decode stored instruction into fields
       if (node.type === 'IR') {
@@ -905,6 +950,10 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     if (!ms) {
       ms = { q: 0, prevClkValue: null };
       if (node.type === 'RAM' || node.type === 'ROM') ms.memory = node.memory ? { ...node.memory } : {};
+      if (node.type === 'CACHE') {
+        ms.lines = Array.from({ length: node.lines || 4 }, () => ({ tag: null, valid: 0, data: 0 }));
+        ms.stats = { hits: 0, misses: 0 };
+      }
       if (node.type === 'COUNTER') ms.count = 0;
       ffStates.set(node.id, ms);
     }
@@ -1495,6 +1544,33 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         nodeValues.set(node.id, ms.q);
         propagate(node.id);
       }
+    }
+
+    // 4c2.5: CACHE re-eval with fresh MEM_DATA_IN.
+    // The CPU↔RAM round-trip through CACHE creates a cycle in the
+    // dependency graph (CACHE drives RAM's address; RAM drives CACHE's
+    // MEM_DATA_IN). Phase 1's topological propagation can only walk
+    // it once, so DATA_OUT lags one cycle behind the actual RAM read.
+    // After Phase 4c2 has settled the RAM, do a second pass on every
+    // CACHE so DATA_OUT (and the LRU/tag updates the later layers will
+    // add here) reflect the value that just came back from RAM.
+    for (const node of nodes) {
+      if (node.type !== 'CACHE') continue;
+      const id = node.id;
+      const inputSlots = inputs.get(id);
+      const _readSlotC = (s) => {
+        if (!s) return 0;
+        const outIdx = s.wire.sourceOutputIndex || 0;
+        const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
+        return nodeValues.get(k) ?? 0;
+      };
+      const memDiSlot = inputSlots.find(s => s.inputIndex === 5);
+      const memDataIn = _readSlotC(memDiSlot);
+      const dMask = _mask(node.dataBits || 8);
+      // Layer 0 stub: DATA_OUT is just whatever came back from RAM.
+      // Layer 1+ will branch on hit/miss and read from cache lines on hit.
+      nodeValues.set(id, memDataIn & dMask);
+      propagate(id);
     }
 
     // 4c3: BUS_MUX eval with fresh wire values

@@ -25,6 +25,7 @@ export const COMPONENT_TYPES = {
   COUNTER:      'COUNTER',
   RAM:          'RAM',
   ROM:          'ROM',
+  CACHE:        'CACHE',
   REG_FILE:     'REG_FILE',
   FIFO:         'FIFO',
   STACK:        'STACK',
@@ -80,7 +81,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -137,6 +138,13 @@ export function createComponent(type, x, y) {
       return { ...base, addrBits: 3, dataBits: 4, memory: {}, label: 'RAM' };
     case COMPONENT_TYPES.ROM:
       return { ...base, addrBits: 3, dataBits: 4, memory: {}, label: 'ROM' };
+    // Cache: black-box L1 between CPU and RAM. CPU side accepts the
+    // same 5 inputs as RAM (ADDR, DATA, WE, RE, CLK) plus a 6th
+    // MEM_DATA_IN that arrives from the RAM behind the cache. Outputs:
+    // DATA_OUT(0), HIT(1), MISS(2), MEM_ADDR(3), MEM_DATA_OUT(4),
+    // MEM_RE(5), MEM_WE(6). Layer 0 is a pass-through stub.
+    case COMPONENT_TYPES.CACHE:
+      return { ...base, lines: 4, dataBits: 8, addrBits: 8, mapping: 'direct', label: 'CACHE' };
     case COMPONENT_TYPES.REG_FILE:
       return { ...base, regCount: 8, dataBits: 8, initialRegs: null, label: 'RF' };
     case COMPONENT_TYPES.FIFO:

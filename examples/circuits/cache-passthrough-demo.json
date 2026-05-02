@@ -1,0 +1,63 @@
+{
+  "_comment": "Layer 0 scaffold demo. PC drives an 8-entry ROM that holds the access sequence (5, 7, 5, 9, 5, 11, 5, 13). The chosen address goes through the CACHE to a preloaded RAM and the fetched value flows back through CACHE.DATA_OUT to a live LED. With the Layer 0 stub eval the cache is pure pass-through — every access flows to RAM and back; HIT/MISS LEDs stay at 0. The trace deliberately repeats address 5 four times so the same demo will show 3 HITs once Layer 1 ships, with ZERO wiring changes. STEP through 8 cycles to watch ADDR walk and DATA_OUT mirror RAM[ADDR]: 50, 70, 50, 90, 50, 110, 50, 130.",
+  "nodes": [
+    { "type": "CLOCK", "id": "clk",  "x": -640, "y":  280, "value": 0 },
+    { "type": "INPUT", "id": "en",   "x": -640, "y":  140, "fixedValue": 1, "label": "EN" },
+    { "type": "INPUT", "id": "rst",  "x": -640, "y":  200, "fixedValue": 0, "label": "RST" },
+
+    { "type": "PC",   "id": "pc",    "x": -460, "y":  200, "bitWidth": 3, "label": "PC" },
+
+    { "type": "ROM",  "id": "rom",   "x": -260, "y":  200,
+      "addrBits": 3, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 5, "1": 7, "2": 5, "3": 9, "4": 5, "5": 11, "6": 5, "7": 13 },
+      "label": "TRACE" },
+
+    { "type": "INPUT", "id": "we",   "x": -640, "y":   60, "fixedValue": 0, "label": "WE" },
+    { "type": "INPUT", "id": "re",   "x": -640, "y":    0, "fixedValue": 1, "label": "RE" },
+    { "type": "INPUT", "id": "din",  "x": -640, "y":  -60, "fixedValue": 0, "label": "DATA_IN" },
+
+    { "type": "CACHE", "id": "cache","x":  -40, "y":  120,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "direct", "label": "L1" },
+
+    { "type": "RAM",  "id": "ram",   "x":  280, "y":  200,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "5": 50, "7": 70, "9": 90, "11": 110, "13": 130 },
+      "label": "RAM" },
+
+    { "type": "OUTPUT", "id": "out_pc",   "x": -380, "y":  100, "label": "PC_VAL" },
+    { "type": "OUTPUT", "id": "out_addr", "x": -120, "y":  280, "label": "ADDR" },
+    { "type": "OUTPUT", "id": "out_data", "x":  140, "y":   20, "label": "DATA_OUT" },
+    { "type": "OUTPUT", "id": "out_hit",  "x":  140, "y":   80, "label": "HIT" },
+    { "type": "OUTPUT", "id": "out_miss", "x":  140, "y":  140, "label": "MISS" },
+    { "type": "OUTPUT", "id": "out_ramq", "x":  480, "y":  200, "label": "RAM_OUT" }
+  ],
+  "wires": [
+    { "id": "w1",  "sourceId": "en",  "targetId": "pc", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w2",  "sourceId": "rst", "targetId": "pc", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w3",  "sourceId": "clk", "targetId": "pc", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w4",  "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w5",  "sourceId": "clk", "targetId": "rom", "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w6",  "sourceId": "rom", "targetId": "cache", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7",  "sourceId": "din", "targetId": "cache", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8",  "sourceId": "we",  "targetId": "cache", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9",  "sourceId": "re",  "targetId": "cache", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10", "sourceId": "clk", "targetId": "cache", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w11", "sourceId": "cache", "targetId": "ram", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12", "sourceId": "cache", "targetId": "ram", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13", "sourceId": "cache", "targetId": "ram", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14", "sourceId": "cache", "targetId": "ram", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15", "sourceId": "clk",   "targetId": "ram", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w16", "sourceId": "ram",   "targetId": "cache", "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w20", "sourceId": "pc",    "targetId": "out_pc",   "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w21", "sourceId": "rom",   "targetId": "out_addr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w22", "sourceId": "cache", "targetId": "out_data", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w23", "sourceId": "cache", "targetId": "out_hit",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w24", "sourceId": "cache", "targetId": "out_miss", "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w25", "sourceId": "ram",   "targetId": "out_ramq", "targetInputIndex": 0, "sourceOutputIndex": 0 }
+  ]
+}

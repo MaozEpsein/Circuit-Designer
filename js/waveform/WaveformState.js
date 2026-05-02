@@ -158,7 +158,7 @@ const DEFAULT_VISIBLE_TYPES = new Set(['CLOCK', 'INPUT', 'MUX_SELECT', 'OUTPUT',
 const PICKABLE_TYPES = new Set([
   'CLOCK', 'INPUT', 'MUX_SELECT', 'OUTPUT',
   'REGISTER', 'SHIFT_REG', 'COUNTER', 'PC', 'IR',
-  'RAM', 'ROM', 'REG_FILE', 'REG_FILE_DP',
+  'RAM', 'ROM', 'CACHE', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
   'GATE_SLOT', 'FF_SLOT',
@@ -167,7 +167,7 @@ const PICKABLE_TYPES = new Set([
 const TYPE_TO_SIG_TYPE = {
   CLOCK: 'clock', INPUT: 'input', MUX_SELECT: 'mux', OUTPUT: 'output',
   REGISTER: 'memory', SHIFT_REG: 'memory', COUNTER: 'memory', PC: 'memory', IR: 'memory',
-  RAM: 'memory', ROM: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
+  RAM: 'memory', ROM: 'memory', CACHE: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
   ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff',
@@ -189,6 +189,7 @@ const PINS_BY_TYPE = {
   HANDSHAKE:   [['S', 0], ['F', 1]],
   HDU:         [['PCWrite', 0], ['IFIDWrite', 1], ['Bubble', 2]],
   FWD:         [['ForwardA', 0], ['ForwardB', 1]],
+  CACHE:       [['DATA_OUT', 0], ['HIT', 1], ['MISS', 2], ['MEM_ADDR', 3], ['MEM_DATA_OUT', 4], ['MEM_RE', 5], ['MEM_WE', 6]],
 };
 
 // ── Input pins (matches SimulationEngine inputSlots[i].inputIndex order) ──
@@ -202,6 +203,7 @@ const INPUT_PINS_BY_TYPE = {
   REG_FILE_DP: [['RD1_ADDR', 0], ['RD2_ADDR', 1], ['WR_ADDR', 2], ['WR_DATA', 3], ['WE', 4]],
   RAM:         [['ADDR', 0], ['DATA', 1], ['WE', 2], ['RE', 3]],
   ROM:         [['ADDR', 0], ['RE', 1]],
+  CACHE:       [['ADDR', 0], ['DATA', 1], ['WE', 2], ['RE', 3], ['MEM_DATA_IN', 5]],
   COUNTER:     [['EN', 0], ['LOAD', 1], ['DATA', 2], ['CLR', 3]],
   SHIFT_REG:   [['DIN', 0], ['DIR', 1], ['EN', 2], ['CLR', 3]],
   FIFO:        [['DATA', 0], ['WR', 1], ['RD', 2], ['CLR', 3]],

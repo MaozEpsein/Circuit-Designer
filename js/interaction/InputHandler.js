@@ -58,6 +58,7 @@ const TOOL_TYPE_MAP = {
   'place-counter':       COMPONENT_TYPES.COUNTER,
   'place-ram':           COMPONENT_TYPES.RAM,
   'place-rom':           COMPONENT_TYPES.ROM,
+  'place-cache':         COMPONENT_TYPES.CACHE,
   'place-regfile':       COMPONENT_TYPES.REG_FILE,
   'place-fifo':          COMPONENT_TYPES.FIFO,
   'place-stack':         COMPONENT_TYPES.STACK,

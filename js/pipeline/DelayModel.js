@@ -42,6 +42,7 @@ export const DEFAULT_DELAY_PS = {
   COUNTER:     0,
   RAM:         0,
   ROM:         0,
+  CACHE:       0,
   REG_FILE:    0,
   REG_FILE_DP: 0,
   FIFO:        0,
