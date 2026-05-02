@@ -3701,6 +3701,13 @@ const EXAMPLES = [
     tags: ['cache', 'intermediate', 'CACHE', 'set-associative', 'LRU', '2-way'],
     file: 'examples/circuits/cache-2way-vs-direct.json',
   },
+  {
+    id: 'cache-fully-assoc',
+    title: '4. Cache — fully-associative beats the 2-way thrash',
+    desc: 'Side-by-side comparison: a 2-way set-associative cache and a fully-associative cache (both 4 lines), driven by the same trace 0,4,8,0,4,8,... All three addresses map to set 0 of the 2-way (3 competing tags into 2 ways) ⇒ LRU keeps evicting ⇒ 100% miss. Fully-associative stores all three tags in any way ⇒ after 3 compulsory misses, every later access HITS. Open the Pipeline panel CACHE (LIVE) section to see both hit-rate counters update side by side.',
+    tags: ['cache', 'intermediate', 'CACHE', 'fully-associative', 'thrash', 'comparison'],
+    file: 'examples/circuits/cache-fully-assoc.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

@@ -1,0 +1,79 @@
+{
+  "_comment": "Layer 4 demo — workload that thrashes a 2-way set-associative cache but hits cleanly in fully-associative. The trace cycles 3 addresses (0, 4, 8) that all map to set 0 of a 2-way 4-line cache (idx = addr & 1 = 0; tags 0/2/4). Three competing tags into a 2-way set ⇒ every access is a miss (LRU keeps evicting). Fully-associative with 4 lines stores all three tags simultaneously ⇒ after 3 compulsory misses, every access HITS. Open the Pipeline panel CACHE (LIVE) section to compare hit rates side by side.",
+  "nodes": [
+    { "type": "CLOCK", "id": "clk", "x": -640, "y":  280, "value": 0 },
+    { "type": "INPUT", "id": "en",  "x": -640, "y":  140, "fixedValue": 1, "label": "EN" },
+    { "type": "INPUT", "id": "rst", "x": -640, "y":  200, "fixedValue": 0, "label": "RST" },
+
+    { "type": "PC",   "id": "pc",   "x": -460, "y":  200, "bitWidth": 3, "label": "PC" },
+
+    { "type": "ROM",  "id": "rom",  "x": -260, "y":  200,
+      "addrBits": 3, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 0, "1": 4, "2": 8, "3": 0, "4": 4, "5": 8, "6": 0, "7": 4 },
+      "label": "TRACE" },
+
+    { "type": "INPUT", "id": "we",  "x": -640, "y":   60, "fixedValue": 0, "label": "WE" },
+    { "type": "INPUT", "id": "re",  "x": -640, "y":    0, "fixedValue": 1, "label": "RE" },
+    { "type": "INPUT", "id": "din", "x": -640, "y":  -60, "fixedValue": 0, "label": "DATA_IN" },
+
+    { "type": "CACHE", "id": "cache_2w", "x":  -40, "y":   20,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "set-assoc", "ways": 2, "label": "2-WAY" },
+    { "type": "CACHE", "id": "cache_fa", "x":  -40, "y":  220,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "fully-assoc", "label": "FULLY" },
+
+    { "type": "RAM",   "id": "ram_2w",   "x":  280, "y":   20,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 100, "4": 200, "8": 80 },
+      "label": "RAM-2W" },
+    { "type": "RAM",   "id": "ram_fa",   "x":  280, "y":  220,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 100, "4": 200, "8": 80 },
+      "label": "RAM-FA" },
+
+    { "type": "OUTPUT", "id": "out_pc",     "x": -380, "y":  100, "label": "PC_VAL" },
+    { "type": "OUTPUT", "id": "out_addr",   "x": -120, "y":  280, "label": "ADDR" },
+    { "type": "OUTPUT", "id": "out_hit_2w", "x":  140, "y":  -20, "label": "2W_HIT" },
+    { "type": "OUTPUT", "id": "out_mis_2w", "x":  140, "y":   40, "label": "2W_MISS" },
+    { "type": "OUTPUT", "id": "out_hit_fa", "x":  140, "y":  180, "label": "FA_HIT" },
+    { "type": "OUTPUT", "id": "out_mis_fa", "x":  140, "y":  240, "label": "FA_MISS" }
+  ],
+  "wires": [
+    { "id": "w1",  "sourceId": "en",  "targetId": "pc", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w2",  "sourceId": "rst", "targetId": "pc", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w3",  "sourceId": "clk", "targetId": "pc", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w4",  "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w5",  "sourceId": "clk", "targetId": "rom", "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w6a",  "sourceId": "rom", "targetId": "cache_2w", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7a",  "sourceId": "din", "targetId": "cache_2w", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8a",  "sourceId": "we",  "targetId": "cache_2w", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9a",  "sourceId": "re",  "targetId": "cache_2w", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10a", "sourceId": "clk", "targetId": "cache_2w", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w11a", "sourceId": "cache_2w", "targetId": "ram_2w", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12a", "sourceId": "cache_2w", "targetId": "ram_2w", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13a", "sourceId": "cache_2w", "targetId": "ram_2w", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14a", "sourceId": "cache_2w", "targetId": "ram_2w", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15a", "sourceId": "clk",      "targetId": "ram_2w", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w16a", "sourceId": "ram_2w",   "targetId": "cache_2w", "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w6b",  "sourceId": "rom", "targetId": "cache_fa", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7b",  "sourceId": "din", "targetId": "cache_fa", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8b",  "sourceId": "we",  "targetId": "cache_fa", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9b",  "sourceId": "re",  "targetId": "cache_fa", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10b", "sourceId": "clk", "targetId": "cache_fa", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w11b", "sourceId": "cache_fa", "targetId": "ram_fa", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12b", "sourceId": "cache_fa", "targetId": "ram_fa", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13b", "sourceId": "cache_fa", "targetId": "ram_fa", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14b", "sourceId": "cache_fa", "targetId": "ram_fa", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15b", "sourceId": "clk",      "targetId": "ram_fa", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w16b", "sourceId": "ram_fa",   "targetId": "cache_fa", "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w20", "sourceId": "pc",        "targetId": "out_pc",     "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w21", "sourceId": "rom",       "targetId": "out_addr",   "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w22", "sourceId": "cache_2w",  "targetId": "out_hit_2w", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w23", "sourceId": "cache_2w",  "targetId": "out_mis_2w", "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w24", "sourceId": "cache_fa",  "targetId": "out_hit_fa", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w25", "sourceId": "cache_fa",  "targetId": "out_mis_fa", "targetInputIndex": 0, "sourceOutputIndex": 2 }
+  ]
+}
