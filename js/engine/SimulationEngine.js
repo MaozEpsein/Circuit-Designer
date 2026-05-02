@@ -171,6 +171,50 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
   });
   inputs.forEach(arr => arr.sort((a, b) => a.inputIndex - b.inputIndex));
 
+  // ── IR_FLUSH suppression (per-instruction branch one-shot) ───
+  // When a branch fires at cycle N, its IR.curSeq is captured in
+  // ffStates as __last_fired_branch_seq__. At cycle N+1 the IR still
+  // physically holds the BNE instruction (Phase 2 hasn't latched the
+  // new fetch yet), so a naive Phase-1 CU evaluation would see op=BNE,
+  // assert jmp=1, drive ir_flush_mux to gnd, and the new fetch would
+  // be lost — over-flushing the IF stage by one cycle.
+  // Suppression: every CU eval site checks whether the IR (or upstream
+  // PIPE_REG) it's reading carries the SAME instruction-id as the
+  // last-fired branch. If yes, force jmp=0 — that branch is already
+  // history; the engine has already updated PC and committed the flush.
+  // The mux reads jmp=0, selects ROM, the target instruction reaches
+  // IR correctly. Sentinel -1 = no branch ever fired (safe at startup).
+  const _lastFiredBranchSeq = ffStates && ffStates.get
+    ? (ffStates.get('__last_fired_branch_seq__') ?? -1)
+    : -1;
+  const _cuSeqCache = new Map();
+  const _cuBranchSeqOf = (cuNode) => {
+    if (_cuSeqCache.has(cuNode.id)) return _cuSeqCache.get(cuNode.id);
+    const slots = inputs.get(cuNode.id) || [];
+    const opSlot = slots.find(s => s.inputIndex === 0);
+    let seq = -1;
+    if (opSlot) {
+      const upNode = nodeMap.get(opSlot.sourceId);
+      if (upNode) {
+        const upMs = ffStates.get(upNode.id);
+        if (upNode.type === 'IR' && upMs && typeof upMs.curSeq === 'number') seq = upMs.curSeq;
+        else if (upNode.type === 'PIPE_REG' && upMs && typeof upMs.metaSeq === 'number') seq = upMs.metaSeq;
+      }
+    }
+    _cuSeqCache.set(cuNode.id, seq);
+    return seq;
+  };
+  // Wrap a freshly-computed jmp output: returns 0 if this CU is
+  // re-firing on the same IR instance that already fired last cycle,
+  // otherwise returns the original jmp value.
+  const _suppressReFireJmp = (cuNode, jmp) => {
+    if (!jmp) return 0;
+    if (_lastFiredBranchSeq < 0) return jmp;
+    const mySeq = _cuBranchSeqOf(cuNode);
+    if (mySeq < 0) return jmp;
+    return (mySeq === _lastFiredBranchSeq) ? 0 : jmp;
+  };
+
   // ── Topological Sort (Kahn's) ─────────────────────────────
   const inDegree = new Map(nodes.map(n => [n.id, 0]));
   wires.forEach(w => {
@@ -844,12 +888,13 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const z  = inputSlots[1] ? (nodeValues.get(inputSlots[1].sourceId) ?? 0) : 0;
       const c  = inputSlots[2] ? (nodeValues.get(inputSlots[2].sourceId) ?? 0) : 0;
       const { aluOp, regWe, memWe, memRe, jmp, halt, immSel } = _evalCU(node, op, z, c);
+      const jmpFinal = _suppressReFireJmp(node, jmp);
       value = aluOp;
       nodeValues.set(id + '__out0', aluOp);
       nodeValues.set(id + '__out1', regWe);
       nodeValues.set(id + '__out2', memWe);
       nodeValues.set(id + '__out3', memRe);
-      nodeValues.set(id + '__out4', jmp);
+      nodeValues.set(id + '__out4', jmpFinal);
       nodeValues.set(id + '__out5', halt);
       nodeValues.set(id + '__out6', immSel);
 
@@ -1378,8 +1423,9 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const z = inputSlots[1] ? (nodeValues.get(inputSlots[1].sourceId) ?? 0) : 0;
         const c = inputSlots[2] ? (nodeValues.get(inputSlots[2].sourceId) ?? 0) : 0;
         const cu = _evalCU(node, op, z, c);
+        const cuJmp = _suppressReFireJmp(node, cu.jmp);
         value = cu.aluOp;
-        nodeValues.set(id+'__out0',cu.aluOp);nodeValues.set(id+'__out1',cu.regWe);nodeValues.set(id+'__out2',cu.memWe);nodeValues.set(id+'__out3',cu.memRe);nodeValues.set(id+'__out4',cu.jmp);nodeValues.set(id+'__out5',cu.halt);nodeValues.set(id+'__out6',cu.immSel);
+        nodeValues.set(id+'__out0',cu.aluOp);nodeValues.set(id+'__out1',cu.regWe);nodeValues.set(id+'__out2',cu.memWe);nodeValues.set(id+'__out3',cu.memRe);nodeValues.set(id+'__out4',cuJmp);nodeValues.set(id+'__out5',cu.halt);nodeValues.set(id+'__out6',cu.immSel);
       } else if (node.type === 'MUX') {
         // Re-evaluate so multi-output sources (PIPE_REG channels, IR fields)
         // deliver the right post-edge values to data + select inputs.
@@ -1558,8 +1604,9 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const z  = inputSlots[1] ? _nv(inputSlots[1].sourceId) : 0;
       const c  = inputSlots[2] ? _nv(inputSlots[2].sourceId) : 0;
       const { aluOp, regWe, memWe, memRe, jmp, halt, immSel } = _evalCU(node, op, z, c);
+      const jmpFinal = _suppressReFireJmp(node, jmp);
       nodeValues.set(id, aluOp);
-      nodeValues.set(id+'__out0',aluOp);nodeValues.set(id+'__out1',regWe);nodeValues.set(id+'__out2',memWe);nodeValues.set(id+'__out3',memRe);nodeValues.set(id+'__out4',jmp);nodeValues.set(id+'__out5',halt);nodeValues.set(id+'__out6',immSel);
+      nodeValues.set(id+'__out0',aluOp);nodeValues.set(id+'__out1',regWe);nodeValues.set(id+'__out2',memWe);nodeValues.set(id+'__out3',memRe);nodeValues.set(id+'__out4',jmpFinal);nodeValues.set(id+'__out5',halt);nodeValues.set(id+'__out6',immSel);
       propagate(id);
     }
 
@@ -1983,8 +2030,15 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const z  = _flagState.z;
       const c  = _flagState.c;
       const { aluOp, regWe, memWe, memRe, jmp, halt, immSel } = _evalCU(node, op, z, c);
+      // Phase 4d also gets the IR_FLUSH suppression: at this point
+      // PIPE_REG / IR may have just latched (Phase 2), so curSeq /
+      // metaSeq may have advanced. The cache is per-evaluate so the
+      // _cuBranchSeqOf result is whatever was captured at first call;
+      // re-derive freshly here to use the post-Phase-2 seq.
+      _cuSeqCache.delete(node.id);
+      const jmpFinal = _suppressReFireJmp(node, jmp);
       nodeValues.set(id, aluOp);
-      nodeValues.set(id+'__out0',aluOp);nodeValues.set(id+'__out1',regWe);nodeValues.set(id+'__out2',memWe);nodeValues.set(id+'__out3',memRe);nodeValues.set(id+'__out4',jmp);nodeValues.set(id+'__out5',halt);nodeValues.set(id+'__out6',immSel);
+      nodeValues.set(id+'__out0',aluOp);nodeValues.set(id+'__out1',regWe);nodeValues.set(id+'__out2',memWe);nodeValues.set(id+'__out3',memRe);nodeValues.set(id+'__out4',jmpFinal);nodeValues.set(id+'__out5',halt);nodeValues.set(id+'__out6',immSel);
       propagate(id);
     }
 
@@ -2097,6 +2151,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         log.push({ cycle: stepCount ?? 0, pc: branchPc });
         if (log.length > 1024) log.splice(0, log.length - 1024);
       }
+      // Persist the seq of the branch instruction that just committed,
+      // so next cycle's CU evals can recognise a re-fire of the same
+      // IR instance and suppress the over-flush. _branchSeq was
+      // captured above when we computed _jmpActive.
+      if (_branchSeq >= 0) ffStates.set('__last_fired_branch_seq__', _branchSeq);
     }
     // CLOCK prevClkValue tracking for rising-edge detection above.
     for (const n of nodes) {
