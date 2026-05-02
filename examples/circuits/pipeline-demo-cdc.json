@@ -1,9 +1,10 @@
 {
+  "_comment": "Multi-clock domain crossing (CDC) demo. data_in toggles every cycle in the source domain (clkA). The same value crosses to the destination domain (clkB) via two paths: BAD path uses a single PIPE_REG clocked by clkB (rcvB_bad) — when data changes near clkB's edge, the sample lands a cycle off-spec. GOOD path uses a 2-flop synchronizer (sync1 → sync2 in clkB) which absorbs the cycle of skew. The DIFFER output XORs Q_bad and Q_ok — every cycle they disagree, it pulses high. NOTE: this simulator is logical, not analog, so it cannot model true metastability (a sub-clock-period uncertainty); what you see is the structural NEED for the synchronizer (eliminating the 1-cycle skew between domains), not the physical metastability event itself.",
   "nodes": [
     { "type": "CLOCK",    "x": -320, "y":   0, "value": 0, "label": "clkA (100 MHz)", "id": "clk_a" },
     { "type": "CLOCK",    "x": -320, "y": 300, "value": 0, "label": "clkB (150 MHz)", "id": "clk_b" },
 
-    { "type": "INPUT",    "x": -480, "y":  -60, "value": 0, "label": "data_in", "id": "din" },
+    { "type": "INPUT",    "x": -480, "y":  -60, "fixedValue": 0, "stepValues": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0], "label": "data_in", "id": "din" },
     { "type": "PIPE_REG", "x": -160, "y":  -60, "channels": 1, "label": "srcA", "id": "src_a" },
 
     { "type": "PIPE_REG", "x":  80,  "y":  -60, "channels": 1, "label": "rcvB (unsynced)", "id": "rcv_b_bad" },
@@ -11,7 +12,10 @@
 
     { "type": "PIPE_REG", "x":   80, "y":  220, "channels": 1, "label": "sync1 (clkB)", "id": "sync1" },
     { "type": "PIPE_REG", "x":  240, "y":  220, "channels": 1, "label": "sync2 (clkB)", "id": "sync2" },
-    { "type": "OUTPUT",   "x":  400, "y":  220, "targetValue": 0, "sandbox": true, "label": "Q_ok", "id": "q_ok" }
+    { "type": "OUTPUT",   "x":  400, "y":  220, "targetValue": 0, "sandbox": true, "label": "Q_ok", "id": "q_ok" },
+
+    { "type": "GATE_SLOT","x":  400, "y":   80, "gate": "XOR", "label": "DIFFER?", "id": "g_diff" },
+    { "type": "OUTPUT",   "x":  560, "y":   80, "targetValue": 0, "sandbox": true, "label": "DIFFER", "id": "diff_out" }
   ],
   "wires": [
     { "id": "c1", "sourceId": "clk_a", "targetId": "src_a",      "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true  },
@@ -25,6 +29,10 @@
 
     { "id": "d4", "sourceId": "src_a", "targetId": "sync1",     "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
     { "id": "d5", "sourceId": "sync1", "targetId": "sync2",     "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "d6", "sourceId": "sync2", "targetId": "q_ok",      "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false }
+    { "id": "d6", "sourceId": "sync2", "targetId": "q_ok",      "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+
+    { "id": "x1", "sourceId": "rcv_b_bad", "targetId": "g_diff", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "x2", "sourceId": "sync2",     "targetId": "g_diff", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "x3", "sourceId": "g_diff",    "targetId": "diff_out", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false }
   ]
 }

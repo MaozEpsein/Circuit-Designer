@@ -3613,14 +3613,14 @@ const EXAMPLES = [
   {
     id: 'pipeline-demo-elastic',
     title: '3. Elastic Pipeline — valid/ready + LIP',
-    desc: 'Two-stage pipeline with HANDSHAKE components wiring valid/ready into each PIPE_REG STALL pin. Toggle VALID and READY inputs to pause or release the pipeline. The PIPE panel flags both stages as elastic (yellow E badge), shows S (stall) status live, and runs the LIP checker (unregistered V/R, dangling S, V\u2192R combinational deadlock). Canonical back-pressure template.',
+    desc: 'Two-stage pipeline with HANDSHAKE components wiring valid/ready into each PIPE_REG STALL pin. The 7-cycle stepped script walks through every elastic situation: c1-2 normal flow (V=1, R=1), c3-4 upstream BUBBLE (V=0 \u2014 no data offered), c5 downstream STALL (R=0 \u2014 sink full), c6-7 back to flow. The FIRED output (= V AND R) lights only on cycles where a real transfer happens \u2014 gaps in its waveform mark every bubble and stall. The PIPE panel flags both stages as elastic (yellow E badge), shows S (stall) status live, and runs the LIP checker.',
     tags: ['pipeline', 'elastic', 'HANDSHAKE', 'LIP', 'stall', 'back-pressure'],
     file: 'examples/circuits/pipeline-demo-elastic.json',
   },
   {
     id: 'pipeline-demo-cdc',
     title: '4. Multi-Clock + CDC',
-    desc: 'Two CLOCK sources (clkA, clkB) feeding stateful flops in separate domains. A source PIPE on clkA fans out to two receivers on clkB: one single flop (WARN — depth 1) and one 2-flop synchronizer chain (OK — depth 2). The CDC CROSSINGS section reports both with sync-depth badges. Demonstrates cross-domain data-path analysis and the 2-flop synchronizer pattern.',
+    desc: 'Two CLOCK sources (clkA, clkB) and a toggling data input. The same value crosses to clkB via two paths: BAD = single flop on clkB (rcvB), GOOD = 2-flop synchronizer (sync1 → sync2). The DIFFER output (= Q_bad XOR Q_ok) lights every cycle the two paths disagree — visual proof that the unsynced path drifts off the synchronized one. The CDC CROSSINGS section also reports both crossings with sync-depth badges. NOTE: this is a logical simulator and does not model true metastability — what you see is the structural NEED for the 2-flop synchronizer (eliminating cross-domain skew), not the physical metastability event.',
     tags: ['pipeline', 'cdc', 'clock-domain', 'synchronizer', 'multi-clock'],
     file: 'examples/circuits/pipeline-demo-cdc.json',
   },

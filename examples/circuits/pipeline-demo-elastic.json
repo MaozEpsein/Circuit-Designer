@@ -1,8 +1,9 @@
 {
+  "_comment": "Elastic pipeline / latency-insensitive (LIP) demo. The point of valid/ready handshaking is that data only advances when BOTH sides agree (VALID=1 from upstream means 'I have data', READY=1 from downstream means 'I can take data'). The FIRED output lights only when both are high — that's the cycle a real transfer happens. STEP through the 7-cycle script: c1-2 normal flow (FIRED=1), c3-4 upstream bubble (VALID=0, FIRED=0), c5 downstream stall (READY=0, FIRED=0), c6-7 back to flow. The stalls and bubbles are visible as gaps in the FIRED waveform.",
   "nodes": [
-    { "type": "INPUT",    "x": -520, "y": -40, "fixedValue": 1, "label": "DATA",  "id": "data_in" },
-    { "type": "INPUT",    "x": -520, "y":  60, "fixedValue": 1, "label": "VALID", "id": "valid_in" },
-    { "type": "INPUT",    "x": -520, "y": 160, "fixedValue": 1, "label": "READY", "id": "ready_in" },
+    { "type": "INPUT",    "x": -520, "y": -40, "fixedValue": 1, "stepValues": [1, 0, 0, 0, 1, 0, 1], "label": "DATA",  "id": "data_in" },
+    { "type": "INPUT",    "x": -520, "y":  60, "fixedValue": 1, "stepValues": [1, 1, 0, 0, 1, 1, 1], "label": "VALID", "id": "valid_in" },
+    { "type": "INPUT",    "x": -520, "y": 160, "fixedValue": 1, "stepValues": [1, 1, 1, 0, 0, 1, 1], "label": "READY", "id": "ready_in" },
 
     { "type": "HANDSHAKE","x": -280, "y": 110, "label": "HS1",   "pipelineRole": "control", "id": "hs_1" },
 
@@ -13,6 +14,9 @@
     { "type": "HANDSHAKE","x":   60, "y": 110, "label": "HS2",   "pipelineRole": "control", "id": "hs_2" },
 
     { "type": "PIPE_REG", "x":   60, "y": -40, "channels": 1, "pipelineRole": "register", "stage": null, "label": "PIPE2", "id": "p2" },
+
+    { "type": "GATE_SLOT","x":  240, "y":  60, "gate": "AND",   "label": "FIRED?", "id": "g_fired" },
+    { "type": "OUTPUT",   "x":  420, "y":  60, "targetValue": 0, "sandbox": true, "label": "FIRED", "id": "fired_out" },
 
     { "type": "OUTPUT",   "x":  260, "y": -40, "targetValue": 0, "sandbox": true, "label": "Q", "id": "q_out" },
 
@@ -34,6 +38,10 @@
     { "id": "wr2", "sourceId": "ready_in", "targetId": "hs_2", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "ready", "colorGroup": null, "isClockWire": false },
     { "id": "ws2", "sourceId": "hs_2",     "targetId": "p2",   "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "stall", "colorGroup": null, "isClockWire": false },
     { "id": "wck2","sourceId": "clk",     "targetId": "p2",   "targetInputIndex": 3, "sourceOutputIndex": 0, "waypoints": [], "netName": "",      "colorGroup": null, "isClockWire": true  },
+
+    { "id": "wfa", "sourceId": "valid_in", "targetId": "g_fired", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "wfb", "sourceId": "ready_in", "targetId": "g_fired", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "wfo", "sourceId": "g_fired", "targetId": "fired_out", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
 
     { "id": "wo",  "sourceId": "p2",       "targetId": "q_out","targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "",      "colorGroup": null, "isClockWire": false }
   ]
