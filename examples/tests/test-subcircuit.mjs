@@ -7,20 +7,12 @@
 //   - createInstance returns deep-cloned, mutually independent objects.
 //   - End-to-end combinational sub-circuit (AND) wired into outer scene.
 //   - End-to-end sequential sub-circuit (D-FF) — internal state evolves
-//     correctly with the standard "toggle external CLK between
-//     evaluate() calls" pattern.
+//     correctly across rising edges and HOLDS its value when CLK is
+//     held high (same contract as a primary FF outside the
+//     sub-circuit — see section 8 for the explicit equivalence test).
 //   - Two instances of the same definition keep isolated _subFfStates.
 //   - Mutating one instance's internal nodes does not leak to another.
 //   - serialize / deserialize round-trip.
-//
-// Note on clock semantics: the engine's SUB_CIRCUIT eval pumps the
-// internal CLK low-then-actual on every outer evaluate() call (to
-// guarantee a fresh prevClk for edge detection). This means callers
-// must follow the standard "drop external CLK to 0 between rising
-// edges" pattern; calling evaluate() twice while holding external
-// CLK=1 will trigger TWO inner edges. Every test here uses the
-// standard toggle pattern, which is how all production demos drive
-// their clocks.
 //
 // Run:  node examples/tests/test-subcircuit.mjs
 
@@ -212,6 +204,9 @@ console.log('\n[6] Two D-FF instances — independent _subFfStates');
     W(d2.id, i2.id, 0), W(ck.id, i2.id, 1, 0, { isClockWire: true }), W(i2.id, o2.id, 0, 0),
   ];
   const ffs = new Map();
+  // Standard contract: first evaluate with CLK=0 to seed prevClk
+  // before driving any rising edges (same as every primary-FF demo).
+  evaluate([d1, d2, ck, i1, i2, o1, o2], wires, ffs, 0);
   function tick() {
     ck.value = 1; const r = evaluate([d1, d2, ck, i1, i2, o1, o2], wires, ffs, 0);
     ck.value = 0; evaluate([d1, d2, ck, i1, i2, o1, o2], wires, ffs, 0);
@@ -250,6 +245,54 @@ console.log('\n[7] serialize → deserialize round-trip');
   const r = evaluate([eA, eB, inst, eOut], wires, new Map(), 0);
   check('instance from deserialized def still computes 1 AND 1 = 1',
         r.nodeValues.get(eOut.id) === 1);
+}
+
+// ── 8. SUB_CIRCUIT FF must behave identically to inlined FF ───
+// A clocked sub-circuit must NOT re-latch on every outer evaluate().
+// It should latch exactly once per external 0→1 transition of its
+// CLK input — same contract as a primary FF outside the sub-circuit.
+console.log('\n[8] Inlined-FF equivalence — multiple evaluate() with held CLK does NOT re-latch');
+{
+  const reg = new SubCircuitRegistry();
+  reg.define('dff', ...Object.values(buildDffDef()));
+  reset();
+  const inst = reg.createInstance('dff', 0, 0, 'sub');
+  const eD   = mk('INPUT', { fixedValue: 1, label: 'eD' });
+  const eClk = mk('CLOCK', { value: 0 });
+  const eOut = mk('OUTPUT', { label: 'eOUT' });
+  const wires = [
+    W(eD.id, inst.id, 0),
+    W(eClk.id, inst.id, 1, 0, { isClockWire: true }),
+    W(inst.id, eOut.id, 0, 0),
+  ];
+  const ffs = new Map();
+  // Setup the FF with D=1 captured on a real 0→1 edge.
+  evaluate([eD, eClk, inst, eOut], wires, ffs, 0);   // CLK=0
+  eClk.value = 1;
+  let r = evaluate([eD, eClk, inst, eOut], wires, ffs, 0);   // CLK=1, edge → latch D=1
+  check('after first 0→1 edge with D=1: Q = 1', r.nodeValues.get(eOut.id) === 1);
+
+  // Now hold CLK=1 and change D. The FF MUST hold its old value
+  // because there's no new edge — same as a primary D-FF would.
+  eD.fixedValue = 0;
+  r = evaluate([eD, eClk, inst, eOut], wires, ffs, 0);
+  check('hold CLK=1, D dropped to 0, eval again → Q stays 1 (no edge)',
+        r.nodeValues.get(eOut.id) === 1);
+  r = evaluate([eD, eClk, inst, eOut], wires, ffs, 0);
+  check('hold CLK=1, eval third time → Q still 1',
+        r.nodeValues.get(eOut.id) === 1);
+
+  // Drop CLK to 0 (still no edge for rising-edge FF).
+  eClk.value = 0;
+  r = evaluate([eD, eClk, inst, eOut], wires, ffs, 0);
+  check('CLK 1→0 with D=0 → Q still 1 (only rising edges latch)',
+        r.nodeValues.get(eOut.id) === 1);
+
+  // Now a real 0→1 transition with D=0 should finally latch the new value.
+  eClk.value = 1;
+  r = evaluate([eD, eClk, inst, eOut], wires, ffs, 0);
+  check('next genuine 0→1 edge with D=0 → Q = 0',
+        r.nodeValues.get(eOut.id) === 0);
 }
 
 // ── Summary ───────────────────────────────────────────────────

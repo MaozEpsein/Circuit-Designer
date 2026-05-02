@@ -683,26 +683,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           }
         };
 
-        // Find CLK inputs (by label) to simulate edges
-        const clkIndices = subInputDefs
-          .map((d, i) => d.label === 'CLK' ? i : -1)
-          .filter(i => i >= 0);
-
-        let subResult;
-        if (clkIndices.length > 0) {
-          // Phase A: evaluate with CLK=0 (set prevClk)
-          const overrides0 = {};
-          clkIndices.forEach(ci => overrides0[ci] = 0);
-          setInputs(overrides0);
-          evaluate(sc.nodes, sc.wires, node._subFfStates, stepCount);
-
-          // Phase B: evaluate with actual CLK value (may trigger edge)
-          setInputs(null);
-          subResult = evaluate(sc.nodes, sc.wires, node._subFfStates, stepCount);
-        } else {
-          setInputs(null);
-          subResult = evaluate(sc.nodes, sc.wires, node._subFfStates, stepCount);
-        }
+        // Inject the external CLK values directly and run the
+        // inner scene once. The inner FFs maintain their own
+        // prevClkValue across calls (via node._subFfStates), so
+        // an internal rising edge fires exactly when the external
+        // CLK actually transitions 0→1 — same contract as a
+        // primary FF outside the sub-circuit. (An earlier version
+        // forced an internal CLK=0 pre-pulse on every outer
+        // evaluate(), which made any sub-circuit FF re-latch
+        // every cycle the external CLK was held high.)
+        setInputs(null);
+        const subResult = evaluate(sc.nodes, sc.wires, node._subFfStates, stepCount);
 
         const subOutputDefs = node.subOutputs || [];
         for (let i = 0; i < subOutputDefs.length; i++) {
