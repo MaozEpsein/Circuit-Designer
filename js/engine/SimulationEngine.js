@@ -494,11 +494,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           if (ways >= 2) {
             const sets = Math.max(1, Math.floor(N / ways));
             ms.sets = Array.from({ length: sets }, () =>
-              Array.from({ length: ways }, () => ({ tag: null, valid: 0, data: 0, lru: 0 }))
+              Array.from({ length: ways }, () => ({ tag: null, valid: 0, data: 0, lru: 0, dirty: 0 }))
             );
             ms.lruClock = 0;
           } else {
-            ms.lines = Array.from({ length: N }, () => ({ tag: null, valid: 0, data: 0 }));
+            ms.lines = Array.from({ length: N }, () => ({ tag: null, valid: 0, data: 0, dirty: 0 }));
           }
           ms.stats = { hits: 0, misses: 0 };
         }
@@ -618,10 +618,15 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         nodeValues.set(id + '__out2', miss);                              // MISS
         nodeValues.set(id + '__out3', addr);                              // MEM_ADDR
         nodeValues.set(id + '__out4', dataInCpu & dMask);                 // MEM_DATA_OUT
-        // Drive RAM only on a miss-read or any write. A read hit must
-        // leave MEM_RE=0 so the demo can visually distinguish the two.
-        nodeValues.set(id + '__out5', (re && !hit) ? 1 : 0);              // MEM_RE
-        nodeValues.set(id + '__out6', we ? 1 : 0);                        // MEM_WE
+        // MEM_RE rises on a read miss (always) and on a write miss in
+        // write-back policy (write-allocate needs to fetch the line).
+        // MEM_WE rises on every write under write-through; under
+        // write-back, writes stay in the cache and only escape on
+        // eviction of a dirty line (handled in Phase 4c2.5 via direct
+        // RAM mutation, since the bus is busy with the new fill).
+        const isWB = node.writePolicy === 'write-back';
+        nodeValues.set(id + '__out5', ((re || (we && isWB)) && !hit) ? 1 : 0);  // MEM_RE
+        nodeValues.set(id + '__out6', (we && !isWB) ? 1 : 0);                   // MEM_WE
         value = dataOut;
       }
       // IR: decode stored instruction into fields
@@ -1669,6 +1674,20 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     // pass above, so MEM_DATA_IN reflects the real value coming back
     // from the layer below this cycle. Gated on the rising CLK edge so
     // each access mutates state exactly once per real bus cycle.
+    // Helper: locate the RAM (or downstream cache) wired to this cache's
+    // MEM_ADDR output — needed for write-back eviction, which mutates
+    // the next layer's storage directly (the bus is busy with the
+    // refill so we cannot drive a real bus writeback in the same cycle).
+    const _findConnectedMem = (cacheId) => {
+      for (const n of nodes) {
+        if (n.type !== 'RAM' && n.type !== 'CACHE') continue;
+        const slots = inputs.get(n.id) || [];
+        for (const s of slots) {
+          if (s.sourceId === cacheId && (s.wire.sourceOutputIndex || 0) === 3) return n;
+        }
+      }
+      return null;
+    };
     for (const node of nodes) {
       if (node.type !== 'CACHE') continue;
       const id = node.id;
@@ -1740,22 +1759,55 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       // edge gate makes this idempotent.
       if (!isRisingEdge || !isAccess) continue;
 
+      const isWriteBack = node.writePolicy === 'write-back';
+      // Write-back eviction: when a dirty line is replaced, push its
+      // value to the next memory layer. We mutate that layer directly
+      // (RAM.memory or downstream CACHE.lines/sets) because the wire
+      // bus is occupied by the refill. Counted in stats.writebacks.
+      const _writeback = (oldTag, oldIdx, oldData, oldDirty) => {
+        if (!isWriteBack || !oldDirty) return;
+        if (!ms.connectedMemId) {
+          const mem = _findConnectedMem(id);
+          if (mem) ms.connectedMemId = mem.id;
+        }
+        if (!ms.connectedMemId) return;
+        // Reconstruct the address: addr = (tag << indexBits) | idx.
+        // For sets > 1: indexBits = log2(sets); idx = setIdx.
+        // For direct: indexBits = log2(N); idx = lineIdx.
+        // For fully-assoc (sets=1, indexBits=0): addr = tag.
+        let addrBack;
+        if (isSetAssoc) {
+          const sets2 = ms.sets.length;
+          const ib2   = sets2 > 1 ? Math.max(0, Math.ceil(Math.log2(sets2))) : 0;
+          addrBack = sets2 > 1 ? ((oldTag << ib2) | oldIdx) : oldTag;
+        } else {
+          const ib2 = Math.max(1, Math.ceil(Math.log2(node.lines || 4)));
+          addrBack = (oldTag << ib2) | oldIdx;
+        }
+        const memMs = ffStates.get(ms.connectedMemId);
+        if (!memMs) return;
+        if (memMs.memory) {
+          memMs.memory[addrBack] = oldData & dMask;
+        }
+        ms.stats.writebacks = (ms.stats.writebacks || 0) + 1;
+      };
+
       if (isSetAssoc) {
         ms.lruClock = (ms.lruClock || 0) + 1;
         if (hit) {
           ms.stats.hits++;
-          // Touch the matching way; refresh data on write hit (write-through).
           for (const w of set) {
             if (w.valid === 1 && w.tag === tag) {
               w.lru = ms.lruClock;
-              if (we) w.data = dataInCpu & dMask;
+              if (we) {
+                w.data = dataInCpu & dMask;
+                if (isWriteBack) w.dirty = 1;
+              }
               break;
             }
           }
         } else {
           ms.stats.misses++;
-          // Pick eviction victim: any invalid way first, else the way
-          // with the smallest LRU counter (least-recently-used).
           let victim = set.find(w => w.valid === 0);
           if (!victim) {
             victim = set[0];
@@ -1763,25 +1815,31 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
               if (set[k].lru < victim.lru) victim = set[k];
             }
           }
+          // Write back the evicted line BEFORE overwriting it.
+          if (victim.valid === 1) _writeback(victim.tag, setIdx, victim.data, victim.dirty);
           victim.tag   = tag;
           victim.valid = 1;
           victim.data  = (we ? dataInCpu : memDataIn) & dMask;
           victim.lru   = ms.lruClock;
+          victim.dirty = (we && isWriteBack) ? 1 : 0;
         }
       } else {
         if (hit) {
           ms.stats.hits++;
+          if (we) {
+            ms.lines[idx].data = dataInCpu & dMask;
+            if (isWriteBack) ms.lines[idx].dirty = 1;
+          }
         } else {
           ms.stats.misses++;
+          const old = ms.lines[idx];
+          if (old && old.valid === 1) _writeback(old.tag, idx, old.data, old.dirty);
           ms.lines[idx] = {
             tag,
             valid: 1,
             data: (we ? dataInCpu : memDataIn) & dMask,
+            dirty: (we && isWriteBack) ? 1 : 0,
           };
-        }
-        // Write-through on a write hit: line stays valid but data updates.
-        if (hit && we) {
-          ms.lines[idx].data = dataInCpu & dMask;
         }
       }
 

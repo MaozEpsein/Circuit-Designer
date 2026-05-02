@@ -1,0 +1,79 @@
+{
+  "_comment": "Layer 7 demo — write-back vs write-through. Two caches sharing the same write-heavy trace: WT (write-through) and WB (write-back). The trace writes to address 0 eight times in a row, then reads it. With write-through, every CPU write produces a RAM write (MEM_WE pulses 8 times). With write-back, the writes stay in the cache (line marked dirty), and RAM stays untouched until a future eviction. Open the Pipeline panel CACHE (LIVE) section: hits/misses are identical for both, but only the WB cache reports stats.writebacks (visible by hovering Memory Inspector — D = dirty bit). Trace driver: PC counts 0..7, ROM emits the constant address 0 with WE asserted to make every step a write to addr 0 with the cycle index as data.",
+  "nodes": [
+    { "type": "CLOCK", "id": "clk", "x": -700, "y":  280, "value": 0 },
+    { "type": "INPUT", "id": "en",  "x": -700, "y":  140, "fixedValue": 1, "label": "EN" },
+    { "type": "INPUT", "id": "rst", "x": -700, "y":  200, "fixedValue": 0, "label": "RST" },
+
+    { "type": "PC",   "id": "pc",   "x": -540, "y":  200, "bitWidth": 4, "label": "PC" },
+
+    { "type": "ROM",  "id": "rom_addr",  "x": -360, "y":   40,
+      "addrBits": 4, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0,
+                  "8": 0 },
+      "label": "ADDR-FEED" },
+    { "type": "ROM",  "id": "rom_data",  "x": -360, "y":  160,
+      "addrBits": 4, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 11, "1": 22, "2": 33, "3": 44, "4": 55, "5": 66, "6": 77, "7": 88,
+                  "8": 99 },
+      "label": "DATA-FEED" },
+    { "type": "ROM",  "id": "rom_we",    "x": -360, "y":  280,
+      "addrBits": 4, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 1, "1": 1, "2": 1, "3": 1, "4": 1, "5": 1, "6": 1, "7": 1,
+                  "8": 0 },
+      "label": "WE-FEED" },
+
+    { "type": "INPUT", "id": "re",  "x": -700, "y":    0, "fixedValue": 1, "label": "RE" },
+
+    { "type": "CACHE", "id": "c_wt", "x":  -60, "y":   20,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "direct", "writePolicy": "write-through", "label": "WT" },
+    { "type": "CACHE", "id": "c_wb", "x":  -60, "y":  220,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "direct", "writePolicy": "write-back", "label": "WB" },
+
+    { "type": "RAM",   "id": "ram_wt", "x":  280, "y":   20,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 0 }, "label": "RAM-WT" },
+    { "type": "RAM",   "id": "ram_wb", "x":  280, "y":  220,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 0 }, "label": "RAM-WB" },
+
+    { "type": "OUTPUT", "id": "out_wt_we", "x":  140, "y":  -20, "label": "WT_MEM_WE" },
+    { "type": "OUTPUT", "id": "out_wb_we", "x":  140, "y":  180, "label": "WB_MEM_WE" }
+  ],
+  "wires": [
+    { "id": "w1",  "sourceId": "en",  "targetId": "pc", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w2",  "sourceId": "rst", "targetId": "pc", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w3",  "sourceId": "clk", "targetId": "pc", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w4a", "sourceId": "pc",  "targetId": "rom_addr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w4b", "sourceId": "pc",  "targetId": "rom_data", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w4c", "sourceId": "pc",  "targetId": "rom_we",   "targetInputIndex": 0, "sourceOutputIndex": 0 },
+
+    { "id": "w6a",  "sourceId": "rom_addr", "targetId": "c_wt", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7a",  "sourceId": "rom_data", "targetId": "c_wt", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8a",  "sourceId": "rom_we",   "targetId": "c_wt", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9a",  "sourceId": "re",       "targetId": "c_wt", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10a", "sourceId": "clk",      "targetId": "c_wt", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w11a", "sourceId": "c_wt", "targetId": "ram_wt", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12a", "sourceId": "c_wt", "targetId": "ram_wt", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13a", "sourceId": "c_wt", "targetId": "ram_wt", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14a", "sourceId": "c_wt", "targetId": "ram_wt", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15a", "sourceId": "clk",  "targetId": "ram_wt", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w16a", "sourceId": "ram_wt", "targetId": "c_wt", "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w6b",  "sourceId": "rom_addr", "targetId": "c_wb", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7b",  "sourceId": "rom_data", "targetId": "c_wb", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8b",  "sourceId": "rom_we",   "targetId": "c_wb", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9b",  "sourceId": "re",       "targetId": "c_wb", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10b", "sourceId": "clk",      "targetId": "c_wb", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w11b", "sourceId": "c_wb", "targetId": "ram_wb", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12b", "sourceId": "c_wb", "targetId": "ram_wb", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13b", "sourceId": "c_wb", "targetId": "ram_wb", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14b", "sourceId": "c_wb", "targetId": "ram_wb", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15b", "sourceId": "clk",  "targetId": "ram_wb", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w16b", "sourceId": "ram_wb", "targetId": "c_wb", "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w20", "sourceId": "c_wt", "targetId": "out_wt_we", "targetInputIndex": 0, "sourceOutputIndex": 6 },
+    { "id": "w21", "sourceId": "c_wb", "targetId": "out_wb_we", "targetInputIndex": 0, "sourceOutputIndex": 6 }
+  ]
+}

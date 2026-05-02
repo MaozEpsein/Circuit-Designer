@@ -144,7 +144,7 @@ export function createComponent(type, x, y) {
     // DATA_OUT(0), HIT(1), MISS(2), MEM_ADDR(3), MEM_DATA_OUT(4),
     // MEM_RE(5), MEM_WE(6). Layer 0 is a pass-through stub.
     case COMPONENT_TYPES.CACHE:
-      return { ...base, lines: 4, dataBits: 8, addrBits: 8, mapping: 'direct', ways: 2, label: 'CACHE' };
+      return { ...base, lines: 4, dataBits: 8, addrBits: 8, mapping: 'direct', ways: 2, writePolicy: 'write-through', label: 'CACHE' };
     case COMPONENT_TYPES.REG_FILE:
       return { ...base, regCount: 8, dataBits: 8, initialRegs: null, label: 'RF' };
     case COMPONENT_TYPES.FIFO:

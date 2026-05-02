@@ -859,6 +859,12 @@ function _updatePropsPanel() {
         waysInp.value = String(node.ways || 2);
       }
     }
+    const wpRow = document.getElementById('prop-cache-wp-row');
+    const wpSel = document.getElementById('prop-cache-wp-select');
+    if (wpRow && wpSel) {
+      wpRow.style.display = 'flex';
+      wpSel.value = node.writePolicy || 'write-through';
+    }
   } else if (node.type === 'REG_FILE' || node.type === 'REG_FILE_DP' || node.type === 'FIFO' || node.type === 'STACK') {
     propMembitRow.style.display = '';
     document.getElementById('prop-membit-label').textContent = 'Data Bits';
@@ -877,9 +883,11 @@ function _updatePropsPanel() {
     const linesRow = document.getElementById('prop-cache-lines-row');
     const mapRow   = document.getElementById('prop-cache-mapping-row');
     const waysRow  = document.getElementById('prop-cache-ways-row');
+    const wpRow    = document.getElementById('prop-cache-wp-row');
     if (linesRow) linesRow.style.display = 'none';
     if (mapRow)   mapRow.style.display   = 'none';
     if (waysRow)  waysRow.style.display  = 'none';
+    if (wpRow)    wpRow.style.display    = 'none';
   }
   if (isMux) {
     propSizeLabel.textContent = 'Inputs';
@@ -959,6 +967,7 @@ function _openCacheInfoModal() {
         <li><b style="color:#9cf">Lines</b> — total number of cache slots (capacity).</li>
         <li><b style="color:#9cf">Mapping</b> — how addresses are assigned to slots: <code>direct</code>, <code>set-associative</code>, or <code>fully-associative</code>.</li>
         <li><b style="color:#9cf">Ways</b> — only for set-associative: how many slots each address can land in.</li>
+        <li><b style="color:#9cf">Write Policy</b> — <code>write-through</code>: every CPU write goes to cache + RAM together. <code>write-back</code>: writes stay in the cache (line marked <span style="color:#f88">D</span>irty); RAM is only updated when a dirty line is evicted. Write-back saves bus traffic on write-heavy workloads.</li>
       </ul>
       <p style="margin-top:14px;color:#9cf"><b>Example with Lines = 16:</b></p>
       <table style="width:100%;border-collapse:collapse;margin-top:6px">
@@ -1004,6 +1013,14 @@ document.getElementById('prop-cache-lines-input')?.addEventListener('change', ()
   // Refresh the Ways input's max attribute live.
   const waysInp = document.getElementById('prop-cache-ways-input');
   if (waysInp) waysInp.setAttribute('max', String(v));
+});
+
+document.getElementById('prop-cache-wp-select')?.addEventListener('change', () => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'CACHE') return;
+  const val = document.getElementById('prop-cache-wp-select').value;
+  state.ffStates?.delete(node.id);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { writePolicy: val }));
 });
 
 document.getElementById('prop-cache-ways-input')?.addEventListener('change', () => {
@@ -2157,14 +2174,14 @@ function _refreshMemInspector() {
       html += `<div class="mem-ram-table" style="grid-column:1/-1;">`;
       html += `<div class="mem-ram-cell" style="grid-column:1/-1;font-size:11px;">hits ${stats.hits} · misses ${stats.misses} · hit-rate ${rate}%</div>`;
       if (ms.sets) {
-        // 2-way set-associative: show set | way | tag | valid | data | lru.
         for (let s = 0; s < ms.sets.length; s++) {
           for (let w = 0; w < ms.sets[s].length; w++) {
             const ln = ms.sets[s][w];
             const tag = ln.tag === null ? '—' : ln.tag;
             const data = _formatMemValue(ln.data ?? 0, bits);
             const active = ln.valid ? ' mem-ram-cell-active' : '';
-            html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">S${s}W${w}</span>tag=${tag} v=${ln.valid?1:0} d=${data} lru=${ln.lru||0}</div>`;
+            const dirty = ln.dirty ? ' <span style="color:#f88">D</span>' : '';
+            html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">S${s}W${w}</span>tag=${tag} v=${ln.valid?1:0}${dirty} d=${data} lru=${ln.lru||0}</div>`;
           }
         }
       } else {
@@ -2173,7 +2190,8 @@ function _refreshMemInspector() {
           const tag = ln.tag === null ? '—' : ln.tag;
           const data = _formatMemValue(ln.data ?? 0, bits);
           const active = ln.valid ? ' mem-ram-cell-active' : '';
-          html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">L${i}</span>tag=${tag} v=${ln.valid?1:0} d=${data}</div>`;
+          const dirty = ln.dirty ? ' <span style="color:#f88">D</span>' : '';
+          html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">L${i}</span>tag=${tag} v=${ln.valid?1:0}${dirty} d=${data}</div>`;
         }
       }
       html += `</div>`;
@@ -3721,6 +3739,13 @@ const EXAMPLES = [
     desc: 'Two CACHE components nested in series: a small fast L1 (4 lines, direct-mapped) and a larger L2 (16 lines, fully-associative) sitting between L1 and RAM. Trace cycles 6 distinct addresses repeatedly. L1 thrashes (every access is a miss in 4 lines), but L2 absorbs the working set after the first 6 compulsory misses, so RAM is barely touched. Open the Pipeline panel CACHE (LIVE) to compare the L1 vs L2 hit rates side by side.',
     tags: ['cache', 'advanced', 'CACHE', 'hierarchy', 'L1', 'L2'],
     file: 'examples/circuits/cache-l1-l2-hierarchy.json',
+  },
+  {
+    id: 'cache-write-back-vs-through',
+    title: '7. Cache — write-back vs write-through',
+    desc: 'Two caches sharing the same write-heavy trace: WT (write-through) and WB (write-back). The trace writes 8 different values to address 0 in succession. With write-through, every CPU write also drives MEM_WE so RAM stays in sync each cycle. With write-back, the writes stay in the cache (line marked Dirty in Memory Inspector); RAM is only updated when a future eviction needs to spill the dirty line. Watch the WT_MEM_WE / WB_MEM_WE LEDs on the canvas — WT pulses every cycle, WB stays low.',
+    tags: ['cache', 'advanced', 'CACHE', 'write-back', 'write-through', 'dirty'],
+    file: 'examples/circuits/cache-write-back-vs-through.json',
   },
 ];
 
