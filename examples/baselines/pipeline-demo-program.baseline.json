@@ -1,0 +1,26 @@
+{
+  "file": "examples/circuits/pipeline-demo-program.json",
+  "cycles": 80,
+  "RF": [
+    0,
+    2,
+    3,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": null,
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": null
+}

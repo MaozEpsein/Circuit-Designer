@@ -1,0 +1,39 @@
+{
+  "file": "examples/circuits/cache-l1-l2-hierarchy.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": {
+    "0": 100,
+    "4": 200,
+    "8": 80,
+    "12": 120,
+    "16": 160,
+    "20": 220
+  },
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": [
+    {
+      "id": "l1",
+      "label": "L1 (4 lines)",
+      "hits": 0,
+      "misses": 79,
+      "miss3C": {
+        "compulsory": 6,
+        "capacity": 57,
+        "conflict": 16
+      }
+    },
+    {
+      "id": "l2",
+      "label": "L2 (16 lines)",
+      "hits": 73,
+      "misses": 6,
+      "miss3C": {
+        "compulsory": 6,
+        "capacity": 0,
+        "conflict": 0
+      }
+    }
+  ]
+}

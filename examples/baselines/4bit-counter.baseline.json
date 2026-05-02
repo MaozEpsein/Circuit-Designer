@@ -1,0 +1,9 @@
+{
+  "file": "examples/circuits/4bit-counter.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": null,
+  "PC": null,
+  "branchFlushes": null,
+  "cacheStats": null
+}

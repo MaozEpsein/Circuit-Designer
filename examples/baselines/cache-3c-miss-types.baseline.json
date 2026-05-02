@@ -1,0 +1,60 @@
+{
+  "file": "examples/circuits/cache-3c-miss-types.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": {
+    "0": 100,
+    "4": 200,
+    "8": 80,
+    "12": 120,
+    "16": 160
+  },
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": [
+    {
+      "id": "c_dir",
+      "label": "DIRECT-4",
+      "hits": 0,
+      "misses": 79,
+      "miss3C": {
+        "compulsory": 5,
+        "capacity": 47,
+        "conflict": 27
+      }
+    },
+    {
+      "id": "c_sa2",
+      "label": "2-WAY-4",
+      "hits": 27,
+      "misses": 52,
+      "miss3C": {
+        "compulsory": 5,
+        "capacity": 47,
+        "conflict": 0
+      }
+    },
+    {
+      "id": "c_fa4",
+      "label": "FULLY-4",
+      "hits": 27,
+      "misses": 52,
+      "miss3C": {
+        "compulsory": 5,
+        "capacity": 47,
+        "conflict": 0
+      }
+    },
+    {
+      "id": "c_fa8",
+      "label": "FULLY-8",
+      "hits": 74,
+      "misses": 5,
+      "miss3C": {
+        "compulsory": 5,
+        "capacity": 0,
+        "conflict": 0
+      }
+    }
+  ]
+}

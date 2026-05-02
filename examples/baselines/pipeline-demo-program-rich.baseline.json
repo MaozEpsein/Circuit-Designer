@@ -1,0 +1,9 @@
+{
+  "file": "examples/circuits/pipeline-demo-program-rich.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": null,
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": null
+}

@@ -1,0 +1,28 @@
+{
+  "file": "examples/circuits/mips-5stage-forwarding-demo.json",
+  "cycles": 80,
+  "RF": [
+    0,
+    0,
+    10,
+    20,
+    0,
+    30,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": {
+    "2": 100
+  },
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": null
+}

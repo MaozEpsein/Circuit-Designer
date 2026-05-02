@@ -1,0 +1,147 @@
+{
+  "file": "examples/circuits/simple-cpu.json",
+  "cycles": 80,
+  "RF": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": {},
+  "PC": 5,
+  "branchFlushes": [
+    {
+      "cycle": 5,
+      "pc": 5
+    },
+    {
+      "cycle": 6,
+      "pc": 6
+    },
+    {
+      "cycle": 10,
+      "pc": 5
+    },
+    {
+      "cycle": 11,
+      "pc": 6
+    },
+    {
+      "cycle": 15,
+      "pc": 5
+    },
+    {
+      "cycle": 16,
+      "pc": 6
+    },
+    {
+      "cycle": 20,
+      "pc": 5
+    },
+    {
+      "cycle": 21,
+      "pc": 6
+    },
+    {
+      "cycle": 25,
+      "pc": 5
+    },
+    {
+      "cycle": 26,
+      "pc": 6
+    },
+    {
+      "cycle": 30,
+      "pc": 5
+    },
+    {
+      "cycle": 31,
+      "pc": 6
+    },
+    {
+      "cycle": 35,
+      "pc": 5
+    },
+    {
+      "cycle": 36,
+      "pc": 6
+    },
+    {
+      "cycle": 40,
+      "pc": 5
+    },
+    {
+      "cycle": 41,
+      "pc": 6
+    },
+    {
+      "cycle": 45,
+      "pc": 5
+    },
+    {
+      "cycle": 46,
+      "pc": 6
+    },
+    {
+      "cycle": 50,
+      "pc": 5
+    },
+    {
+      "cycle": 51,
+      "pc": 6
+    },
+    {
+      "cycle": 55,
+      "pc": 5
+    },
+    {
+      "cycle": 56,
+      "pc": 6
+    },
+    {
+      "cycle": 60,
+      "pc": 5
+    },
+    {
+      "cycle": 61,
+      "pc": 6
+    },
+    {
+      "cycle": 65,
+      "pc": 5
+    },
+    {
+      "cycle": 66,
+      "pc": 6
+    },
+    {
+      "cycle": 70,
+      "pc": 5
+    },
+    {
+      "cycle": 71,
+      "pc": 6
+    },
+    {
+      "cycle": 75,
+      "pc": 5
+    },
+    {
+      "cycle": 76,
+      "pc": 6
+    }
+  ],
+  "cacheStats": null
+}

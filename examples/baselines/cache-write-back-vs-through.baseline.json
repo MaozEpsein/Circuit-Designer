@@ -1,0 +1,34 @@
+{
+  "file": "examples/circuits/cache-write-back-vs-through.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": {
+    "0": 88
+  },
+  "PC": 0,
+  "branchFlushes": null,
+  "cacheStats": [
+    {
+      "id": "c_wt",
+      "label": "WT",
+      "hits": 78,
+      "misses": 1,
+      "miss3C": {
+        "compulsory": 1,
+        "capacity": 0,
+        "conflict": 0
+      }
+    },
+    {
+      "id": "c_wb",
+      "label": "WB",
+      "hits": 78,
+      "misses": 1,
+      "miss3C": {
+        "compulsory": 1,
+        "capacity": 0,
+        "conflict": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "file": "examples/circuits/ram-readwrite.json",
+  "cycles": 80,
+  "RF": null,
+  "RAM": {
+    "3": 99
+  },
+  "PC": null,
+  "branchFlushes": null,
+  "cacheStats": null
+}
