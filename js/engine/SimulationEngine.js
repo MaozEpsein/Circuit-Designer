@@ -96,6 +96,71 @@ function _cacheWays(node, lines) {
 // is undefined.
 const _DEBUG = (typeof process !== 'undefined' && process.env && process.env.SIM_DEBUG === '1');
 
+// CACHE combinational evaluation — pure (no state mutation). Reads
+// inputs (ADDR, DATA, WE, RE, MEM_DATA_IN), looks up the cache lines/
+// sets, and writes DATA_OUT, HIT, MISS, MEM_ADDR, MEM_DATA_OUT,
+// MEM_RE, MEM_WE into nodeValues. Caller is responsible for calling
+// propagate(node.id) to push these to wireValues for downstream
+// consumers. Used by Phase 1's main DAG pass, by the new Phase 1.5
+// cascade settle (so PIPE_MEMWB latches the right value), and by the
+// existing Phase 4c2.5pre settle (so post-state-mutation outputs
+// reach Phase 4c3+ consumers).
+function _evalCacheCombinational(node, ms, inputs, nodeValues) {
+  const id = node.id;
+  const inputSlotsC = inputs.get(id);
+  const _readSlot = (s) => {
+    if (!s) return 0;
+    const outIdx = s.wire.sourceOutputIndex || 0;
+    const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
+    return nodeValues.get(k) ?? 0;
+  };
+  const addrSlot   = inputSlotsC.find(s => s.inputIndex === 0);
+  const dataSlotC  = inputSlotsC.find(s => s.inputIndex === 1);
+  const weSlot     = inputSlotsC.find(s => s.inputIndex === 2);
+  const reSlot     = inputSlotsC.find(s => s.inputIndex === 3);
+  const memDiSlot  = inputSlotsC.find(s => s.inputIndex === 5);
+  const addr      = _readSlot(addrSlot);
+  const dataInCpu = _readSlot(dataSlotC);
+  const we        = _readSlot(weSlot) ? 1 : 0;
+  const re        = _readSlot(reSlot) ? 1 : 0;
+  const memDataIn = _readSlot(memDiSlot);
+  const dMask     = _mask(node.dataBits || 8);
+  const N         = node.lines || 4;
+  const isAccess  = re || we;
+  let hit = 0, hitData = 0;
+  if (ms.sets) {
+    const sets      = ms.sets.length;
+    const indexBits = Math.max(0, Math.ceil(Math.log2(sets)));
+    const setIdx    = sets > 1 ? (addr & (sets - 1)) : 0;
+    const tag       = sets > 1 ? (addr >>> indexBits) : addr;
+    const set       = ms.sets[setIdx];
+    if (isAccess && set) {
+      for (const w of set) {
+        if (w.valid === 1 && w.tag === tag) { hit = 1; hitData = w.data; break; }
+      }
+    }
+  } else if (ms.lines) {
+    const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+    const idx       = addr & (N - 1);
+    const tag       = addr >>> indexBits;
+    const line      = ms.lines[idx];
+    if (isAccess && line && line.valid === 1 && line.tag === tag) {
+      hit = 1; hitData = line.data;
+    }
+  }
+  const miss    = (isAccess && !hit) ? 1 : 0;
+  const dataOut = hit ? (hitData & dMask) : (memDataIn & dMask);
+  const isWB    = node.writePolicy === 'write-back';
+  nodeValues.set(id,             dataOut);
+  nodeValues.set(id + '__out1',  hit);
+  nodeValues.set(id + '__out2',  miss);
+  nodeValues.set(id + '__out3',  addr);
+  nodeValues.set(id + '__out4',  dataInCpu & dMask);
+  nodeValues.set(id + '__out5',  ((re || (we && isWB)) && !hit) ? 1 : 0);  // MEM_RE
+  nodeValues.set(id + '__out6',  (we && !isWB) ? 1 : 0);                   // MEM_WE
+  return dataOut;
+}
+
 // Safe mask apply (avoids signed 32-bit issues with & operator)
 function _applyMask(val, bits) {
   if (bits >= 53) return val;
@@ -603,81 +668,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMaskAsync;
         value = ms.q ?? 0;
       }
-      // CACHE — Layer 1 direct-mapped lookup (combinational).
+      // CACHE — combinational lookup. Body factored into
+      // _evalCacheCombinational so Phase 1 + Phase 1.5 settle + Phase
+      // 4c2.5pre settle all share the exact same logic.
       // Pinout:
       //   In:  0=ADDR, 1=DATA(CPU→cache), 2=WE, 3=RE, 4=CLK, 5=MEM_DATA_IN
       //   Out: 0=DATA_OUT, 1=HIT, 2=MISS, 3=MEM_ADDR, 4=MEM_DATA_OUT,
       //        5=MEM_RE, 6=MEM_WE
-      // The lookup runs every Phase-1 pass — it's pure (no side effects).
-      // Side effects (fill line, increment counters) happen in Phase 4c2.5
-      // gated on the rising CLK edge so each access is counted exactly
-      // once per real bus cycle, not per evaluate() call.
+      // Side effects (fill line, increment counters) happen in Phase
+      // 4c2.5 gated on the rising CLK edge.
       if (node.type === 'CACHE') {
-        const inputSlotsC = inputs.get(id);
-        const _readSlotC = (s) => {
-          if (!s) return 0;
-          const outIdx = s.wire.sourceOutputIndex || 0;
-          const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
-          return nodeValues.get(k) ?? 0;
-        };
-        const addrSlot   = inputSlotsC.find(s => s.inputIndex === 0);
-        const dataSlotC  = inputSlotsC.find(s => s.inputIndex === 1);
-        const weSlot     = inputSlotsC.find(s => s.inputIndex === 2);
-        const reSlot     = inputSlotsC.find(s => s.inputIndex === 3);
-        const memDiSlot  = inputSlotsC.find(s => s.inputIndex === 5);
-        const addr      = _readSlotC(addrSlot);
-        const dataInCpu = _readSlotC(dataSlotC);
-        const we        = _readSlotC(weSlot) ? 1 : 0;
-        const re        = _readSlotC(reSlot) ? 1 : 0;
-        const memDataIn = _readSlotC(memDiSlot);
-        const dMask     = _mask(node.dataBits || 8);
-        const N         = node.lines || 4;
-        const isAccess  = re || we;
-        let hit = 0, hitData = 0;
-        if (ms.sets) {
-          // N-way set-associative (or fully-associative when sets===1):
-          // index over sets, scan all ways in the set for a tag match.
-          const sets      = ms.sets.length;
-          const indexBits = Math.max(0, Math.ceil(Math.log2(sets)));
-          const setIdx    = sets > 1 ? (addr & (sets - 1)) : 0;
-          const tag       = sets > 1 ? (addr >>> indexBits) : addr;
-          const set       = ms.sets[setIdx];
-          if (isAccess && set) {
-            for (const w of set) {
-              if (w.valid === 1 && w.tag === tag) { hit = 1; hitData = w.data; break; }
-            }
-          }
-        } else {
-          // Direct-mapped (Layer 1).
-          const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
-          const idx       = addr & (N - 1);
-          const tag       = addr >>> indexBits;
-          const line      = ms.lines && ms.lines[idx];
-          if (isAccess && line && line.valid === 1 && line.tag === tag) {
-            hit = 1; hitData = line.data;
-          }
-        }
-        const miss      = (isAccess && !hit) ? 1 : 0;
-        // On hit + read: serve from the cache line. On miss: pass the
-        // RAM-returned value through (Phase 4c2.5 will refresh DATA_OUT
-        // once RAM has actually settled). Writes always pass through to
-        // RAM as well (write-through).
-        const dataOut = hit ? (hitData & dMask) : (memDataIn & dMask);
-        nodeValues.set(id,             dataOut);                          // DATA_OUT
-        nodeValues.set(id + '__out1', hit);                               // HIT
-        nodeValues.set(id + '__out2', miss);                              // MISS
-        nodeValues.set(id + '__out3', addr);                              // MEM_ADDR
-        nodeValues.set(id + '__out4', dataInCpu & dMask);                 // MEM_DATA_OUT
-        // MEM_RE rises on a read miss (always) and on a write miss in
-        // write-back policy (write-allocate needs to fetch the line).
-        // MEM_WE rises on every write under write-through; under
-        // write-back, writes stay in the cache and only escape on
-        // eviction of a dirty line (handled in Phase 4c2.5 via direct
-        // RAM mutation, since the bus is busy with the new fill).
-        const isWB = node.writePolicy === 'write-back';
-        nodeValues.set(id + '__out5', ((re || (we && isWB)) && !hit) ? 1 : 0);  // MEM_RE
-        nodeValues.set(id + '__out6', (we && !isWB) ? 1 : 0);                   // MEM_WE
-        value = dataOut;
+        value = _evalCacheCombinational(node, ms, inputs, nodeValues);
       }
       // IR: decode stored instruction into fields
       if (node.type === 'IR') {
