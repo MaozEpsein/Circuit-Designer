@@ -79,6 +79,17 @@ function _mask(bits) {
   return (1 << bits) - 1;
 }
 
+// Resolve the associativity of a CACHE node. `direct` ⇒ 1 way (handled
+// via ms.lines). `set-assoc` ⇒ node.ways (default 2). `fully-assoc` ⇒
+// every line in one set. Legacy `set-assoc-2` is treated as ways=2.
+function _cacheWays(node, lines) {
+  const m = node.mapping;
+  if (m === 'fully-assoc') return Math.max(2, lines | 0);
+  if (m === 'set-assoc-2') return 2;
+  if (m === 'set-assoc')   return Math.max(2, (node.ways | 0) || 2);
+  return 1;
+}
+
 // Safe mask apply (avoids signed 32-bit issues with & operator)
 function _applyMask(val, bits) {
   if (bits >= 53) return val;
@@ -474,11 +485,21 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms = { q: 0, prevClkValue: null };
         if (node.type === 'RAM' || node.type === 'ROM') ms.memory = node.memory ? { ...node.memory } : {};
         if (node.type === 'CACHE') {
-          // Allocate cache lines + stats container. Layer 0 keeps these
-          // bookkeeping fields untouched; Layer 1 fills them with real
-          // tag/valid/data. Stats are a single object so the panel layer
-          // can mutate counters in place across cycles.
-          ms.lines = Array.from({ length: node.lines || 4 }, () => ({ tag: null, valid: 0, data: 0 }));
+          // Direct-mapped: ms.lines[N]. N-way set-associative or fully-
+          // associative: ms.sets[N/ways], each holding `ways` lines.
+          // LRU is a monotonically increasing counter touched on every
+          // hit/fill; evict the line with the smallest counter.
+          const N = node.lines || 4;
+          const ways = _cacheWays(node, N);
+          if (ways >= 2) {
+            const sets = Math.max(1, Math.floor(N / ways));
+            ms.sets = Array.from({ length: sets }, () =>
+              Array.from({ length: ways }, () => ({ tag: null, valid: 0, data: 0, lru: 0 }))
+            );
+            ms.lruClock = 0;
+          } else {
+            ms.lines = Array.from({ length: N }, () => ({ tag: null, valid: 0, data: 0 }));
+          }
           ms.stats = { hits: 0, misses: 0 };
         }
         if (node.type === 'COUNTER') ms.count = 0;
@@ -561,18 +582,37 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const memDataIn = _readSlotC(memDiSlot);
         const dMask     = _mask(node.dataBits || 8);
         const N         = node.lines || 4;
-        const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
-        const idx       = addr & (N - 1);
-        const tag       = addr >>> indexBits;
-        const line      = ms.lines && ms.lines[idx];
         const isAccess  = re || we;
-        const hit       = (isAccess && line && line.valid === 1 && line.tag === tag) ? 1 : 0;
+        let hit = 0, hitData = 0;
+        if (ms.sets) {
+          // N-way set-associative (or fully-associative when sets===1):
+          // index over sets, scan all ways in the set for a tag match.
+          const sets      = ms.sets.length;
+          const indexBits = Math.max(0, Math.ceil(Math.log2(sets)));
+          const setIdx    = sets > 1 ? (addr & (sets - 1)) : 0;
+          const tag       = sets > 1 ? (addr >>> indexBits) : addr;
+          const set       = ms.sets[setIdx];
+          if (isAccess && set) {
+            for (const w of set) {
+              if (w.valid === 1 && w.tag === tag) { hit = 1; hitData = w.data; break; }
+            }
+          }
+        } else {
+          // Direct-mapped (Layer 1).
+          const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+          const idx       = addr & (N - 1);
+          const tag       = addr >>> indexBits;
+          const line      = ms.lines && ms.lines[idx];
+          if (isAccess && line && line.valid === 1 && line.tag === tag) {
+            hit = 1; hitData = line.data;
+          }
+        }
         const miss      = (isAccess && !hit) ? 1 : 0;
         // On hit + read: serve from the cache line. On miss: pass the
         // RAM-returned value through (Phase 4c2.5 will refresh DATA_OUT
         // once RAM has actually settled). Writes always pass through to
         // RAM as well (write-through).
-        const dataOut = hit ? (line.data & dMask) : (memDataIn & dMask);
+        const dataOut = hit ? (hitData & dMask) : (memDataIn & dMask);
         nodeValues.set(id,             dataOut);                          // DATA_OUT
         nodeValues.set(id + '__out1', hit);                               // HIT
         nodeValues.set(id + '__out2', miss);                              // MISS
@@ -966,7 +1006,17 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       ms = { q: 0, prevClkValue: null };
       if (node.type === 'RAM' || node.type === 'ROM') ms.memory = node.memory ? { ...node.memory } : {};
       if (node.type === 'CACHE') {
-        ms.lines = Array.from({ length: node.lines || 4 }, () => ({ tag: null, valid: 0, data: 0 }));
+        const N = node.lines || 4;
+        if (node.mapping === 'set-assoc-2') {
+          const sets = Math.max(1, N >> 1);
+          ms.sets = Array.from({ length: sets }, () => [
+            { tag: null, valid: 0, data: 0, lru: 0 },
+            { tag: null, valid: 0, data: 0, lru: 0 },
+          ]);
+          ms.lruClock = 0;
+        } else {
+          ms.lines = Array.from({ length: N }, () => ({ tag: null, valid: 0, data: 0 }));
+        }
         ms.stats = { hits: 0, misses: 0 };
       }
       if (node.type === 'COUNTER') ms.count = 0;
@@ -1597,17 +1647,37 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const dMask     = _mask(node.dataBits || 8);
 
       const N         = node.lines || 4;
-      const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
-      const idx       = addr & (N - 1);
-      const tag       = addr >>> indexBits;
-      const line      = ms.lines && ms.lines[idx];
       const isAccess  = re || we;
-      const hit       = (isAccess && line && line.valid === 1 && line.tag === tag) ? 1 : 0;
+      const isSetAssoc = !!ms.sets;
+
+      let hit = 0, hitData = 0;
+      let setIdx = 0, tag = 0, set = null, idx = 0, line = null;
+
+      if (isSetAssoc) {
+        const sets      = ms.sets.length;
+        const indexBits = Math.max(0, Math.ceil(Math.log2(sets)));
+        setIdx = sets > 1 ? (addr & (sets - 1)) : 0;
+        tag    = sets > 1 ? (addr >>> indexBits) : addr;
+        set    = ms.sets[setIdx];
+        if (isAccess && set) {
+          for (const w of set) {
+            if (w.valid === 1 && w.tag === tag) { hit = 1; hitData = w.data; break; }
+          }
+        }
+      } else {
+        const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+        idx  = addr & (N - 1);
+        tag  = addr >>> indexBits;
+        line = ms.lines && ms.lines[idx];
+        if (isAccess && line && line.valid === 1 && line.tag === tag) {
+          hit = 1; hitData = line.data;
+        }
+      }
 
       // Always refresh DATA_OUT with the now-settled value so the LED
       // shows the right thing this cycle even on a miss (the RAM read
       // happens combinationally via asyncRead). On hit, serve from line.
-      const dataOut = hit ? (line.data & dMask) : (memDataIn & dMask);
+      const dataOut = hit ? (hitData & dMask) : (memDataIn & dMask);
       nodeValues.set(id, dataOut);
       propagate(id);
 
@@ -1617,23 +1687,49 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       // edge gate makes this idempotent.
       if (!isRisingEdge || !isAccess) continue;
 
-      if (hit) {
-        ms.stats.hits++;
+      if (isSetAssoc) {
+        ms.lruClock = (ms.lruClock || 0) + 1;
+        if (hit) {
+          ms.stats.hits++;
+          // Touch the matching way; refresh data on write hit (write-through).
+          for (const w of set) {
+            if (w.valid === 1 && w.tag === tag) {
+              w.lru = ms.lruClock;
+              if (we) w.data = dataInCpu & dMask;
+              break;
+            }
+          }
+        } else {
+          ms.stats.misses++;
+          // Pick eviction victim: any invalid way first, else the way
+          // with the smallest LRU counter (least-recently-used).
+          let victim = set.find(w => w.valid === 0);
+          if (!victim) {
+            victim = set[0];
+            for (let k = 1; k < set.length; k++) {
+              if (set[k].lru < victim.lru) victim = set[k];
+            }
+          }
+          victim.tag   = tag;
+          victim.valid = 1;
+          victim.data  = (we ? dataInCpu : memDataIn) & dMask;
+          victim.lru   = ms.lruClock;
+        }
       } else {
-        ms.stats.misses++;
-        // Allocate / overwrite the line with what came back from RAM
-        // (read miss) or what the CPU is writing (write miss with
-        // write-allocate). Writes always update the line; write-through
-        // means RAM was already driven by the Phase-1 outputs.
-        ms.lines[idx] = {
-          tag,
-          valid: 1,
-          data: (we ? dataInCpu : memDataIn) & dMask,
-        };
-      }
-      // Write-through on a write hit: line stays valid but data updates.
-      if (hit && we) {
-        ms.lines[idx].data = dataInCpu & dMask;
+        if (hit) {
+          ms.stats.hits++;
+        } else {
+          ms.stats.misses++;
+          ms.lines[idx] = {
+            tag,
+            valid: 1,
+            data: (we ? dataInCpu : memDataIn) & dMask,
+          };
+        }
+        // Write-through on a write hit: line stays valid but data updates.
+        if (hit && we) {
+          ms.lines[idx].data = dataInCpu & dMask;
+        }
       }
 
       // Push a snapshot to the global cache-stats map so the Pipeline

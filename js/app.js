@@ -776,7 +776,17 @@ function _updatePropsPanel() {
     return;
   }
   designProps.classList.remove('hidden');
-  propsType.textContent = node.type;
+  if (node.type === 'CACHE') {
+    propsType.innerHTML = `CACHE <button id="prop-cache-info-btn" title="What do these props mean?" style="margin-left:8px;background:#1a4a7a;color:#fff;border:1px solid #4a90e2;border-radius:50%;width:18px;height:18px;font-size:11px;font-family:serif;font-style:italic;text-transform:lowercase;cursor:pointer;padding:0;line-height:1;vertical-align:middle">i</button>`;
+    // Direct click binding — delegation through document was unreliable
+    // because some upstream handler swallowed the event.
+    setTimeout(() => {
+      const btn = document.getElementById('prop-cache-info-btn');
+      if (btn) btn.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); _openCacheInfoModal(); };
+    }, 0);
+  } else {
+    propsType.textContent = node.type;
+  }
 
   propLabelRow.style.display = '';
   propValueRow.style.display = (node.type === 'INPUT' || node.type === 'MUX_SELECT') ? '' : 'none';
@@ -828,6 +838,27 @@ function _updatePropsPanel() {
     propMembitSel.value = node.dataBits || 8;
     propMemaddrRow.style.display = '';
     propMemaddrSel.value = node.addrBits || 8;
+    const linesRow = document.getElementById('prop-cache-lines-row');
+    const linesInp = document.getElementById('prop-cache-lines-input');
+    const mapRow   = document.getElementById('prop-cache-mapping-row');
+    const mapSel   = document.getElementById('prop-cache-mapping-select');
+    const waysRow  = document.getElementById('prop-cache-ways-row');
+    const waysInp  = document.getElementById('prop-cache-ways-input');
+    if (linesRow && linesInp) {
+      linesRow.style.display = 'flex';
+      linesInp.value = String(node.lines || 4);
+    }
+    if (mapRow && mapSel) {
+      mapRow.style.display = '';
+      // Migrate legacy 'set-assoc-2' literal to the canonical (mapping, ways) pair.
+      const m = node.mapping === 'set-assoc-2' ? 'set-assoc' : (node.mapping || 'direct');
+      mapSel.value = m;
+      if (waysRow && waysInp) {
+        waysRow.style.display = (m === 'set-assoc') ? '' : 'none';
+        waysInp.max = String(node.lines || 4);
+        waysInp.value = String(node.ways || 2);
+      }
+    }
   } else if (node.type === 'REG_FILE' || node.type === 'REG_FILE_DP' || node.type === 'FIFO' || node.type === 'STACK') {
     propMembitRow.style.display = '';
     document.getElementById('prop-membit-label').textContent = 'Data Bits';
@@ -841,6 +872,14 @@ function _updatePropsPanel() {
   } else {
     propMembitRow.style.display = 'none';
     propMemaddrRow.style.display = 'none';
+  }
+  if (node.type !== 'CACHE') {
+    const linesRow = document.getElementById('prop-cache-lines-row');
+    const mapRow   = document.getElementById('prop-cache-mapping-row');
+    const waysRow  = document.getElementById('prop-cache-ways-row');
+    if (linesRow) linesRow.style.display = 'none';
+    if (mapRow)   mapRow.style.display   = 'none';
+    if (waysRow)  waysRow.style.display  = 'none';
   }
   if (isMux) {
     propSizeLabel.textContent = 'Inputs';
@@ -879,6 +918,105 @@ propSizeSelect?.addEventListener('change', () => {
   else if (node.type === 'DECODER') props.inputBits = val;
   else if (node.type === 'ENCODER') props.inputLines = val;
   if (Object.keys(props).length) commands.execute(new SetNodePropsCommand(scene, node.id, props));
+});
+
+// CACHE mapping change — switching mapping rebuilds cache state on next eval
+// because Phase 2b initializes either ms.lines or ms.sets based on the prop.
+// Mapping + ways are kept as separate node props (matching how the engine's
+// _cacheWays helper reads them). The Ways row is only meaningful for
+// set-associative; show/hide it manually here to avoid relying on a panel
+// re-render after the props command.
+document.getElementById('prop-cache-mapping-select')?.addEventListener('change', () => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'CACHE') return;
+  const val = document.getElementById('prop-cache-mapping-select').value;
+  state.ffStates?.delete(node.id);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { mapping: val }));
+  const waysRow = document.getElementById('prop-cache-ways-row');
+  const waysInp = document.getElementById('prop-cache-ways-input');
+  if (waysRow) waysRow.style.display = (val === 'set-assoc') ? 'flex' : 'none';
+  if (waysInp && val === 'set-assoc') waysInp.value = String(node.ways || 2);
+});
+
+// Info modal explaining Lines / Mapping / Ways. Opened by the (i) button
+// next to the CACHE properties header (binding done in _updatePropsPanel
+// because the button gets re-rendered on every panel refresh).
+function _openCacheInfoModal() {
+  if (document.getElementById('cache-info-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'cache-info-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;font-family:"JetBrains Mono",monospace';
+  overlay.innerHTML = `
+    <div style="background:#1a1a1a;border:1px solid #444;border-radius:8px;max-width:640px;width:90%;max-height:80vh;overflow:auto;padding:20px;color:#ccc;font-size:12px;line-height:1.6">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="margin:0;color:#9cf;font-size:14px">CACHE — Lines / Mapping / Ways</h2>
+        <button id="cache-info-close" style="background:#333;color:#ccc;border:1px solid #555;border-radius:4px;padding:2px 10px;cursor:pointer">✕</button>
+      </div>
+      <p style="margin-bottom:6px"><b style="color:#9cf">Each property in the panel:</b></p>
+      <ul style="margin:0 0 14px 18px;padding:0">
+        <li><b style="color:#9cf">Data Bits</b> — width of each value stored in a line (e.g. 8 → bytes).</li>
+        <li><b style="color:#9cf">Addr Bits</b> — width of the address bus connecting CPU↔cache↔RAM.</li>
+        <li><b style="color:#9cf">Lines</b> — total number of cache slots (capacity).</li>
+        <li><b style="color:#9cf">Mapping</b> — how addresses are assigned to slots: <code>direct</code>, <code>set-associative</code>, or <code>fully-associative</code>.</li>
+        <li><b style="color:#9cf">Ways</b> — only for set-associative: how many slots each address can land in.</li>
+      </ul>
+      <p style="margin-top:14px;color:#9cf"><b>Example with Lines = 16:</b></p>
+      <table style="width:100%;border-collapse:collapse;margin-top:6px">
+        <thead>
+          <tr style="background:#222;color:#9cf">
+            <th style="padding:6px;border:1px solid #444;text-align:left">Mapping</th>
+            <th style="padding:6px;border:1px solid #444;text-align:left">Ways</th>
+            <th style="padding:6px;border:1px solid #444;text-align:left">Sets</th>
+            <th style="padding:6px;border:1px solid #444;text-align:left">Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:6px;border:1px solid #444">direct</td><td style="padding:6px;border:1px solid #444">—</td><td style="padding:6px;border:1px solid #444">16 × 1</td><td style="padding:6px;border:1px solid #444">each address maps to exactly one slot</td></tr>
+          <tr><td style="padding:6px;border:1px solid #444">set-assoc</td><td style="padding:6px;border:1px solid #444">2</td><td style="padding:6px;border:1px solid #444">8 × 2</td><td style="padding:6px;border:1px solid #444">each address has 2 candidate slots</td></tr>
+          <tr><td style="padding:6px;border:1px solid #444">set-assoc</td><td style="padding:6px;border:1px solid #444">4</td><td style="padding:6px;border:1px solid #444">4 × 4</td><td style="padding:6px;border:1px solid #444">more flexibility, fewer conflicts</td></tr>
+          <tr><td style="padding:6px;border:1px solid #444">set-assoc</td><td style="padding:6px;border:1px solid #444">16</td><td style="padding:6px;border:1px solid #444">1 × 16</td><td style="padding:6px;border:1px solid #444">equivalent to fully-associative</td></tr>
+          <tr><td style="padding:6px;border:1px solid #444">fully-assoc</td><td style="padding:6px;border:1px solid #444">—</td><td style="padding:6px;border:1px solid #444">1 × 16</td><td style="padding:6px;border:1px solid #444">any address can live in any slot</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:14px;color:#888;font-size:11px"><b>Real-world:</b> a typical L1 data cache is 32KB ÷ 64-byte lines = <b>512 lines</b>, organized as 8-way set-associative (64 sets × 8 ways).</p>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(); });
+  document.getElementById('cache-info-close').addEventListener('click', close);
+  document.addEventListener('keydown', function esc(ev) {
+    if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+  });
+}
+
+document.getElementById('prop-cache-lines-input')?.addEventListener('change', () => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'CACHE') return;
+  const inp = document.getElementById('prop-cache-lines-input');
+  let v = parseInt(inp.value);
+  if (!Number.isFinite(v) || v < 1) v = 1;
+  inp.value = String(v);
+  state.ffStates?.delete(node.id);
+  // If shrinking lines below current ways, clamp ways too.
+  const props = { lines: v };
+  if ((node.ways || 2) > v && (node.mapping === 'set-assoc')) props.ways = v;
+  commands.execute(new SetNodePropsCommand(scene, node.id, props));
+  // Refresh the Ways input's max attribute live.
+  const waysInp = document.getElementById('prop-cache-ways-input');
+  if (waysInp) waysInp.setAttribute('max', String(v));
+});
+
+document.getElementById('prop-cache-ways-input')?.addEventListener('change', () => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'CACHE') return;
+  const inp = document.getElementById('prop-cache-ways-input');
+  let v = parseInt(inp.value);
+  if (!Number.isFinite(v) || v < 2) v = 2;
+  const maxLines = node.lines || 4;
+  if (v > maxLines) v = maxLines;
+  inp.value = String(v);
+  state.ffStates?.delete(node.id);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { ways: v }));
 });
 
 // Memory bit width / data bits change
@@ -2012,18 +2150,31 @@ function _refreshMemInspector() {
     // CACHE: show line state (idx | tag | valid | data) plus a one-line
     // hits/misses summary. The lines array is allocated by the engine
     // on first eval; tag stays null until Layer 1 fills it on a real miss.
-    if (node.type === 'CACHE' && ms?.lines) {
+    if (node.type === 'CACHE' && (ms?.lines || ms?.sets)) {
       const stats = ms.stats || { hits: 0, misses: 0 };
       const total = stats.hits + stats.misses;
       const rate  = total > 0 ? Math.round(100 * stats.hits / total) : 0;
       html += `<div class="mem-ram-table" style="grid-column:1/-1;">`;
       html += `<div class="mem-ram-cell" style="grid-column:1/-1;font-size:11px;">hits ${stats.hits} · misses ${stats.misses} · hit-rate ${rate}%</div>`;
-      for (let i = 0; i < ms.lines.length; i++) {
-        const ln = ms.lines[i];
-        const tag = ln.tag === null ? '—' : ln.tag;
-        const data = _formatMemValue(ln.data ?? 0, bits);
-        const active = ln.valid ? ' mem-ram-cell-active' : '';
-        html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">L${i}</span>tag=${tag} v=${ln.valid?1:0} d=${data}</div>`;
+      if (ms.sets) {
+        // 2-way set-associative: show set | way | tag | valid | data | lru.
+        for (let s = 0; s < ms.sets.length; s++) {
+          for (let w = 0; w < ms.sets[s].length; w++) {
+            const ln = ms.sets[s][w];
+            const tag = ln.tag === null ? '—' : ln.tag;
+            const data = _formatMemValue(ln.data ?? 0, bits);
+            const active = ln.valid ? ' mem-ram-cell-active' : '';
+            html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">S${s}W${w}</span>tag=${tag} v=${ln.valid?1:0} d=${data} lru=${ln.lru||0}</div>`;
+          }
+        }
+      } else {
+        for (let i = 0; i < ms.lines.length; i++) {
+          const ln = ms.lines[i];
+          const tag = ln.tag === null ? '—' : ln.tag;
+          const data = _formatMemValue(ln.data ?? 0, bits);
+          const active = ln.valid ? ' mem-ram-cell-active' : '';
+          html += `<div class="mem-ram-cell${active}"><span class="mem-ram-addr">L${i}</span>tag=${tag} v=${ln.valid?1:0} d=${data}</div>`;
+        }
       }
       html += `</div>`;
     }
@@ -3542,6 +3693,13 @@ const EXAMPLES = [
     desc: 'Layer 1 weakness demo. The trace alternates between addresses 0 and 4, which BOTH map to line index 0 in a 4-line direct-mapped cache (0 & 3 = 0; 4 & 3 = 0) but have different tags. Every access evicts the line that was just filled — even though the cache is "warm" and the access pattern repeats perfectly, the hit rate is exactly 0%. STEP 8 cycles to watch line[0] flip between tag=0 and tag=1 on every access, with hits/misses ending at 0/8. This is the textbook workload that motivates the set-associative caches arriving in Layer 3.',
     tags: ['cache', 'intermediate', 'CACHE', 'conflict', 'thrash'],
     file: 'examples/circuits/cache-direct-mapped-thrash.json',
+  },
+  {
+    id: 'cache-2way-vs-direct',
+    title: '3. Cache — 2-way set-associative beats the thrash',
+    desc: 'Same conflict-thrash trace as demo #2 (addresses 0 and 4 both map to set 0 of a 4-line cache), but the L1 is now 2-way set-associative. Both addresses fit into set 0 (one per way), so after the first 2 compulsory misses every later access HITS — hit rate climbs from 0% to 75% (6/8). Open the Pipeline panel CACHE (LIVE) section to watch it, and Memory Inspector (M) to see the per-set/per-way LRU counters update.',
+    tags: ['cache', 'intermediate', 'CACHE', 'set-associative', 'LRU', '2-way'],
+    file: 'examples/circuits/cache-2way-vs-direct.json',
   },
 ];
 
