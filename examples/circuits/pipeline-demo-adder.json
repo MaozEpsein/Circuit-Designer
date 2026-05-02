@@ -1,5 +1,5 @@
 {
-  "_comment": "3-stage pipelined 3-bit ripple-carry adder. Each stage processes one bit of the sum and propagates the carry forward through a multi-channel PIPE_REG. Inputs A=(a2,a1,a0) and B=(b2,b1,b0) step through 6 operand pairs; with the 2-cycle pipeline latency, the first valid sum appears on cycle 3 and a new sum lands every cycle after that (II=1). Watch the OUTPUTs change across cycles: 0+0, 1+1, 3+2, 7+1 (overflow → COUT=1), 5+3, 4+4. Compared to a single combinational adder (which would be 3× the propagation delay), pipelining trades latency for throughput. Stages are perfectly balanced (1 FULL_ADDER per stage = 150 ps) — Balance 100%, f_max = 1/150ps.",
+  "_comment": "3-stage pipelined 3-bit ripple-carry adder, INTENTIONALLY imbalanced to demonstrate stage balancing + RETIME on a real datapath. Initial split: stage 0 = FA0 (150 ps), stage 1 = FA1 → FA2 chained via carry (300 ps), stage 2 = just routing through PIPE2 (~0 ps). Bottleneck = stage 1, Balance ≈ 33%, f_max gated by 300 ps. Click RETIME in the PIPE panel header — the analyzer will suggest pulling PIPE2 backward across FA2, which splits the chain so each stage holds exactly one FA = 150 ps, Balance 100%, f_max raised by 2×. Inputs A=(A2,A1,A0) and B=(B2,B1,B0) step through 6 operand pairs (0+0, 1+1, 3+2, 7+1, 5+3, 4+4). With the 2-cycle pipeline latency, the first valid sum lands on cycle 3; from then on a new sum lands every cycle (II=1).",
   "nodes": [
     { "type": "INPUT",  "x": -700, "y":  -80, "fixedValue": 0, "stepValues": [0, 1, 1, 1, 1, 0], "label": "A0", "id": "a0" },
     { "type": "INPUT",  "x": -700, "y":  -40, "fixedValue": 0, "stepValues": [0, 0, 1, 1, 0, 0], "label": "A1", "id": "a1" },
@@ -13,16 +13,15 @@
 
     { "type": "PIPE_REG",   "x": -300, "y":   60, "channels": 6, "pipelineRole": "register", "stage": null, "label": "PIPE1", "id": "p1" },
 
-    { "type": "FULL_ADDER", "x": -100, "y":   60, "label": "FA1 (bit 1)", "id": "fa1" },
+    { "type": "FULL_ADDER", "x": -100, "y":   20, "label": "FA1 (bit 1)", "id": "fa1" },
+    { "type": "FULL_ADDER", "x": -100, "y":  100, "label": "FA2 (bit 2)", "id": "fa2" },
 
-    { "type": "PIPE_REG",   "x":  100, "y":   60, "channels": 5, "pipelineRole": "register", "stage": null, "label": "PIPE2", "id": "p2" },
+    { "type": "PIPE_REG",   "x":  120, "y":   60, "channels": 4, "pipelineRole": "register", "stage": null, "label": "PIPE2", "id": "p2" },
 
-    { "type": "FULL_ADDER", "x":  300, "y":   60, "label": "FA2 (bit 2)", "id": "fa2" },
-
-    { "type": "OUTPUT", "x":  500, "y":  -40, "targetValue": 0, "sandbox": true, "label": "S0", "id": "s0_out" },
-    { "type": "OUTPUT", "x":  500, "y":   20, "targetValue": 0, "sandbox": true, "label": "S1", "id": "s1_out" },
-    { "type": "OUTPUT", "x":  500, "y":   80, "targetValue": 0, "sandbox": true, "label": "S2", "id": "s2_out" },
-    { "type": "OUTPUT", "x":  500, "y":  140, "targetValue": 0, "sandbox": true, "label": "COUT", "id": "cout_out" },
+    { "type": "OUTPUT", "x":  340, "y":  -40, "targetValue": 0, "sandbox": true, "label": "S0", "id": "s0_out" },
+    { "type": "OUTPUT", "x":  340, "y":   20, "targetValue": 0, "sandbox": true, "label": "S1", "id": "s1_out" },
+    { "type": "OUTPUT", "x":  340, "y":   80, "targetValue": 0, "sandbox": true, "label": "S2", "id": "s2_out" },
+    { "type": "OUTPUT", "x":  340, "y":  140, "targetValue": 0, "sandbox": true, "label": "COUT", "id": "cout_out" },
 
     { "type": "CLOCK",  "x":  -100, "y":  340, "value": 0, "id": "clk" }
   ],
@@ -43,20 +42,19 @@
     { "id": "wfa1_b", "sourceId": "p1", "targetId": "fa1", "targetInputIndex": 1, "sourceOutputIndex": 3, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
     { "id": "wfa1_c", "sourceId": "p1", "targetId": "fa1", "targetInputIndex": 2, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
 
+    { "id": "wfa2_a", "sourceId": "p1",  "targetId": "fa2", "targetInputIndex": 0, "sourceOutputIndex": 4, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "wfa2_b", "sourceId": "p1",  "targetId": "fa2", "targetInputIndex": 1, "sourceOutputIndex": 5, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "wfa2_c", "sourceId": "fa1", "targetId": "fa2", "targetInputIndex": 2, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+
     { "id": "wp2_0", "sourceId": "p1",  "targetId": "p2", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "s0", "colorGroup": null, "isClockWire": false },
     { "id": "wp2_1", "sourceId": "fa1", "targetId": "p2", "targetInputIndex": 1, "sourceOutputIndex": 0, "waypoints": [], "netName": "s1", "colorGroup": null, "isClockWire": false },
-    { "id": "wp2_2", "sourceId": "fa1", "targetId": "p2", "targetInputIndex": 2, "sourceOutputIndex": 1, "waypoints": [], "netName": "c1", "colorGroup": null, "isClockWire": false },
-    { "id": "wp2_3", "sourceId": "p1",  "targetId": "p2", "targetInputIndex": 3, "sourceOutputIndex": 4, "waypoints": [], "netName": "a2", "colorGroup": null, "isClockWire": false },
-    { "id": "wp2_4", "sourceId": "p1",  "targetId": "p2", "targetInputIndex": 4, "sourceOutputIndex": 5, "waypoints": [], "netName": "b2", "colorGroup": null, "isClockWire": false },
-    { "id": "wp2_clk", "sourceId": "clk", "targetId": "p2", "targetInputIndex": 7, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true },
+    { "id": "wp2_2", "sourceId": "fa2", "targetId": "p2", "targetInputIndex": 2, "sourceOutputIndex": 0, "waypoints": [], "netName": "s2", "colorGroup": null, "isClockWire": false },
+    { "id": "wp2_3", "sourceId": "fa2", "targetId": "p2", "targetInputIndex": 3, "sourceOutputIndex": 1, "waypoints": [], "netName": "cout", "colorGroup": null, "isClockWire": false },
+    { "id": "wp2_clk", "sourceId": "clk", "targetId": "p2", "targetInputIndex": 6, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": true },
 
-    { "id": "wfa2_a", "sourceId": "p2", "targetId": "fa2", "targetInputIndex": 0, "sourceOutputIndex": 3, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "wfa2_b", "sourceId": "p2", "targetId": "fa2", "targetInputIndex": 1, "sourceOutputIndex": 4, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "wfa2_c", "sourceId": "p2", "targetId": "fa2", "targetInputIndex": 2, "sourceOutputIndex": 2, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-
-    { "id": "ws0_out", "sourceId": "p2",  "targetId": "s0_out", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "ws1_out", "sourceId": "p2",  "targetId": "s1_out", "targetInputIndex": 0, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "ws2_out", "sourceId": "fa2", "targetId": "s2_out", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
-    { "id": "wcout",   "sourceId": "fa2", "targetId": "cout_out", "targetInputIndex": 0, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false }
+    { "id": "ws0_out", "sourceId": "p2", "targetId": "s0_out", "targetInputIndex": 0, "sourceOutputIndex": 0, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "ws1_out", "sourceId": "p2", "targetId": "s1_out", "targetInputIndex": 0, "sourceOutputIndex": 1, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "ws2_out", "sourceId": "p2", "targetId": "s2_out", "targetInputIndex": 0, "sourceOutputIndex": 2, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false },
+    { "id": "wcout",   "sourceId": "p2", "targetId": "cout_out", "targetInputIndex": 0, "sourceOutputIndex": 3, "waypoints": [], "netName": "", "colorGroup": null, "isClockWire": false }
   ]
 }
