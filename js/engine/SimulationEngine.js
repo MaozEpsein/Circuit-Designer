@@ -90,6 +90,12 @@ function _cacheWays(node, lines) {
   return 1;
 }
 
+// Engine debug toggle. Set SIM_DEBUG=1 to re-enable the [EVAL]/[CPU]/
+// [P4e-PC]/[P4e-RF] traces. Default: silent — keeps test stdout clean.
+// Browser-safe: typeof guard so the file still parses where `process`
+// is undefined.
+const _DEBUG = (typeof process !== 'undefined' && process.env && process.env.SIM_DEBUG === '1');
+
 // Safe mask apply (avoids signed 32-bit issues with & operator)
 function _applyMask(val, bits) {
   if (bits >= 53) return val;
@@ -144,7 +150,7 @@ function _evalCU(node, op, z, c) {
  */
 export function evaluate(nodes, wires, ffStates, stepCount) {
   const _clkNode = nodes.find(n => n.type === 'CLOCK');
-  if (_clkNode && _clkNode.value === 1) console.log(`[EVAL] CLOCK=1 step=${stepCount}`);
+  if (_DEBUG && _clkNode && _clkNode.value === 1) console.log(`[EVAL] CLOCK=1 step=${stepCount}`);
   ffStates = ffStates || new Map();
 
   const nodeMap    = new Map(nodes.map(n => [n.id, n]));
@@ -2109,8 +2115,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       if (!clkSlot) continue;
       const clkNow = _wv(clkSlot.wire.id);
       const prevClk = ms.prevClkValue;
-      if (node.type === 'PC') console.log(`[P4e-PC] clkNow=${clkNow} prevClk=${prevClk} edge=${clkNow===1&&(prevClk===0||prevClk===null)} PC=${ms.q}`);
-      if (node.type === 'REG_FILE_DP') console.log(`[P4e-RF] clkNow=${clkNow} prevClk=${prevClk} edge=${clkNow===1&&(prevClk===0||prevClk===null)}`);
+      if (_DEBUG && node.type === 'PC') console.log(`[P4e-PC] clkNow=${clkNow} prevClk=${prevClk} edge=${clkNow===1&&(prevClk===0||prevClk===null)} PC=${ms.q}`);
+      if (_DEBUG && node.type === 'REG_FILE_DP') console.log(`[P4e-RF] clkNow=${clkNow} prevClk=${prevClk} edge=${clkNow===1&&(prevClk===0||prevClk===null)}`);
 
       if (clkNow === 1 && (prevClk === 0 || prevClk === null)) {
         const dataSlots = inputSlots.filter(s => s !== clkSlot);
@@ -2169,8 +2175,10 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       if (clkNow !== null) ms.prevClkValue = clkNow;
     }
 
-    // DEBUG: CPU state trace (only on clock rising edge)
-    const _anyClkHigh = nodes.some(n => n.type === 'CLOCK' && n.value === 1);
+    // DEBUG: CPU state trace (only on clock rising edge). Gated on
+    // _DEBUG so production / test stdout stays clean — the snapshot
+    // diff is the proper signal channel.
+    const _anyClkHigh = _DEBUG && nodes.some(n => n.type === 'CLOCK' && n.value === 1);
     if (_anyClkHigh) for (const node of nodes) {
       if (node.type === 'PC') {
         const pc = nodeValues.get(node.id) ?? '?';
