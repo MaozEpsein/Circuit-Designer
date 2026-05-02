@@ -2,13 +2,13 @@
 // CACHE component is wired through every place the README §
 // "Adding a New Component" checklist requires (type, factory,
 // MEMORY_TYPE_SET, palette, render pin counts, waveform metadata,
-// delay model, run-length state-holding set), AND that the stub
-// evaluator passes ADDR/DATA/WE/RE through to the RAM-facing
-// outputs while keeping HIT/MISS at 0.
+// delay model, run-length state-holding set, ms.lines and ms.stats
+// initialization, MEM-side pin forwarding).
 //
-// Layer 1 will replace the pass-through with real cache logic; this
-// test is what stops Layer 1 from accidentally breaking the
-// pinout/registration contract.
+// Behavioural cache semantics (hit/miss decisions, line filling,
+// counter increments) are covered in test-cache-direct-mapped.mjs
+// and the higher-layer cache tests. This file just locks down
+// the pin contract and registration.
 //
 // Run:  node examples/tests/test-cache-scaffold.mjs
 
@@ -75,14 +75,14 @@ console.log('\n[2] Pin-out contract — all 7 __out keys populated');
     const key = i === 0 ? cache.id : cache.id + '__out' + i;
     check(`cache.__out${i} populated`, r.nodeValues.has(key));
   }
-  // Pass-through values (Layer 0 stub semantics):
-  check('DATA_OUT  (out0) === MEM_DATA_IN',          r.nodeValues.get(cache.id) === 42);
-  check('HIT       (out1) === 0',                    r.nodeValues.get(cache.id + '__out1') === 0);
-  check('MISS      (out2) === 0',                    r.nodeValues.get(cache.id + '__out2') === 0);
+  // Pin-forwarding contract (Layer 1+: behaviour around hit/miss
+  // is exercised in test-cache-direct-mapped.mjs; here we only
+  // assert the wiring forwards CPU-side signals to MEM-side pins
+  // and that DATA_OUT is a meaningful number).
   check('MEM_ADDR  (out3) === ADDR',                 r.nodeValues.get(cache.id + '__out3') === 7);
   check('MEM_DATA_OUT (out4) === CPU DATA',          r.nodeValues.get(cache.id + '__out4') === 99);
-  check('MEM_RE    (out5) === RE',                   r.nodeValues.get(cache.id + '__out5') === 1);
   check('MEM_WE    (out6) === WE',                   r.nodeValues.get(cache.id + '__out6') === 0);
+  check('DATA_OUT  is numeric',                      typeof r.nodeValues.get(cache.id) === 'number');
 
   // ms.lines and ms.stats must be initialized after first eval.
   const ms = ffStates.get(cache.id);
@@ -100,10 +100,11 @@ console.log('\n[3] DelayModel + run-length integration');
   check("DEFAULT_DELAY_PS.CACHE === 0", DEFAULT_DELAY_PS.CACHE === 0);
 }
 
-// ── 4. WE behaviour ──────────────────────────────────────────
-// With WE=1, the CACHE should forward both DATA and WE to the
-// MEM side. RE behaviour is symmetric.
-console.log('\n[4] WE / RE forwarding');
+// ── 4. WE forwarding ─────────────────────────────────────────
+// With WE=1 RE=0, MEM_WE must go high and CPU DATA must reach
+// MEM_DATA_OUT. The cache logic treats this as a write-through;
+// MEM_RE stays 0.
+console.log('\n[4] WE forwarding (write-through)');
 {
   let id = 0;
   const nid = () => 'n' + (++id);
@@ -127,11 +128,10 @@ console.log('\n[4] WE / RE forwarding');
     W(memDi.id, cache.id, 5),
   ];
   const r = evaluate([addr, data, we, re, memDi, clk, cache], wires, new Map(), 0);
-  check('WE=1 → MEM_WE=1, MEM_RE=0',
-        r.nodeValues.get(cache.id + '__out6') === 1 &&
-        r.nodeValues.get(cache.id + '__out5') === 0);
+  check('WE=1 → MEM_WE=1',                  r.nodeValues.get(cache.id + '__out6') === 1);
+  check('WE=1 RE=0 → MEM_RE=0',             r.nodeValues.get(cache.id + '__out5') === 0);
   check('CPU DATA forwarded to MEM_DATA_OUT', r.nodeValues.get(cache.id + '__out4') === 55);
-  check('ADDR forwarded',                       r.nodeValues.get(cache.id + '__out3') === 3);
+  check('ADDR forwarded',                     r.nodeValues.get(cache.id + '__out3') === 3);
 }
 
 // ── Summary ───────────────────────────────────────────────────

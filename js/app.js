@@ -3522,10 +3522,17 @@ const EXAMPLES = [
   },
   {
     id: 'cache-passthrough-demo',
-    title: '1. Cache scaffold — pass-through stub',
-    desc: 'Layer 0 of the cache build, driven by a real address trace. PC walks 0..7 on each clock edge; an 8-entry ROM holds the access sequence (5, 7, 5, 9, 5, 11, 5, 13). The selected address flows through the CACHE to a preloaded RAM and back. With the Layer 0 stub eval, every access is pass-through and HIT/MISS stay at 0. The trace deliberately repeats address 5 four times so when Layer 1 ships, the same circuit will show 3 HITs without any wiring change. STEP 8 cycles to watch ADDR walk and DATA_OUT mirror RAM[ADDR]: 50, 70, 50, 90, 50, 110, 50, 130. The Memory Inspector shows the cache lines (all empty in Layer 0).',
+    title: '1. Cache — mixed trace (2 hits / 6 misses)',
+    desc: 'PC + ROM drive an 8-entry access trace (5, 7, 5, 9, 5, 11, 5, 13) through a 4-line direct-mapped cache to a preloaded RAM. STEP through 8 cycles and watch the cache fill, conflict-evict, and occasionally hit. Final result: 2 HITs (cycles 3 and 7, both addr=5 right after a fresh fill), 6 MISSES (3 compulsory + 3 conflicts). The Memory Inspector shows lines updating live (tag/valid/data); the line for index 1 thrashes between tags 1, 2, 3 as addresses 5, 9, 13 fight over it. A primer for the more dramatic conflict workload in demo #2.',
     tags: ['cache', 'beginner', 'CACHE', 'Memory', 'Inspector'],
     file: 'examples/circuits/cache-passthrough-demo.json',
+  },
+  {
+    id: 'cache-direct-mapped-thrash',
+    title: '2. Cache — pure conflict thrash (0% hit rate)',
+    desc: 'Layer 1 weakness demo. The trace alternates between addresses 0 and 4, which BOTH map to line index 0 in a 4-line direct-mapped cache (0 & 3 = 0; 4 & 3 = 0) but have different tags. Every access evicts the line that was just filled — even though the cache is "warm" and the access pattern repeats perfectly, the hit rate is exactly 0%. STEP 8 cycles to watch line[0] flip between tag=0 and tag=1 on every access, with hits/misses ending at 0/8. This is the textbook workload that motivates the set-associative caches arriving in Layer 3.',
+    tags: ['cache', 'intermediate', 'CACHE', 'conflict', 'thrash'],
+    file: 'examples/circuits/cache-direct-mapped-thrash.json',
   },
 ];
 

@@ -532,14 +532,15 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMaskAsync;
         value = ms.q ?? 0;
       }
-      // CACHE — Layer 0 pass-through stub. Forwards CPU-side ADDR/DATA/
-      // WE/RE to MEM_*; DATA_OUT mirrors MEM_DATA_IN (the value coming
-      // back from the RAM behind the cache); HIT/MISS stay at 0 until
-      // Layer 1 adds real cache logic. Inputs (per pin order):
-      //   0=ADDR, 1=DATA(CPU→cache), 2=WE, 3=RE, 4=CLK, 5=MEM_DATA_IN.
-      // Outputs:
-      //   0=DATA_OUT, 1=HIT, 2=MISS, 3=MEM_ADDR, 4=MEM_DATA_OUT,
-      //   5=MEM_RE, 6=MEM_WE.
+      // CACHE — Layer 1 direct-mapped lookup (combinational).
+      // Pinout:
+      //   In:  0=ADDR, 1=DATA(CPU→cache), 2=WE, 3=RE, 4=CLK, 5=MEM_DATA_IN
+      //   Out: 0=DATA_OUT, 1=HIT, 2=MISS, 3=MEM_ADDR, 4=MEM_DATA_OUT,
+      //        5=MEM_RE, 6=MEM_WE
+      // The lookup runs every Phase-1 pass — it's pure (no side effects).
+      // Side effects (fill line, increment counters) happen in Phase 4c2.5
+      // gated on the rising CLK edge so each access is counted exactly
+      // once per real bus cycle, not per evaluate() call.
       if (node.type === 'CACHE') {
         const inputSlotsC = inputs.get(id);
         const _readSlotC = (s) => {
@@ -553,21 +554,35 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const weSlot     = inputSlotsC.find(s => s.inputIndex === 2);
         const reSlot     = inputSlotsC.find(s => s.inputIndex === 3);
         const memDiSlot  = inputSlotsC.find(s => s.inputIndex === 5);
-        const addr     = _readSlotC(addrSlot);
-        const dataIn   = _readSlotC(dataSlotC);
-        const we       = _readSlotC(weSlot);
-        const re       = _readSlotC(reSlot);
+        const addr      = _readSlotC(addrSlot);
+        const dataInCpu = _readSlotC(dataSlotC);
+        const we        = _readSlotC(weSlot) ? 1 : 0;
+        const re        = _readSlotC(reSlot) ? 1 : 0;
         const memDataIn = _readSlotC(memDiSlot);
-        const dMask    = _mask(node.dataBits || 8);
-        // Pass-through: DATA_OUT mirrors what came back from RAM.
-        nodeValues.set(id,             memDataIn & dMask);   // DATA_OUT
-        nodeValues.set(id + '__out1', 0);                    // HIT
-        nodeValues.set(id + '__out2', 0);                    // MISS
-        nodeValues.set(id + '__out3', addr);                 // MEM_ADDR
-        nodeValues.set(id + '__out4', dataIn & dMask);       // MEM_DATA_OUT
-        nodeValues.set(id + '__out5', re ? 1 : 0);           // MEM_RE
-        nodeValues.set(id + '__out6', we ? 1 : 0);           // MEM_WE
-        value = memDataIn & dMask;
+        const dMask     = _mask(node.dataBits || 8);
+        const N         = node.lines || 4;
+        const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+        const idx       = addr & (N - 1);
+        const tag       = addr >>> indexBits;
+        const line      = ms.lines && ms.lines[idx];
+        const isAccess  = re || we;
+        const hit       = (isAccess && line && line.valid === 1 && line.tag === tag) ? 1 : 0;
+        const miss      = (isAccess && !hit) ? 1 : 0;
+        // On hit + read: serve from the cache line. On miss: pass the
+        // RAM-returned value through (Phase 4c2.5 will refresh DATA_OUT
+        // once RAM has actually settled). Writes always pass through to
+        // RAM as well (write-through).
+        const dataOut = hit ? (line.data & dMask) : (memDataIn & dMask);
+        nodeValues.set(id,             dataOut);                          // DATA_OUT
+        nodeValues.set(id + '__out1', hit);                               // HIT
+        nodeValues.set(id + '__out2', miss);                              // MISS
+        nodeValues.set(id + '__out3', addr);                              // MEM_ADDR
+        nodeValues.set(id + '__out4', dataInCpu & dMask);                 // MEM_DATA_OUT
+        // Drive RAM only on a miss-read or any write. A read hit must
+        // leave MEM_RE=0 so the demo can visually distinguish the two.
+        nodeValues.set(id + '__out5', (re && !hit) ? 1 : 0);              // MEM_RE
+        nodeValues.set(id + '__out6', we ? 1 : 0);                        // MEM_WE
+        value = dataOut;
       }
       // IR: decode stored instruction into fields
       if (node.type === 'IR') {
@@ -1546,17 +1561,16 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       }
     }
 
-    // 4c2.5: CACHE re-eval with fresh MEM_DATA_IN.
-    // The CPU↔RAM round-trip through CACHE creates a cycle in the
-    // dependency graph (CACHE drives RAM's address; RAM drives CACHE's
-    // MEM_DATA_IN). Phase 1's topological propagation can only walk
-    // it once, so DATA_OUT lags one cycle behind the actual RAM read.
-    // After Phase 4c2 has settled the RAM, do a second pass on every
-    // CACHE so DATA_OUT (and the LRU/tag updates the later layers will
-    // add here) reflect the value that just came back from RAM.
+    // 4c2.5: CACHE side effects — fill lines on miss, update counters.
+    // Runs after Phase 4c2 has settled RAM so MEM_DATA_IN reflects the
+    // real value coming back from RAM this cycle. Gated on the rising
+    // CLK edge so each access mutates state exactly once per real bus
+    // cycle, regardless of how many times evaluate() is called.
     for (const node of nodes) {
       if (node.type !== 'CACHE') continue;
       const id = node.id;
+      const ms = ffStates.get(id);
+      if (!ms) continue;
       const inputSlots = inputs.get(id);
       const _readSlotC = (s) => {
         if (!s) return 0;
@@ -1564,13 +1578,63 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
         return nodeValues.get(k) ?? 0;
       };
-      const memDiSlot = inputSlots.find(s => s.inputIndex === 5);
+      const clkSlotC  = inputSlots.find(s => s.wire.isClockWire) || inputSlots.find(s => s.inputIndex === 4);
+      const clkNow    = clkSlotC ? (_wv(clkSlotC.wire.id) ?? 0) : 0;
+      const prevClkC  = ms.prevCacheClk ?? null;
+      const isRisingEdge = (clkNow === 1 && prevClkC === 0);
+      ms.prevCacheClk = clkNow;
+
+      const addrSlot   = inputSlots.find(s => s.inputIndex === 0);
+      const dataSlotC  = inputSlots.find(s => s.inputIndex === 1);
+      const weSlot     = inputSlots.find(s => s.inputIndex === 2);
+      const reSlot     = inputSlots.find(s => s.inputIndex === 3);
+      const memDiSlot  = inputSlots.find(s => s.inputIndex === 5);
+      const addr      = _readSlotC(addrSlot);
+      const dataInCpu = _readSlotC(dataSlotC);
+      const we        = _readSlotC(weSlot)  ? 1 : 0;
+      const re        = _readSlotC(reSlot)  ? 1 : 0;
       const memDataIn = _readSlotC(memDiSlot);
-      const dMask = _mask(node.dataBits || 8);
-      // Layer 0 stub: DATA_OUT is just whatever came back from RAM.
-      // Layer 1+ will branch on hit/miss and read from cache lines on hit.
-      nodeValues.set(id, memDataIn & dMask);
+      const dMask     = _mask(node.dataBits || 8);
+
+      const N         = node.lines || 4;
+      const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+      const idx       = addr & (N - 1);
+      const tag       = addr >>> indexBits;
+      const line      = ms.lines && ms.lines[idx];
+      const isAccess  = re || we;
+      const hit       = (isAccess && line && line.valid === 1 && line.tag === tag) ? 1 : 0;
+
+      // Always refresh DATA_OUT with the now-settled value so the LED
+      // shows the right thing this cycle even on a miss (the RAM read
+      // happens combinationally via asyncRead). On hit, serve from line.
+      const dataOut = hit ? (line.data & dMask) : (memDataIn & dMask);
+      nodeValues.set(id, dataOut);
       propagate(id);
+
+      // Side effects only on the rising edge of CLK — once per real
+      // bus cycle. evaluate() may be called multiple times per cycle
+      // (e.g. tooling that calls it twice for clk=0 then clk=1); the
+      // edge gate makes this idempotent.
+      if (!isRisingEdge || !isAccess) continue;
+
+      if (hit) {
+        ms.stats.hits++;
+      } else {
+        ms.stats.misses++;
+        // Allocate / overwrite the line with what came back from RAM
+        // (read miss) or what the CPU is writing (write miss with
+        // write-allocate). Writes always update the line; write-through
+        // means RAM was already driven by the Phase-1 outputs.
+        ms.lines[idx] = {
+          tag,
+          valid: 1,
+          data: (we ? dataInCpu : memDataIn) & dMask,
+        };
+      }
+      // Write-through on a write hit: line stays valid but data updates.
+      if (hit && we) {
+        ms.lines[idx].data = dataInCpu & dMask;
+      }
     }
 
     // 4c3: BUS_MUX eval with fresh wire values
