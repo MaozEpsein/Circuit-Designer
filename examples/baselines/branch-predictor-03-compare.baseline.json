@@ -1,0 +1,26 @@
+{
+  "file": "examples/circuits/branch-predictor-03-compare.json",
+  "cycles": 100,
+  "RF": [
+    0,
+    3,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": null,
+  "PC": 4,
+  "branchFlushes": null,
+  "cacheStats": null
+}

@@ -1,0 +1,39 @@
+{
+  "file": "examples/circuits/mips-5stage-branch-flush-demo.json",
+  "cycles": 60,
+  "RF": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": {},
+  "PC": 1,
+  "branchFlushes": [
+    {
+      "cycle": 5,
+      "pc": 5
+    },
+    {
+      "cycle": 8,
+      "pc": 10
+    },
+    {
+      "cycle": 9,
+      "pc": 13
+    }
+  ],
+  "cacheStats": null
+}

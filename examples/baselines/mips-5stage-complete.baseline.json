@@ -1,0 +1,28 @@
+{
+  "file": "examples/circuits/mips-5stage-complete.json",
+  "cycles": 60,
+  "RF": [
+    0,
+    0,
+    99,
+    99,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": {
+    "0": 99
+  },
+  "PC": 60,
+  "branchFlushes": null,
+  "cacheStats": null
+}

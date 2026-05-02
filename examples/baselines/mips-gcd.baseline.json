@@ -1,0 +1,43 @@
+{
+  "file": "examples/circuits/mips-gcd.json",
+  "cycles": 200,
+  "RF": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "RAM": {},
+  "PC": 20,
+  "branchFlushes": [
+    {
+      "cycle": 6,
+      "pc": 6
+    },
+    {
+      "cycle": 67,
+      "pc": 6
+    },
+    {
+      "cycle": 128,
+      "pc": 6
+    },
+    {
+      "cycle": 189,
+      "pc": 6
+    }
+  ],
+  "cacheStats": null
+}
