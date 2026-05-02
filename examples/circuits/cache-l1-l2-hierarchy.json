@@ -1,0 +1,72 @@
+{
+  "_comment": "Layer 6 demo — two-level memory hierarchy (L1 → L2 → RAM). The CACHE component nests in series: L1's CPU-side accepts the trace, L1's MEM-side drives L2's CPU-side, and L2's MEM-side drives the actual RAM. L1 is small (4 lines, direct-mapped) so it thrashes easily. L2 is larger (16 lines, fully-associative) and absorbs most of L1's misses — only the truly cold accesses reach RAM. Trace 0,4,8,12,16,20,0,4,8,12,16,20 cycles 6 distinct addresses: L1 (4 lines) misses every access; L2 (16 lines) misses only the first 6 (compulsory) and hits the rest. Open the Pipeline panel CACHE (LIVE) section to compare the two hit rates side by side.",
+  "nodes": [
+    { "type": "CLOCK", "id": "clk", "x": -700, "y":  280, "value": 0 },
+    { "type": "INPUT", "id": "en",  "x": -700, "y":  140, "fixedValue": 1, "label": "EN" },
+    { "type": "INPUT", "id": "rst", "x": -700, "y":  200, "fixedValue": 0, "label": "RST" },
+
+    { "type": "PC",   "id": "pc",   "x": -540, "y":  200, "bitWidth": 4, "label": "PC" },
+
+    { "type": "ROM",  "id": "rom",  "x": -360, "y":  200,
+      "addrBits": 4, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 0, "1": 4, "2": 8, "3": 12, "4": 16, "5": 20,
+                  "6": 0, "7": 4, "8": 8, "9": 12, "10": 16, "11": 20,
+                  "12": 0, "13": 4, "14": 8, "15": 12 },
+      "label": "TRACE" },
+
+    { "type": "INPUT", "id": "we",  "x": -700, "y":   60, "fixedValue": 0, "label": "WE" },
+    { "type": "INPUT", "id": "re",  "x": -700, "y":    0, "fixedValue": 1, "label": "RE" },
+    { "type": "INPUT", "id": "din", "x": -700, "y":  -60, "fixedValue": 0, "label": "DATA_IN" },
+
+    { "type": "CACHE", "id": "l1", "x":  -100, "y":  120,
+      "lines": 4, "dataBits": 8, "addrBits": 8, "mapping": "direct", "label": "L1 (4 lines)" },
+    { "type": "CACHE", "id": "l2", "x":  220, "y":  120,
+      "lines": 16, "dataBits": 8, "addrBits": 8, "mapping": "fully-assoc", "label": "L2 (16 lines)" },
+
+    { "type": "RAM",   "id": "ram", "x":  540, "y":  200,
+      "addrBits": 8, "dataBits": 8, "asyncRead": true,
+      "memory": { "0": 100, "4": 200, "8": 80, "12": 120, "16": 160, "20": 220 },
+      "label": "RAM" },
+
+    { "type": "OUTPUT", "id": "out_addr", "x": -180, "y":  280, "label": "ADDR" },
+    { "type": "OUTPUT", "id": "out_l1_h", "x":   80, "y":   20, "label": "L1_HIT" },
+    { "type": "OUTPUT", "id": "out_l1_m", "x":   80, "y":   80, "label": "L1_MISS" },
+    { "type": "OUTPUT", "id": "out_l2_h", "x":  400, "y":   20, "label": "L2_HIT" },
+    { "type": "OUTPUT", "id": "out_l2_m", "x":  400, "y":   80, "label": "L2_MISS" }
+  ],
+  "wires": [
+    { "id": "w1",  "sourceId": "en",  "targetId": "pc", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w2",  "sourceId": "rst", "targetId": "pc", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w3",  "sourceId": "clk", "targetId": "pc", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w4",  "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w5",  "sourceId": "clk", "targetId": "rom", "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w6",  "sourceId": "rom", "targetId": "l1", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w7",  "sourceId": "din", "targetId": "l1", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w8",  "sourceId": "we",  "targetId": "l1", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w9",  "sourceId": "re",  "targetId": "l1", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w10", "sourceId": "clk", "targetId": "l1", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w11", "sourceId": "l1",  "targetId": "l2", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w12", "sourceId": "l1",  "targetId": "l2", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w13", "sourceId": "l1",  "targetId": "l2", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w14", "sourceId": "l1",  "targetId": "l2", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w15", "sourceId": "clk", "targetId": "l2", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w16", "sourceId": "l2",  "targetId": "ram", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w17", "sourceId": "l2",  "targetId": "ram", "targetInputIndex": 1, "sourceOutputIndex": 4 },
+    { "id": "w18", "sourceId": "l2",  "targetId": "ram", "targetInputIndex": 2, "sourceOutputIndex": 6 },
+    { "id": "w19", "sourceId": "l2",  "targetId": "ram", "targetInputIndex": 3, "sourceOutputIndex": 5 },
+    { "id": "w20", "sourceId": "clk", "targetId": "ram", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w21", "sourceId": "ram", "targetId": "l2",  "targetInputIndex": 5, "sourceOutputIndex": 0 },
+    { "id": "w22", "sourceId": "l2",  "targetId": "l1",  "targetInputIndex": 5, "sourceOutputIndex": 0 },
+
+    { "id": "w30", "sourceId": "rom", "targetId": "out_addr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w31", "sourceId": "l1",  "targetId": "out_l1_h", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w32", "sourceId": "l1",  "targetId": "out_l1_m", "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w33", "sourceId": "l2",  "targetId": "out_l2_h", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w34", "sourceId": "l2",  "targetId": "out_l2_m", "targetInputIndex": 0, "sourceOutputIndex": 2 }
+  ]
+}

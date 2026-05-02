@@ -3715,6 +3715,13 @@ const EXAMPLES = [
     tags: ['cache', 'advanced', 'CACHE', '3C', 'compulsory', 'capacity', 'conflict'],
     file: 'examples/circuits/cache-3c-miss-types.json',
   },
+  {
+    id: 'cache-l1-l2-hierarchy',
+    title: '6. Cache — L1 + L2 hierarchy (two-level memory)',
+    desc: 'Two CACHE components nested in series: a small fast L1 (4 lines, direct-mapped) and a larger L2 (16 lines, fully-associative) sitting between L1 and RAM. Trace cycles 6 distinct addresses repeatedly. L1 thrashes (every access is a miss in 4 lines), but L2 absorbs the working set after the first 6 compulsory misses, so RAM is barely touched. Open the Pipeline panel CACHE (LIVE) to compare the L1 vs L2 hit rates side by side.',
+    tags: ['cache', 'advanced', 'CACHE', 'hierarchy', 'L1', 'L2'],
+    file: 'examples/circuits/cache-l1-l2-hierarchy.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

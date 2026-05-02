@@ -1611,11 +1611,64 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       }
     }
 
+    // 4c2.5pre: settle DATA_OUT through any cache hierarchy (L1 → L2 → ...).
+    // When two CACHE components are wired in series, the inner cache's
+    // DATA_OUT feeds the outer cache's MEM_DATA_IN. The outer cache must
+    // see the inner's settled value before it captures memDataIn into a
+    // refilled line. Iterate `numCaches` times (sufficient for any
+    // depth of acyclic cascade); no state mutation or counter update.
+    const _cacheNodes = nodes.filter(n => n.type === 'CACHE');
+    for (let pass = 0; pass < _cacheNodes.length; pass++) {
+      for (const node of _cacheNodes) {
+        const id = node.id;
+        const ms = ffStates.get(id);
+        if (!ms) continue;
+        const inputSlots = inputs.get(id);
+        const _read = (s) => {
+          if (!s) return 0;
+          const outIdx = s.wire.sourceOutputIndex || 0;
+          const k = outIdx === 0 ? s.sourceId : (s.sourceId + '__out' + outIdx);
+          return nodeValues.get(k) ?? 0;
+        };
+        const addr      = _read(inputSlots.find(s => s.inputIndex === 0));
+        const we        = _read(inputSlots.find(s => s.inputIndex === 2)) ? 1 : 0;
+        const re        = _read(inputSlots.find(s => s.inputIndex === 3)) ? 1 : 0;
+        const memDataIn = _read(inputSlots.find(s => s.inputIndex === 5));
+        const dMask     = _mask(node.dataBits || 8);
+        const isAccess  = re || we;
+        let hit = 0, hitData = 0;
+        if (ms.sets) {
+          const sets      = ms.sets.length;
+          const indexBits = Math.max(0, Math.ceil(Math.log2(sets)));
+          const setIdx    = sets > 1 ? (addr & (sets - 1)) : 0;
+          const tag       = sets > 1 ? (addr >>> indexBits) : addr;
+          const set       = ms.sets[setIdx];
+          if (isAccess && set) {
+            for (const w of set) {
+              if (w.valid === 1 && w.tag === tag) { hit = 1; hitData = w.data; break; }
+            }
+          }
+        } else if (ms.lines) {
+          const N         = node.lines || 4;
+          const indexBits = Math.max(1, Math.ceil(Math.log2(N)));
+          const idx       = addr & (N - 1);
+          const tag       = addr >>> indexBits;
+          const line      = ms.lines[idx];
+          if (isAccess && line && line.valid === 1 && line.tag === tag) {
+            hit = 1; hitData = line.data;
+          }
+        }
+        const dataOut = hit ? (hitData & dMask) : (memDataIn & dMask);
+        nodeValues.set(id, dataOut);
+        propagate(id);
+      }
+    }
+
     // 4c2.5: CACHE side effects — fill lines on miss, update counters.
-    // Runs after Phase 4c2 has settled RAM so MEM_DATA_IN reflects the
-    // real value coming back from RAM this cycle. Gated on the rising
-    // CLK edge so each access mutates state exactly once per real bus
-    // cycle, regardless of how many times evaluate() is called.
+    // Runs after Phase 4c2 has settled RAM AND after the cascade settle
+    // pass above, so MEM_DATA_IN reflects the real value coming back
+    // from the layer below this cycle. Gated on the rising CLK edge so
+    // each access mutates state exactly once per real bus cycle.
     for (const node of nodes) {
       if (node.type !== 'CACHE') continue;
       const id = node.id;
