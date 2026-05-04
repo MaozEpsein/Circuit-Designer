@@ -373,34 +373,49 @@ export class PipelinePanel {
     return `<div class="pipe-perf-row"><span class="k">Count</span><span class="v">${log.length} — at ${pcs}${more}</span></div>`;
   }
 
-  // One row per cache instance in the scene. Each row shows total
-  // hits / misses / hit-rate and the tail of the access pattern as a
-  // sequence of H@addr / M@addr tokens so the learner can correlate
-  // the LEDs on the canvas with the panel.
+  // Aligned table: one row per cache instance in the scene. The
+  // monospace columns let the eye scan vertically to compare
+  // mappings/policies side by side (especially in the 3C demo with
+  // four caches sharing one trace). Falls back to a friendly notice
+  // when no caches are present.
   _renderLiveCacheStats() {
     const snaps = this._liveCacheStats || [];
     if (snaps.length === 0) {
       return `<div class="pipe-perf-row"><span class="k">Caches</span><span class="v">none in scene — drop a CACHE component to enable</span></div>`;
     }
-    return snaps.map(s => {
+    // Build raw cells per snap.
+    const rows = snaps.map(s => {
       const total = s.hits + s.misses;
       const rate  = total > 0 ? Math.round(100 * s.hits / total) : 0;
+      const m3 = s.miss3C || { compulsory: 0, capacity: 0, conflict: 0 };
       const recent = (s.recent || []).slice(-8)
         .map(a => `${a.hit ? 'H' : 'M'}@${a.addr}`).join(' ');
-      const recentStr = recent || 'idle — updates while AUTO CLK runs';
-      // 3C miss breakdown — Hill 1989 classification (compulsory /
-      // capacity / conflict). Only render when there are any misses
-      // so warm-startup caches don't show "0/0/0".
-      const m3 = s.miss3C || { compulsory: 0, capacity: 0, conflict: 0 };
-      const m3total = m3.compulsory + m3.capacity + m3.conflict;
-      const breakdown = m3total > 0
-        ? ` · 3C: ${m3.compulsory} compulsory / ${m3.capacity} capacity / ${m3.conflict} conflict`
-        : '';
-      return `<div class="pipe-perf-row">
-        <span class="k">${s.label || 'CACHE'}</span>
-        <span class="v">${s.hits} hits · ${s.misses} misses · ${rate}% hit-rate${breakdown} · ${recentStr}</span>
-      </div>`;
-    }).join('');
+      return {
+        name:   s.label || 'CACHE',
+        hits:   String(s.hits),
+        miss:   String(s.misses),
+        rate:   total > 0 ? `${rate}%` : '—',
+        comp:   String(m3.compulsory),
+        cap:    String(m3.capacity),
+        conf:   String(m3.conflict),
+        recent: recent || '—',
+      };
+    });
+    // Column widths: max(header, max cell). Recent is left ragged.
+    const headers = { name: 'NAME', hits: 'HITS', miss: 'MISS', rate: 'RATE', comp: 'COMP', cap: 'CAP', conf: 'CONF', recent: 'RECENT' };
+    const widths = {};
+    for (const k of Object.keys(headers)) {
+      if (k === 'recent') continue;
+      widths[k] = Math.max(headers[k].length, ...rows.map(r => r[k].length));
+    }
+    const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
+    const headerLine = `<span class="k">${pad(headers.name, widths.name)}</span><span class="v">  ${pad(headers.hits, widths.hits)}  ${pad(headers.miss, widths.miss)}  ${pad(headers.rate, widths.rate)}  ${pad(headers.comp, widths.comp)}  ${pad(headers.cap, widths.cap)}  ${pad(headers.conf, widths.conf)}  ${headers.recent}</span>`;
+    const bodyLines = rows.map(r =>
+      `<span class="k">${pad(r.name, widths.name)}</span><span class="v">  ${pad(r.hits, widths.hits)}  ${pad(r.miss, widths.miss)}  ${pad(r.rate, widths.rate)}  ${pad(r.comp, widths.comp)}  ${pad(r.cap, widths.cap)}  ${pad(r.conf, widths.conf)}  ${r.recent}</span>`
+    );
+    return [headerLine, ...bodyLines]
+      .map(line => `<div class="pipe-perf-row" style="font-family:monospace;white-space:pre">${line}</div>`)
+      .join('');
   }
 
   _render(r) {
