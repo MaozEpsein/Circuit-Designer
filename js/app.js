@@ -4705,6 +4705,13 @@ const EXAMPLES = [
     file: 'examples/circuits/verilog-phase5a-imm-pc.json',
   },
   {
+    id: 'verilog-phase6-hierarchy',
+    title: '6. VERILOG — sub-circuits & hierarchy',
+    desc: 'Phase-6 demo: two instances of a 2:1 mux sub-circuit feed an XOR. Click VERILOG to see one `module mux2(...)` definition emitted above the top, instantiated twice with named ports — content-hash de-duplication collapses identical sub-circuits to a single module shared across all instantiations. Definition order is dependency-correct (sub before top). Try `cpu-detailed` next: it uses a CU sub-circuit which now lifts to its own module instead of the previous `// TODO: SUB_CIRCUIT` stub.',
+    tags: ['verilog', 'phase6', 'hierarchy', 'sub-circuit'],
+    file: 'examples/circuits/verilog-phase6-hierarchy.json',
+  },
+  {
     id: 'verilog-phase7-export-ux',
     title: '7. VERILOG — export UX showcase',
     desc: 'Phase-7 demo: small mixed circuit (counter → XOR-mask → register → adder) tagged with `stage` attributes so the export shows the new `// ─── Stage N ───` dividers. Use it to exercise the full export modal: line-numbered syntax-highlit preview, live top-name editing, stats bar, header toggle, error-surface warnings panel, TESTBENCH download (clock + VCD dump skeleton), PROJECT .ZIP bundle (.v + _tb.v + README, ready for `iverilog -g2005`), and right-click → Copy as Verilog on any block to grab a single-component snippet.',

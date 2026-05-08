@@ -200,8 +200,22 @@ function inferPassthroughWidths(circuit) {
   }
 }
 
-export function fromCircuit(circuitJSON) {
+// Phase-6 hierarchy plumbing. A single shared registry passes through
+// recursive fromCircuit calls so every SUB_CIRCUIT lookup hits the
+// same hash table — content-identical inner scenes collapse to one
+// emitted module shared across all instantiations, including those
+// in other parts of the canvas.
+//
+//   submodules : IRModule[]            — emitted definitions, in dependency order
+//   byHash     : Map<hash, moduleName> — for de-duplication
+//   usedNames  : Set<string>           — module-name uniqueness across the whole IR
+function makeSubmoduleRegistry() {
+  return { submodules: [], byHash: new Map(), usedNames: new Set() };
+}
+
+export function fromCircuit(circuitJSON, opts = {}) {
   const circuit = circuitJSON || { nodes: [], wires: [] };
+  const submoduleRegistry = opts.submoduleRegistry || makeSubmoduleRegistry();
   inferPassthroughWidths(circuit);
   const usedNames = new Set();
   const { ports, portByNodeId } = collectPorts(circuit, usedNames);
@@ -238,6 +252,15 @@ export function fromCircuit(circuitJSON) {
     instanceName(node) {
       return sanitizeIdentifier(node.label || `u_${node.id}`, 'u');
     },
+    // Phase-6 entry point for the SUB_CIRCUIT translator. Recursively
+    // builds the inner module IR (sharing this same registry so nested
+    // sub-circuits also de-dup), registers it, and returns the chosen
+    // module name. The translator builds its Instance against this
+    // name. Returns null when sub.subCircuit is missing.
+    registerSubmodule(sub) {
+      return _registerSubmodule(sub, submoduleRegistry);
+    },
+    submoduleRegistry,
   };
 
   const instances = [];
@@ -246,7 +269,15 @@ export function fromCircuit(circuitJSON) {
   const alwaysBlocks = [];  // populated by sequential translators (FFs, registers, …)
   const memories = [];      // memory arrays — populated by REG_FILE / RAM / ROM
   const unmapped = [];      // [{ type, nodeId }] — caller renders as // TODO
-  const instUsedNames = new Set();
+  // Instance names share the module-level identifier namespace —
+  // ports and nets already live in `usedNames`, and Verilog rejects
+  // an instance whose name collides with either. (Phase-6 hierarchy
+  // surfaced this: an inner OR gate labelled the same as an inner
+  // output port both sanitised to `use_imm`, and iverilog refused to
+  // compile the resulting submodule.) We seed `instUsedNames` from
+  // `usedNames` so the uniqueIdentifier suffixing kicks in for any
+  // gate or instance that would otherwise shadow a port/net.
+  const instUsedNames = new Set(usedNames);
   // Net-name → kind override map. Translators that drive a net from an
   // always block need it declared as `reg` instead of `wire`.
   const _regNetNames = new Set();
@@ -390,9 +421,60 @@ export function fromCircuit(circuitJSON) {
     assigns,
     alwaysBlocks,
     memories,
-    submodules: [],
+    // Only the outermost call (the one that allocated its own
+    // registry) attaches submodules — recursive callees return their
+    // module to the parent which registers it; embedding the full
+    // list inside every nested IR would multi-emit each definition.
+    submodules: opts.submoduleRegistry ? [] : submoduleRegistry.submodules,
   });
   // Non-IR metadata used by the pretty printer to render // TODO markers.
   ir._unmapped = unmapped;
   return ir;
+}
+
+// Build a stable content hash for a sub-circuit IR so identical
+// sub-circuits across the canvas collapse to a single Verilog module.
+// We hash a canonical projection of port shape + instance graph +
+// assigns + always blocks. Names of internal nets DO matter (they
+// appear in the emitted body), so we include them. The 32-bit FNV-1a
+// algorithm is plenty for the de-dup table.
+function _hashIR(ir) {
+  const canonical = JSON.stringify({
+    ports: ir.ports.map(p => ({ n: p.name, d: p.dir, w: p.width })),
+    nets:  ir.nets.map(n => ({ n: n.name, w: n.width, k: n.netKind })),
+    instances: ir.instances.map(i => ({
+      t: i.type, p: i.portMap, par: i.params, ord: i.portOrder, prim: !!i.isPrimitive,
+    })),
+    assigns: ir.assigns,
+    always:  ir.alwaysBlocks,
+    memories: ir.memories,
+  });
+  let h = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) {
+    h ^= canonical.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+function _registerSubmodule(node, registry) {
+  const sc = node.subCircuit;
+  if (!sc || !Array.isArray(sc.nodes)) return null;
+
+  const innerIR = fromCircuit(sc, { submoduleRegistry: registry });
+  const hash = _hashIR(innerIR);
+  const existing = registry.byHash.get(hash);
+  if (existing) return existing;
+
+  // Pick a module name. Prefer node.subName when set; fall back to a
+  // hash-suffixed identifier so two different sub-circuits sharing
+  // a label don't collide.
+  let base = sanitizeIdentifier(node.subName || node.label || 'block', 'block');
+  let chosen = base;
+  if (registry.usedNames.has(chosen)) chosen = `${base}_${hash}`;
+  registry.usedNames.add(chosen);
+  innerIR.name = chosen;
+  registry.byHash.set(hash, chosen);
+  registry.submodules.push(innerIR);
+  return chosen;
 }

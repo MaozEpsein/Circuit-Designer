@@ -1,0 +1,81 @@
+{
+  "_doc": "Phase-6 demo: hierarchical export. The scene has TWO instances of a 2:1 mux sub-circuit feeding their outputs into an XOR gate. Click VERILOG to see:\n  • A separate `module mux2(...)` definition emitted ABOVE the top, with its own internal `and`/`or`/`not` primitives — the inner scene's body lifted into a real Verilog hierarchy instead of being inlined twice.\n  • Content-hash de-duplication — only ONE `module mux2(...)` definition for both instances. Top instantiates it twice with named ports: `mux2 mx_lo (.a(in_a), ...)` and `mux2 mx_hi (.a(in_c), ...)`.\n  • Definition order — sub-modules first, top last (Verilog needs definitions before use). The exporter walks the registry in encounter order, with nested sub-circuits already de-duped.\n  • Switch tabs in the modal: `top.v` → see the wiring; `top_tb.v` → see how the auto-TB just feeds the four primary inputs (it doesn't know about the inner ports). Right-click any block → `Copy as Verilog` to grab a snippet for that block alone.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -120, "fixedValue": 1, "label": "in_a", "id": "in_a" },
+    { "type": "INPUT", "x": -380,  "y": -80, "fixedValue": 0, "label": "in_b", "id": "in_b" },
+    { "type": "INPUT", "x": -380,  "y": -40, "fixedValue": 0, "label": "sel_lo", "id": "sel_lo" },
+    { "type": "INPUT", "x": -380,   "y": 40, "fixedValue": 1, "label": "in_c", "id": "in_c" },
+    { "type": "INPUT", "x": -380,   "y": 80, "fixedValue": 0, "label": "in_d", "id": "in_d" },
+    { "type": "INPUT", "x": -380,  "y": 120, "fixedValue": 1, "label": "sel_hi", "id": "sel_hi" },
+
+    { "type": "SUB_CIRCUIT", "x": -100, "y": -80, "subName": "mux2", "label": "mx_lo", "id": "mx_lo",
+      "subInputs":  [{"id":"in_a"},{"id":"in_b"},{"id":"sel"}],
+      "subOutputs": [{"id":"out"}],
+      "subCircuit": {
+        "nodes": [
+          { "type": "INPUT", "x": -200, "y": -40, "label": "in_a", "id": "in_a" },
+          { "type": "INPUT", "x": -200,   "y": 0, "label": "in_b", "id": "in_b" },
+          { "type": "INPUT", "x": -200,  "y": 40, "label": "sel",  "id": "sel"  },
+          { "type": "GATE_SLOT", "x": -40,  "y": 50, "gate": "NOT", "label": "nsel",  "id": "nsel"  },
+          { "type": "GATE_SLOT", "x":  80, "y": -10, "gate": "AND", "label": "a_and", "id": "a_and" },
+          { "type": "GATE_SLOT", "x":  80,  "y": 30, "gate": "AND", "label": "b_and", "id": "b_and" },
+          { "type": "GATE_SLOT", "x": 200,  "y": 10, "gate": "OR",  "label": "or_g",  "id": "or_g"  },
+          { "type": "OUTPUT", "x": 320, "y": 10, "label": "out", "id": "out" }
+        ],
+        "wires": [
+          { "id": "ins1", "sourceId": "sel", "targetId": "nsel", "targetInputIndex": 0 },
+          { "id": "ins2", "sourceId": "in_a", "targetId": "a_and", "targetInputIndex": 0 },
+          { "id": "ins3", "sourceId": "nsel", "sourceOutputIndex": 0, "targetId": "a_and", "targetInputIndex": 1 },
+          { "id": "ins4", "sourceId": "in_b", "targetId": "b_and", "targetInputIndex": 0 },
+          { "id": "ins5", "sourceId": "sel",  "targetId": "b_and", "targetInputIndex": 1 },
+          { "id": "ins6", "sourceId": "a_and", "sourceOutputIndex": 0, "targetId": "or_g", "targetInputIndex": 0 },
+          { "id": "ins7", "sourceId": "b_and", "sourceOutputIndex": 0, "targetId": "or_g", "targetInputIndex": 1 },
+          { "id": "ins8", "sourceId": "or_g", "sourceOutputIndex": 0, "targetId": "out", "targetInputIndex": 0 }
+        ]
+      }
+    },
+
+    { "type": "SUB_CIRCUIT", "x": -100, "y":  80, "subName": "mux2", "label": "mx_hi", "id": "mx_hi",
+      "subInputs":  [{"id":"in_a"},{"id":"in_b"},{"id":"sel"}],
+      "subOutputs": [{"id":"out"}],
+      "subCircuit": {
+        "nodes": [
+          { "type": "INPUT", "x": -200, "y": -40, "label": "in_a", "id": "in_a" },
+          { "type": "INPUT", "x": -200,   "y": 0, "label": "in_b", "id": "in_b" },
+          { "type": "INPUT", "x": -200,  "y": 40, "label": "sel",  "id": "sel"  },
+          { "type": "GATE_SLOT", "x": -40,  "y": 50, "gate": "NOT", "label": "nsel",  "id": "nsel"  },
+          { "type": "GATE_SLOT", "x":  80, "y": -10, "gate": "AND", "label": "a_and", "id": "a_and" },
+          { "type": "GATE_SLOT", "x":  80,  "y": 30, "gate": "AND", "label": "b_and", "id": "b_and" },
+          { "type": "GATE_SLOT", "x": 200,  "y": 10, "gate": "OR",  "label": "or_g",  "id": "or_g"  },
+          { "type": "OUTPUT", "x": 320, "y": 10, "label": "out", "id": "out" }
+        ],
+        "wires": [
+          { "id": "ins1", "sourceId": "sel", "targetId": "nsel", "targetInputIndex": 0 },
+          { "id": "ins2", "sourceId": "in_a", "targetId": "a_and", "targetInputIndex": 0 },
+          { "id": "ins3", "sourceId": "nsel", "sourceOutputIndex": 0, "targetId": "a_and", "targetInputIndex": 1 },
+          { "id": "ins4", "sourceId": "in_b", "targetId": "b_and", "targetInputIndex": 0 },
+          { "id": "ins5", "sourceId": "sel",  "targetId": "b_and", "targetInputIndex": 1 },
+          { "id": "ins6", "sourceId": "a_and", "sourceOutputIndex": 0, "targetId": "or_g", "targetInputIndex": 0 },
+          { "id": "ins7", "sourceId": "b_and", "sourceOutputIndex": 0, "targetId": "or_g", "targetInputIndex": 1 },
+          { "id": "ins8", "sourceId": "or_g", "sourceOutputIndex": 0, "targetId": "out", "targetInputIndex": 0 }
+        ]
+      }
+    },
+
+    { "type": "GATE_SLOT", "x": 160, "y": 0, "gate": "XOR", "label": "combiner", "id": "combiner" },
+    { "type": "OUTPUT", "x": 360, "y": 0, "targetValue": 0, "sandbox": true, "label": "out", "id": "out" }
+  ],
+  "wires": [
+    { "sourceId": "in_a",   "targetId": "mx_lo", "targetInputIndex": 0, "id": "wlo0" },
+    { "sourceId": "in_b",   "targetId": "mx_lo", "targetInputIndex": 1, "id": "wlo1" },
+    { "sourceId": "sel_lo", "targetId": "mx_lo", "targetInputIndex": 2, "id": "wlo2" },
+
+    { "sourceId": "in_c",   "targetId": "mx_hi", "targetInputIndex": 0, "id": "whi0" },
+    { "sourceId": "in_d",   "targetId": "mx_hi", "targetInputIndex": 1, "id": "whi1" },
+    { "sourceId": "sel_hi", "targetId": "mx_hi", "targetInputIndex": 2, "id": "whi2" },
+
+    { "sourceId": "mx_lo", "sourceOutputIndex": 0, "targetId": "combiner", "targetInputIndex": 0, "id": "wxlo" },
+    { "sourceId": "mx_hi", "sourceOutputIndex": 0, "targetId": "combiner", "targetInputIndex": 1, "id": "wxhi" },
+    { "sourceId": "combiner", "sourceOutputIndex": 0, "targetId": "out", "targetInputIndex": 0, "id": "wo" }
+  ]
+}

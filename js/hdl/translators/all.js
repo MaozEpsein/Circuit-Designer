@@ -11,3 +11,4 @@ import './flip-flops.js';
 import './registers.js';
 import './dft.js';
 import './cpu.js';
+import './hierarchy.js';
