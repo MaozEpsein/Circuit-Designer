@@ -29,6 +29,7 @@ import { ProjectStorage } from './ui/ProjectStorage.js';
 import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
 import { PipelinePanel } from './pipeline/ui/PipelinePanel.js';
+import { DFTPanel } from './dft/ui/DFTPanel.js';
 import * as PipelineTelemetry from './pipeline/Telemetry.js';
 import { StageOverlay } from './pipeline/ui/StageOverlay.js';
 import { suggestRetime } from './pipeline/Retimer.js';
@@ -45,6 +46,7 @@ const commands = new CommandManager(100);
 const simCtrl  = new SimulationController();
 const pipelineAnalyzer = new PipelineAnalyzer(scene);
 const pipelinePanel    = new PipelinePanel(pipelineAnalyzer);
+const dftPanel         = new DFTPanel();
 const stageOverlay     = new StageOverlay(pipelineAnalyzer);
 
 // Pipeline panel asks to mutate a CU's props (e.g. branchPredictor dropdown);
@@ -2316,6 +2318,7 @@ bus.on('palette:action', (action) => {
       break;
     }
     case 'toggle-pipeline-panel': pipelinePanel.toggle(); break;
+    case 'toggle-dft-panel':      dftPanel.toggle(); break;
     case 'insert-stall': _insertPipeControl('stall'); break;
     case 'insert-flush': _insertPipeControl('flush'); break;
     case 'suggest-retime': _showRetimeSuggestion(); break;
@@ -2473,6 +2476,11 @@ window.addEventListener('keydown', (e) => {
   if (match === 'pipe-panel-toggle') {
     e.preventDefault();
     bus.emit('palette:action', 'toggle-pipeline-panel');
+    return;
+  }
+  if (match === 'dft-panel-toggle') {
+    e.preventDefault();
+    bus.emit('palette:action', 'toggle-dft-panel');
     return;
   }
   if (match === 'tutorial-toggle') {

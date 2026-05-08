@@ -156,6 +156,7 @@ export class CommandPalette {
       { id: 'action-stageview', label: 'Toggle Stage View', category: 'Pipeline', action: () => bus.emit('palette:action', 'toggle-stageview') },
       { id: 'action-analyze-pipeline', label: 'Analyze Pipeline', category: 'Pipeline', action: () => bus.emit('palette:action', 'analyze-pipeline') },
       { id: 'action-pipeline-panel', label: 'Toggle Pipeline Panel', category: 'Pipeline', action: () => bus.emit('palette:action', 'toggle-pipeline-panel') },
+      { id: 'action-dft-panel',      label: 'Toggle DFT Panel',      category: 'Test',     shortcut: 'T', action: () => bus.emit('palette:action', 'toggle-dft-panel') },
       { id: 'action-insert-stall', label: 'Insert Stall Input → Selected PIPE', category: 'Pipeline', action: () => bus.emit('palette:action', 'insert-stall') },
       { id: 'action-insert-flush', label: 'Insert Flush Input → Selected PIPE', category: 'Pipeline', action: () => bus.emit('palette:action', 'insert-flush') },
       { id: 'action-suggest-retime', label: 'Suggest Retiming', category: 'Pipeline', action: () => bus.emit('palette:action', 'suggest-retime') },

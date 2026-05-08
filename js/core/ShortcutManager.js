@@ -37,6 +37,8 @@ const DEFAULT_SHORTCUTS = {
   'edit-delete2':     { key: 'Backspace',         label: 'Delete Selected',   group: 'Editing' },
   // Pipeline (Phase 13)
   'pipe-panel-toggle':     { key: 'KeyP',             label: 'Toggle Pipeline Panel',  group: 'Pipeline' },
+  // DFT (Design For Test)
+  'dft-panel-toggle':      { key: 'KeyT',             label: 'Toggle DFT Panel',       group: 'Test' },
   // Learn Mode
   'tutorial-toggle':        { key: 'ctrl+shift+KeyL', label: 'Toggle Learn Mode',     group: 'Tutorial' },
   'tutorial-show-solution': { key: 'ctrl+shift+KeyS', label: 'Show Lesson Solution',  group: 'Tutorial' },
