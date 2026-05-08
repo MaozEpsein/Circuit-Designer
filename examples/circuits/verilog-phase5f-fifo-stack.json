@@ -1,0 +1,42 @@
+{
+  "_doc": "Phase-5f demo: FIFO + STACK — synchronous queue and LIFO. Click VERILOG to see how each lowers:\n  • FIFO — `reg [W-1:0] mem [0:DEPTH-1]` plus head/tail pointers and a count register. Reads are destructive: when RD is asserted, Q latches mem[head] and head advances. FULL/EMPTY are continuous comparisons against the count. Pointer wrap uses `(p+1==DEPTH) ? 0 : p+1` so non-power-of-2 depths work.\n  • STACK — single SP pointer naming the next-free slot (0=empty, DEPTH=full). PUSH writes mem[sp] then sp++; POP latches Q from mem[sp-1] then sp--. PUSH wins when both asserted.\nBoth use synchronous CLR-priority and parse cleanly through iverilog.",
+  "nodes": [
+    { "type": "INPUT", "x": -380,  "y": -120, "fixedValue": 0, "bitWidth": 8, "label": "data_q", "id": "data_q" },
+    { "type": "INPUT", "x": -380,   "y": -80, "fixedValue": 0, "label": "wr",  "id": "wr"  },
+    { "type": "INPUT", "x": -380,   "y": -40, "fixedValue": 0, "label": "rd",  "id": "rd"  },
+    { "type": "INPUT", "x": -380,    "y": 0,  "fixedValue": 0, "label": "clr_q", "id": "clr_q" },
+    { "type": "CLOCK", "x": -380,    "y": 40, "label": "clk", "id": "clk" },
+    { "type": "FIFO",  "x":  -80,   "y": -40, "depth": 4, "dataBits": 8, "label": "FIFO 4x8", "id": "fifo" },
+    { "type": "OUTPUT","x":  220,   "y": -80, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q_q",   "id": "q_q" },
+    { "type": "OUTPUT","x":  220,   "y": -40, "targetValue": 0, "sandbox": true, "label": "full_q","id": "full_q" },
+    { "type": "OUTPUT","x":  220,    "y": 0,  "targetValue": 0, "sandbox": true, "label": "emp_q", "id": "emp_q" },
+
+    { "type": "INPUT", "x": -380,  "y": 140, "fixedValue": 0, "bitWidth": 8, "label": "data_s", "id": "data_s" },
+    { "type": "INPUT", "x": -380,  "y": 180, "fixedValue": 0, "label": "psh", "id": "psh" },
+    { "type": "INPUT", "x": -380,  "y": 220, "fixedValue": 0, "label": "pop", "id": "pop" },
+    { "type": "INPUT", "x": -380,  "y": 260, "fixedValue": 0, "label": "clr_s", "id": "clr_s" },
+    { "type": "STACK", "x":  -80,  "y": 200, "depth": 4, "dataBits": 8, "label": "STACK 4x8", "id": "stk" },
+    { "type": "OUTPUT","x":  220,  "y": 160, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q_s",   "id": "q_s" },
+    { "type": "OUTPUT","x":  220,  "y": 200, "targetValue": 0, "sandbox": true, "label": "full_s","id": "full_s" },
+    { "type": "OUTPUT","x":  220,  "y": 240, "targetValue": 0, "sandbox": true, "label": "emp_s", "id": "emp_s" }
+  ],
+  "wires": [
+    { "sourceId": "data_q", "targetId": "fifo", "targetInputIndex": 0, "id": "f0" },
+    { "sourceId": "wr",     "targetId": "fifo", "targetInputIndex": 1, "id": "f1" },
+    { "sourceId": "rd",     "targetId": "fifo", "targetInputIndex": 2, "id": "f2" },
+    { "sourceId": "clr_q",  "targetId": "fifo", "targetInputIndex": 3, "id": "f3" },
+    { "sourceId": "clk",    "targetId": "fifo", "targetInputIndex": 4, "id": "f4" },
+    { "sourceId": "fifo",   "sourceOutputIndex": 0, "targetId": "q_q",    "targetInputIndex": 0, "id": "fo" },
+    { "sourceId": "fifo",   "sourceOutputIndex": 1, "targetId": "full_q", "targetInputIndex": 0, "id": "ff" },
+    { "sourceId": "fifo",   "sourceOutputIndex": 2, "targetId": "emp_q",  "targetInputIndex": 0, "id": "fe" },
+
+    { "sourceId": "data_s", "targetId": "stk", "targetInputIndex": 0, "id": "s0" },
+    { "sourceId": "psh",    "targetId": "stk", "targetInputIndex": 1, "id": "s1" },
+    { "sourceId": "pop",    "targetId": "stk", "targetInputIndex": 2, "id": "s2" },
+    { "sourceId": "clr_s",  "targetId": "stk", "targetInputIndex": 3, "id": "s3" },
+    { "sourceId": "clk",    "targetId": "stk", "targetInputIndex": 4, "id": "s4" },
+    { "sourceId": "stk",    "sourceOutputIndex": 0, "targetId": "q_s",    "targetInputIndex": 0, "id": "so" },
+    { "sourceId": "stk",    "sourceOutputIndex": 1, "targetId": "full_s", "targetInputIndex": 0, "id": "sf" },
+    { "sourceId": "stk",    "sourceOutputIndex": 2, "targetId": "emp_s",  "targetInputIndex": 0, "id": "se" }
+  ]
+}

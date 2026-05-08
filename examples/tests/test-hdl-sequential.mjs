@@ -120,7 +120,9 @@ console.log('Latches');
     ],
   }, { topName: 'dlatch_test', header: false });
   check('D_LATCH: emits @(*) sensitivity',         /always\s+@\(\*\)/.test(v));
-  check('D_LATCH: gated by `if (en)`',             /if\s*\(en\)\s*begin[\s\S]*<=\s*d/.test(v));
+  check('D_LATCH: gated by `if (en)`',             /if\s*\(en\)\s*begin[\s\S]*=\s*d/.test(v));
+  check('D_LATCH: uses BLOCKING (=) not <= (correct synth idiom)',
+    /=\s*d;/.test(v) && !/<=\s*d/.test(v));
   check('D_LATCH: Q net declared as reg',          /reg\s+net_l_0/.test(v));
   if (isIverilogAvailable()) {
     const r = parseCheck(v);
@@ -148,8 +150,8 @@ console.log('Latches');
   check('SR_LATCH: outer if(en) gate present',     /if\s*\(en\)/.test(v));
   check('SR_LATCH: set condition (s & ~r)',        /\(s\s*&\s*\(~r\)\)/.test(v));
   check('SR_LATCH: reset condition (~s & r)',      /\(\(~s\)\s*&\s*r\)/.test(v));
-  check('SR_LATCH: assigns 1\'h1 / 1\'h0 in branches',
-    /<=\s*1'h1/.test(v) && /<=\s*1'h0/.test(v));
+  check('SR_LATCH: assigns 1\'h1 / 1\'h0 in branches with BLOCKING (=)',
+    /=\s*1'h1/.test(v) && /=\s*1'h0/.test(v) && !/<=\s*1'h[01]/.test(v));
   if (isIverilogAvailable()) {
     const r = parseCheck(v);
     check('SR_LATCH: iverilog parses', r.ok, r.stderr);

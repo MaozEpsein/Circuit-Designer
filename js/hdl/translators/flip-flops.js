@@ -113,22 +113,26 @@ registerTranslator(COMPONENT_TYPES.LATCH_SLOT, (node, ctx) => {
   const lit0 = makeLiteral(0, 1, sr);
   const lit1 = makeLiteral(1, 1, sr);
 
-  // Build the body of the @(*) block.
+  // Build the body of the @(*) block. Use BLOCKING assigns inside
+  // combinational/latch always blocks — that's the synthesisable Verilog
+  // idiom. Non-blocking belongs to clocked `@(posedge clk)` blocks only;
+  // mixing them in `@(*)` triggers tool warnings and is a known
+  // race-prone style smell.
   let body;
   if (node.latchType === 'D_LATCH') {
-    // if (en) q <= d;
+    // if (en) q = d;
     const d = makeRef(dataNets[0].name, 1);
     body = [{
       kind: 'IfStmt', sourceRef: sr,
       cond: en,
-      then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: d }],
+      then: [{ kind: 'BlockingAssign', lhs: qRef, rhs: d }],
       else: null,
     }];
   } else {
     // SR_LATCH:
     //   if (en) begin
-    //     if      (s & ~r) q <= 1;
-    //     else if (~s & r) q <= 0;
+    //     if      (s & ~r) q = 1;
+    //     else if (~s & r) q = 0;
     //   end
     const s = makeRef(dataNets[0].name, 1);
     const r = makeRef(dataNets[1].name, 1);
@@ -137,11 +141,11 @@ registerTranslator(COMPONENT_TYPES.LATCH_SLOT, (node, ctx) => {
     const innerIf = {
       kind: 'IfStmt', sourceRef: sr,
       cond: setCond,
-      then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: lit1 }],
+      then: [{ kind: 'BlockingAssign', lhs: qRef, rhs: lit1 }],
       else: [{
         kind: 'IfStmt', sourceRef: sr,
         cond: rstCond,
-        then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: lit0 }],
+        then: [{ kind: 'BlockingAssign', lhs: qRef, rhs: lit0 }],
         else: null,
       }],
     };

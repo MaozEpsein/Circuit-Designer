@@ -1,0 +1,41 @@
+{
+  "_doc": "Phase-5e demo (part 2): CU and BUS — the two more involved CPU pieces. Click VERILOG to see the canonical patterns:\n  • CU (Control Unit) — pure combinational decoder over a 4-bit OP, built as one nested-ternary chain per output. Six control outputs (ALU_OP, RG_WE, MM_WE, MM_RE, JMP, HALT, IMM) drive the rest of the datapath. JMP gates on Z (BEQ → `z`) or ~Z (BNE → `~z`). Default 16-op ISA is hardcoded; node.controlTable lets you override.\n  • BUS — multi-driver bus, lowered to a priority-MUX (en0 > en1 > en2 > 1'bz). No internal multi-driver tri-state; one continuous assign on the bus net. ERR output flags multi-active conflicts via zero-extended population count. This is the lowerTriState pass the README plan called for at Phase 5.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -200, "fixedValue": 0,  "bitWidth": 4, "label": "op", "id": "op" },
+    { "type": "INPUT", "x": -380, "y": -150, "fixedValue": 0,                 "label": "z",  "id": "z" },
+    { "type": "INPUT", "x": -380, "y": -100, "fixedValue": 0,                 "label": "c",  "id": "c" },
+    { "type": "CU",    "x":  -80, "y": -150, "bitWidth": 4, "label": "CU 16-op", "id": "cu" },
+    { "type": "OUTPUT","x":  220, "y": -210, "targetValue": 0, "sandbox": true, "bitWidth": 3, "label": "aluop", "id": "aluop" },
+    { "type": "OUTPUT","x":  220, "y": -170, "targetValue": 0, "sandbox": true, "label": "rwe",  "id": "rwe" },
+    { "type": "OUTPUT","x":  220, "y": -130, "targetValue": 0, "sandbox": true, "label": "jmp",  "id": "jmp" },
+    { "type": "OUTPUT","x":  220,  "y": -90, "targetValue": 0, "sandbox": true, "label": "halt", "id": "halt" },
+
+    { "type": "INPUT", "x": -380,   "y": 30, "fixedValue": 17, "bitWidth": 8, "label": "d0", "id": "d0" },
+    { "type": "INPUT", "x": -380,   "y": 70, "fixedValue": 1,                 "label": "e0", "id": "e0" },
+    { "type": "INPUT", "x": -380,  "y": 110, "fixedValue": 99, "bitWidth": 8, "label": "d1", "id": "d1" },
+    { "type": "INPUT", "x": -380,  "y": 150, "fixedValue": 0,                 "label": "e1", "id": "e1" },
+    { "type": "INPUT", "x": -380,  "y": 190, "fixedValue": 200, "bitWidth": 8, "label": "d2", "id": "d2" },
+    { "type": "INPUT", "x": -380,  "y": 230, "fixedValue": 0,                 "label": "e2", "id": "e2" },
+    { "type": "BUS",   "x":  -80,  "y": 130, "sourceCount": 3, "bitWidth": 8, "label": "BUS 3:1", "id": "bus" },
+    { "type": "OUTPUT","x":  220,  "y": 110, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "bus_out", "id": "bus_out" },
+    { "type": "OUTPUT","x":  220,  "y": 150, "targetValue": 0, "sandbox": true,                 "label": "bus_err", "id": "bus_err" }
+  ],
+  "wires": [
+    { "sourceId": "op", "targetId": "cu", "targetInputIndex": 0, "id": "wo" },
+    { "sourceId": "z",  "targetId": "cu", "targetInputIndex": 1, "id": "wz" },
+    { "sourceId": "c",  "targetId": "cu", "targetInputIndex": 2, "id": "wc" },
+    { "sourceId": "cu", "sourceOutputIndex": 0, "targetId": "aluop", "targetInputIndex": 0, "id": "wa" },
+    { "sourceId": "cu", "sourceOutputIndex": 1, "targetId": "rwe",   "targetInputIndex": 0, "id": "wr" },
+    { "sourceId": "cu", "sourceOutputIndex": 4, "targetId": "jmp",   "targetInputIndex": 0, "id": "wj" },
+    { "sourceId": "cu", "sourceOutputIndex": 5, "targetId": "halt",  "targetInputIndex": 0, "id": "wh" },
+
+    { "sourceId": "d0", "targetId": "bus", "targetInputIndex": 0, "id": "wd0" },
+    { "sourceId": "e0", "targetId": "bus", "targetInputIndex": 1, "id": "we0" },
+    { "sourceId": "d1", "targetId": "bus", "targetInputIndex": 2, "id": "wd1" },
+    { "sourceId": "e1", "targetId": "bus", "targetInputIndex": 3, "id": "we1" },
+    { "sourceId": "d2", "targetId": "bus", "targetInputIndex": 4, "id": "wd2" },
+    { "sourceId": "e2", "targetId": "bus", "targetInputIndex": 5, "id": "we2" },
+    { "sourceId": "bus", "sourceOutputIndex": 0, "targetId": "bus_out", "targetInputIndex": 0, "id": "wbo" },
+    { "sourceId": "bus", "sourceOutputIndex": 1, "targetId": "bus_err", "targetInputIndex": 0, "id": "wbe" }
+  ]
+}

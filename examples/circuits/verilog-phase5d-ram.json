@@ -1,0 +1,21 @@
+{
+  "_doc": "Phase-5d demo: RAM with sync write, async read, and pre-loaded contents. Click VERILOG to see the full memory exported:\n  • `reg [7:0] mem_<id> [0:15]` — 16-deep × 8-bit Verilog memory array.\n  • `assign rd = re ? mem[addr] : 8'h0;` — RE-gated async read. Asserting RE=1 returns the indexed cell; RE=0 returns 0 (matches the engine's hold-on-low semantics best-effort).\n  • `always @(posedge clk) if (we) mem[addr] <= data;` — synchronous write port.\n  • `initial begin mem[0] = 8'h12; mem[1] = 8'h34; ...` — pre-load. Three cells (0/1/2) are seeded with values 0x12 / 0x34 / 0x56. iverilog and FPGA toolchains honour the initial; ASIC users would replace it with $readmemh or a reset path.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -180, "fixedValue": 0, "bitWidth": 4, "label": "addr", "id": "addr" },
+    { "type": "INPUT", "x": -380, "y": -130, "fixedValue": 0, "bitWidth": 8, "label": "data", "id": "data" },
+    { "type": "INPUT", "x": -380,  "y": -80, "fixedValue": 0,                "label": "we",   "id": "we" },
+    { "type": "INPUT", "x": -380,  "y": -30, "fixedValue": 1,                "label": "re",   "id": "re" },
+    { "type": "CLOCK", "x": -380,   "y": 30, "value": 0, "id": "clk" },
+    { "type": "RAM",   "x":  -80, "y": -100, "dataBits": 8, "addrBits": 4, "label": "RAM 16×8",
+      "memory": {"0": 18, "1": 52, "2": 86, "3": 120, "4": 154}, "id": "ram" },
+    { "type": "OUTPUT", "x": 220, "y": -100, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q", "id": "q" }
+  ],
+  "wires": [
+    { "sourceId": "addr", "targetId": "ram", "targetInputIndex": 0, "id": "w1" },
+    { "sourceId": "data", "targetId": "ram", "targetInputIndex": 1, "id": "w2" },
+    { "sourceId": "we",   "targetId": "ram", "targetInputIndex": 2, "id": "w3" },
+    { "sourceId": "re",   "targetId": "ram", "targetInputIndex": 3, "id": "w4" },
+    { "sourceId": "clk",  "targetId": "ram", "targetInputIndex": 4, "isClockWire": true, "id": "w5" },
+    { "sourceId": "ram",  "targetId": "q",   "targetInputIndex": 0, "id": "wq" }
+  ]
+}

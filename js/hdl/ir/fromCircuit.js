@@ -17,6 +17,11 @@ function nodeBitWidth(node, outIdx = 0) {
   // different widths. Listed before the generic bitWidth fallback.
   if (node?.type === 'COUNTER' && outIdx === 1) return 1;        // TC is 1-bit
   if (node?.type === 'LFSR')                     return 1;        // serial Q is 1-bit (MSB)
+  // CU control outputs: out0 = ALU_OP (3-bit op selector), all others
+  // are single-bit control signals.
+  if (node?.type === 'CU') return outIdx === 0 ? 3 : 1;
+  // BUS: out0 = bus value (bitWidth), out1 = ERR flag (1-bit).
+  if (node?.type === 'BUS' && outIdx === 1)       return 1;
   // ALU: out0 = R (bitWidth), out1 = Z (1-bit), out2 = C (1-bit).
   if (node?.type === 'ALU' && outIdx >= 1)       return 1;
   // IR fields: out0=OP, out1=RD, out2=RS1, out3=RS2 — each uses its
@@ -40,6 +45,15 @@ function nodeBitWidth(node, outIdx = 0) {
   if (node?.type === 'REG_FILE' || node?.type === 'REG_FILE_DP') {
     return Math.max(1, (node.dataBits ?? node.bitWidth ?? 8) | 0);
   }
+  // RAM / ROM: outputs are dataBits-wide.
+  if (node?.type === 'RAM' || node?.type === 'ROM') {
+    return Math.max(1, (node.dataBits ?? node.bitWidth ?? 8) | 0);
+  }
+  // FIFO / STACK: out0 = Q (dataBits), out1 = FULL (1), out2 = EMPTY (1).
+  if (node?.type === 'FIFO' || node?.type === 'STACK') {
+    if (outIdx === 0) return Math.max(1, (node.dataBits ?? node.bitWidth ?? 8) | 0);
+    return 1;
+  }
   const w = node?.bitWidth ?? node?.dataBits ?? node?.width ?? 1;
   return Math.max(1, w | 0);
 }
@@ -47,6 +61,21 @@ function nodeBitWidth(node, outIdx = 0) {
 function collectPorts(circuit, usedNames) {
   const ports = [];
   const portByNodeId = new Map();
+  const nodeById = new Map();
+  for (const n of (circuit.nodes || [])) nodeById.set(n.id, n);
+
+  // For OUTPUT nodes that don't carry their own explicit bitWidth, infer
+  // the port width from the driver: find the wire whose target is this
+  // OUTPUT, look up the source node, ask nodeBitWidth(srcNode, outIdx).
+  // Without this, a user-placed OUTPUT defaults to 1 bit and silently
+  // truncates an 8-bit datapath wire to its LSB.
+  const outputDriverWidth = (n) => {
+    const w = (circuit.wires || []).find(w => w.targetId === n.id);
+    if (!w) return 1;
+    const src = nodeById.get(w.sourceId);
+    return src ? nodeBitWidth(src, w.sourceOutputIndex ?? 0) : 1;
+  };
+
   // Stable iteration order: node array order (deterministic).
   for (const n of (circuit.nodes || [])) {
     if (n.type === 'INPUT' || n.type === 'CLOCK') {
@@ -59,8 +88,11 @@ function collectPorts(circuit, usedNames) {
       portByNodeId.set(n.id, p);
     } else if (n.type === 'OUTPUT') {
       const name = uniqueIdentifier(n.label || n.id, usedNames, 'out');
+      // Explicit bitWidth on the OUTPUT wins; otherwise infer from driver.
+      const explicit = n.bitWidth || n.width;
+      const width = explicit ? Math.max(1, explicit | 0) : outputDriverWidth(n);
       const p = makePort({
-        name, dir: PORT_DIR.OUTPUT, width: nodeBitWidth(n),
+        name, dir: PORT_DIR.OUTPUT, width,
         sourceRef: SourceRef.fromNode(n.id),
       });
       ports.push(p);
@@ -132,8 +164,45 @@ function collectNets(circuit, portByNodeId, usedNames) {
   return { nets, netByEndpoint };
 }
 
+// Width inference pre-pass. Some "pass-through" components (BUS_MUX, MUX_2,
+// MUX_4, TRIBUF) carry the width of their data inputs rather than having
+// their own. If the user didn't pin a bitWidth, infer it by walking back
+// to the data driver. Without this, an unconfigured BUS_MUX defaults to
+// 1 bit and silently truncates an 8-bit datapath to its LSB.
+function inferPassthroughWidths(circuit) {
+  const nodeById = new Map();
+  for (const n of (circuit.nodes || [])) nodeById.set(n.id, n);
+  // Per type, which input indices are "data" (carry the operating width).
+  const dataPinsOf = {
+    BUS_MUX: (n) => Array.from({ length: n.inputCount || 2 }, (_, i) => i),
+    MUX_2:   () => [0, 1],
+    MUX_4:   () => [0, 1, 2, 3],
+    TRIBUF:  () => [0],
+  };
+  // Iterate to a fixed point — chained passthroughs need multiple passes.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const n of (circuit.nodes || [])) {
+      const f = dataPinsOf[n.type];
+      if (!f) continue;
+      if (n.bitWidth && n.bitWidth > 1) continue;
+      for (const idx of f(n)) {
+        const w = (circuit.wires || []).find(
+          w => w.targetId === n.id && (w.targetInputIndex || 0) === idx,
+        );
+        if (!w) continue;
+        const src = nodeById.get(w.sourceId);
+        const sw = src ? nodeBitWidth(src, w.sourceOutputIndex ?? 0) : 1;
+        if (sw > 1) { n.bitWidth = sw; changed = true; break; }
+      }
+    }
+    if (!changed) break;
+  }
+}
+
 export function fromCircuit(circuitJSON) {
   const circuit = circuitJSON || { nodes: [], wires: [] };
+  inferPassthroughWidths(circuit);
   const usedNames = new Set();
   const { ports, portByNodeId } = collectPorts(circuit, usedNames);
   const { nets, netByEndpoint } = collectNets(circuit, portByNodeId, usedNames);

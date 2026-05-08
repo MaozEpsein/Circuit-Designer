@@ -24,6 +24,10 @@ function emitExpr(expr) {
       if (expr.hi === expr.lo) return `${expr.netName}[${expr.lo}]`;
       return `${expr.netName}[${expr.hi}:${expr.lo}]`;
     case IR_KIND.Literal:
+      // Translators that need a non-numeric Verilog literal (e.g. a
+      // tri-state `1'bz`, a don't-care `?`, etc.) put the verbatim
+      // text in `_verilog` and the pretty-printer uses it as-is.
+      if (expr._verilog) return expr._verilog;
       return `${expr.width}'h${(BigInt(expr.value) & ((1n << BigInt(expr.width)) - 1n)).toString(16)}`;
     case IR_KIND.BinaryOp:
       return `(${emitExpr(expr.left)} ${expr.op} ${emitExpr(expr.right)})`;
@@ -104,6 +108,27 @@ function emitStatement(stmt, indent = '    ') {
       for (const s of stmt.else) lines.push(emitStatement(s, indent + '  '));
       lines.push(`${indent}end`);
     }
+    return lines.join('\n');
+  }
+  if (stmt.kind === 'CaseStmt') {
+    // case (selector)
+    //   <label>: begin <stmts> end
+    //   ...
+    //   default: begin <stmts> end
+    // endcase
+    const lines = [`${indent}case (${emitExpr(stmt.selector)})`];
+    for (const arm of (stmt.cases || [])) {
+      const label = emitExpr(arm.label);
+      lines.push(`${indent}  ${label}: begin`);
+      for (const s of (arm.body || [])) lines.push(emitStatement(s, indent + '    '));
+      lines.push(`${indent}  end`);
+    }
+    if (stmt.default && stmt.default.length) {
+      lines.push(`${indent}  default: begin`);
+      for (const s of stmt.default) lines.push(emitStatement(s, indent + '    '));
+      lines.push(`${indent}  end`);
+    }
+    lines.push(`${indent}endcase`);
     return lines.join('\n');
   }
   return `${indent}/* <unknown stmt: ${stmt.kind}> */`;

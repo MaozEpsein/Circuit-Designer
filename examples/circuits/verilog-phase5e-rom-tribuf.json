@@ -1,0 +1,26 @@
+{
+  "_doc": "Phase-5e demo (part 1): ROM + TRIBUF. Click VERILOG to see how each lowers:\n  • ROM (16×8) — same memory machinery as RAM (Phase 5d) but without the write port. The `initial begin` block seeds five cells; reads are RE-gated and async.\n  • TRIBUF — `assign y = en ? a : 1'bz;`. The high-Z literal arrives via a Literal-IR override that lets translators emit non-numeric Verilog literals (`1'bz`, `1'bx`, `?`, etc.). Closes the Phase-3 TRIBUF defer.\nCU and BUS — the more complex CPU pieces — land in the next substep.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -180, "fixedValue": 0, "bitWidth": 4, "label": "addr", "id": "addr" },
+    { "type": "INPUT", "x": -380, "y": -130, "fixedValue": 1,                "label": "re",   "id": "re" },
+    { "type": "CLOCK", "x": -380,  "y": -70, "value": 0, "id": "clk" },
+    { "type": "ROM",   "x":  -80, "y": -130, "dataBits": 8, "addrBits": 4, "label": "ROM 16×8",
+      "memory": {"0": 160, "1": 177, "2": 194, "3": 211, "4": 228}, "id": "rom" },
+    { "type": "OUTPUT", "x": 220, "y": -130, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "rom_q", "id": "rom_q" },
+
+    { "type": "INPUT", "x": -380,   "y": 60, "fixedValue": 1, "label": "data", "id": "tri_a" },
+    { "type": "INPUT", "x": -380,  "y": 100, "fixedValue": 1, "label": "en",   "id": "tri_en" },
+    { "type": "GATE_SLOT", "x":  -80, "y": 80, "gate": "TRIBUF", "label": "TRI", "id": "tri" },
+    { "type": "OUTPUT", "x": 220, "y": 80, "targetValue": 1, "sandbox": true, "label": "tri_y", "id": "tri_y" }
+  ],
+  "wires": [
+    { "sourceId": "addr", "targetId": "rom", "targetInputIndex": 0, "id": "wr1" },
+    { "sourceId": "re",   "targetId": "rom", "targetInputIndex": 1, "id": "wr2" },
+    { "sourceId": "clk",  "targetId": "rom", "targetInputIndex": 2, "isClockWire": true, "id": "wr3" },
+    { "sourceId": "rom",  "targetId": "rom_q", "targetInputIndex": 0, "id": "wr_q" },
+
+    { "sourceId": "tri_a",  "targetId": "tri", "targetInputIndex": 0, "id": "wt1" },
+    { "sourceId": "tri_en", "targetId": "tri", "targetInputIndex": 1, "id": "wt2" },
+    { "sourceId": "tri",    "targetId": "tri_y", "targetInputIndex": 0, "id": "wt_y" }
+  ]
+}
