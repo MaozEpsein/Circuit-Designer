@@ -262,6 +262,107 @@ console.log('Muxing');
   }
 }
 
+// ── 4.7 DEMUX, DECODER, ENCODER ─────────────────────────────
+console.log('Demux / Decoder / Encoder');
+
+// DEMUX 1:4 — each output is `(sel == k) ? data : 0`
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd', type: 'INPUT', label: 'd' },
+      { id: 's0', type: 'INPUT', label: 's0' },
+      { id: 's1', type: 'INPUT', label: 's1' },
+      { id: 'dm', type: 'DEMUX', outputCount: 4, label: 'dm' },
+      { id: 'o0', type: 'OUTPUT', label: 'o0' },
+      { id: 'o1', type: 'OUTPUT', label: 'o1' },
+      { id: 'o2', type: 'OUTPUT', label: 'o2' },
+      { id: 'o3', type: 'OUTPUT', label: 'o3' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'd',  targetId: 'dm', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 's0', targetId: 'dm', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 's1', targetId: 'dm', targetInputIndex: 2 },
+      { id: 'wo0', sourceId: 'dm', sourceOutputIndex: 0, targetId: 'o0', targetInputIndex: 0 },
+      { id: 'wo1', sourceId: 'dm', sourceOutputIndex: 1, targetId: 'o1', targetInputIndex: 0 },
+      { id: 'wo2', sourceId: 'dm', sourceOutputIndex: 2, targetId: 'o2', targetInputIndex: 0 },
+      { id: 'wo3', sourceId: 'dm', sourceOutputIndex: 3, targetId: 'o3', targetInputIndex: 0 },
+    ],
+  }, { topName: 'demux14', header: false });
+  check('DEMUX: routes data to selected output',
+    /\(\(\{s1,\s*s0\}\s*==\s*2'h0\)\s*\?\s*d\s*:\s*1'h0\)/.test(v));
+  check('DEMUX: emits one assign per output',
+    (v.match(/assign\s+net_dm_/g) || []).length === 4);
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('DEMUX: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// DECODER 2:4 — each output is `(addr == k)`, one-hot
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a0', type: 'INPUT', label: 'a0' },
+      { id: 'a1', type: 'INPUT', label: 'a1' },
+      { id: 'dec', type: 'DECODER', inputBits: 2, label: 'dec' },
+      { id: 'o0', type: 'OUTPUT', label: 'o0' },
+      { id: 'o1', type: 'OUTPUT', label: 'o1' },
+      { id: 'o2', type: 'OUTPUT', label: 'o2' },
+      { id: 'o3', type: 'OUTPUT', label: 'o3' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'a0', targetId: 'dec', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'a1', targetId: 'dec', targetInputIndex: 1 },
+      { id: 'wo0', sourceId: 'dec', sourceOutputIndex: 0, targetId: 'o0', targetInputIndex: 0 },
+      { id: 'wo1', sourceId: 'dec', sourceOutputIndex: 1, targetId: 'o1', targetInputIndex: 0 },
+      { id: 'wo2', sourceId: 'dec', sourceOutputIndex: 2, targetId: 'o2', targetInputIndex: 0 },
+      { id: 'wo3', sourceId: 'dec', sourceOutputIndex: 3, targetId: 'o3', targetInputIndex: 0 },
+    ],
+  }, { topName: 'dec24', header: false });
+  check('DECODER: each output is `(addr == k)`',
+    /\(\{a1,\s*a0\}\s*==\s*2'h0\)/.test(v) &&
+    /\(\{a1,\s*a0\}\s*==\s*2'h3\)/.test(v));
+  check('DECODER: emits 2^N (=4) outputs',
+    (v.match(/assign\s+net_dec_/g) || []).length === 4);
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('DECODER: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// ENCODER 4:2 — priority encoder, nested ternary chain
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'i0', type: 'INPUT', label: 'i0' },
+      { id: 'i1', type: 'INPUT', label: 'i1' },
+      { id: 'i2', type: 'INPUT', label: 'i2' },
+      { id: 'i3', type: 'INPUT', label: 'i3' },
+      { id: 'enc', type: 'ENCODER', inputLines: 4, label: 'enc' },
+      { id: 'b0', type: 'OUTPUT', label: 'b0' },
+      { id: 'b1', type: 'OUTPUT', label: 'b1' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'i0', targetId: 'enc', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'i1', targetId: 'enc', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'i2', targetId: 'enc', targetInputIndex: 2 },
+      { id: 'w4', sourceId: 'i3', targetId: 'enc', targetInputIndex: 3 },
+      { id: 'wo0', sourceId: 'enc', sourceOutputIndex: 0, targetId: 'b0', targetInputIndex: 0 },
+      { id: 'wo1', sourceId: 'enc', sourceOutputIndex: 1, targetId: 'b1', targetInputIndex: 0 },
+    ],
+  }, { topName: 'enc42', header: false });
+  // i3 is highest-priority and is checked outermost
+  check('ENCODER: highest-priority input checked first',
+    /\(i3\s*\?\s*1'h1/.test(v));
+  // Output count: log2(4) = 2 outputs (b0, b1)
+  check('ENCODER: emits log2(N) (=2) output bits',
+    (v.match(/assign\s+net_enc_/g) || []).length === 2);
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('ENCODER: iverilog parses', r.ok, r.stderr);
+  }
+}
+
 // ── 5. Empty GATE_SLOT (gate field unset) — silently skipped ─
 // Mirrors the canvas behaviour: an empty FF / gate slot is a "drop
 // target", not a circuit element. The translator returns nothing and

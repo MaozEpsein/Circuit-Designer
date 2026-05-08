@@ -3977,6 +3977,13 @@ const EXAMPLES = [
     tags: ['verilog', 'phase3', 'phase3c', 'mux'],
     file: 'examples/circuits/verilog-phase3c-mux.json',
   },
+  {
+    id: 'verilog-phase3d-demux-dec-enc',
+    title: '3d. VERILOG — demux, decoder, encoder',
+    desc: 'Phase-3d demo: DEMUX, DECODER, and ENCODER side by side. Each is pure continuous-assignment form: DEMUX routes the data input to one of N outputs via `(sel == k) ? data : 0`; DECODER produces a one-hot vector via `(addr == k)`; ENCODER (priority) is a nested-ternary chain where the highest active input wins. No `always` blocks, no procedural code — all three lower to a handful of `assign` lines.',
+    tags: ['verilog', 'phase3', 'phase3d', 'demux', 'decoder', 'encoder'],
+    file: 'examples/circuits/verilog-phase3d-demux-dec-enc.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

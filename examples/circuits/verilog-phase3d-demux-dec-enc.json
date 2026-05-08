@@ -1,0 +1,52 @@
+{
+  "_doc": "Phase-3d demo: DEMUX, DECODER, and ENCODER side by side. Click VERILOG in the bottom toolbar to see how each lowers:\n  • DEMUX 1:4 — every output is `(sel == k) ? data : 1'b0`, routing the single data input to one of four outputs.\n  • DECODER 2:4 — every output is `(addr == k)`, producing a one-hot bit vector from a 2-bit address.\n  • ENCODER 4:2 (priority) — nested ternary chain: highest active input wins, output is its index encoded in 2 bits.\nAll three are pure continuous assignments — no `always` blocks needed — and parse cleanly with iverilog.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -260, "fixedValue": 1, "label": "d",   "id": "d_in" },
+    { "type": "INPUT", "x": -380, "y": -200, "fixedValue": 1, "label": "ds0", "id": "ds0" },
+    { "type": "INPUT", "x": -380, "y": -150, "fixedValue": 0, "label": "ds1", "id": "ds1" },
+    { "type": "DEMUX", "x":  -80, "y": -200, "outputCount": 4, "label": "DEMUX 1:4", "id": "dm" },
+    { "type": "OUTPUT", "x": 220, "y": -240, "targetValue": 0, "sandbox": true, "label": "dm0", "id": "dm0" },
+    { "type": "OUTPUT", "x": 220, "y": -210, "targetValue": 1, "sandbox": true, "label": "dm1", "id": "dm1" },
+    { "type": "OUTPUT", "x": 220, "y": -180, "targetValue": 0, "sandbox": true, "label": "dm2", "id": "dm2" },
+    { "type": "OUTPUT", "x": 220, "y": -150, "targetValue": 0, "sandbox": true, "label": "dm3", "id": "dm3" },
+
+    { "type": "INPUT",   "x": -380, "y":  -40, "fixedValue": 1, "label": "a0", "id": "a0" },
+    { "type": "INPUT",   "x": -380,    "y": 0, "fixedValue": 0, "label": "a1", "id": "a1" },
+    { "type": "DECODER", "x":  -80,  "y": -20, "inputBits": 2, "label": "DECODER 2:4", "id": "dec" },
+    { "type": "OUTPUT",  "x":  220,  "y": -60, "targetValue": 0, "sandbox": true, "label": "dec0", "id": "dec0" },
+    { "type": "OUTPUT",  "x":  220,  "y": -30, "targetValue": 1, "sandbox": true, "label": "dec1", "id": "dec1" },
+    { "type": "OUTPUT",  "x":  220,    "y": 0, "targetValue": 0, "sandbox": true, "label": "dec2", "id": "dec2" },
+    { "type": "OUTPUT",  "x":  220,   "y": 30, "targetValue": 0, "sandbox": true, "label": "dec3", "id": "dec3" },
+
+    { "type": "INPUT",   "x": -380, "y": 140, "fixedValue": 0, "label": "i0", "id": "i0" },
+    { "type": "INPUT",   "x": -380, "y": 180, "fixedValue": 0, "label": "i1", "id": "i1" },
+    { "type": "INPUT",   "x": -380, "y": 220, "fixedValue": 1, "label": "i2", "id": "i2" },
+    { "type": "INPUT",   "x": -380, "y": 260, "fixedValue": 0, "label": "i3", "id": "i3" },
+    { "type": "ENCODER", "x":  -80, "y": 200, "inputLines": 4, "label": "ENC 4:2", "id": "enc" },
+    { "type": "OUTPUT",  "x":  220, "y": 180, "targetValue": 0, "sandbox": true, "label": "b0", "id": "b0" },
+    { "type": "OUTPUT",  "x":  220, "y": 220, "targetValue": 1, "sandbox": true, "label": "b1", "id": "b1" }
+  ],
+  "wires": [
+    { "sourceId": "d_in", "targetId": "dm", "targetInputIndex": 0, "id": "wd_d" },
+    { "sourceId": "ds0",  "targetId": "dm", "targetInputIndex": 1, "id": "wd_s0" },
+    { "sourceId": "ds1",  "targetId": "dm", "targetInputIndex": 2, "id": "wd_s1" },
+    { "sourceId": "dm", "sourceOutputIndex": 0, "targetId": "dm0", "targetInputIndex": 0, "id": "w_dm0" },
+    { "sourceId": "dm", "sourceOutputIndex": 1, "targetId": "dm1", "targetInputIndex": 0, "id": "w_dm1" },
+    { "sourceId": "dm", "sourceOutputIndex": 2, "targetId": "dm2", "targetInputIndex": 0, "id": "w_dm2" },
+    { "sourceId": "dm", "sourceOutputIndex": 3, "targetId": "dm3", "targetInputIndex": 0, "id": "w_dm3" },
+
+    { "sourceId": "a0", "targetId": "dec", "targetInputIndex": 0, "id": "w_a0" },
+    { "sourceId": "a1", "targetId": "dec", "targetInputIndex": 1, "id": "w_a1" },
+    { "sourceId": "dec", "sourceOutputIndex": 0, "targetId": "dec0", "targetInputIndex": 0, "id": "w_dec0" },
+    { "sourceId": "dec", "sourceOutputIndex": 1, "targetId": "dec1", "targetInputIndex": 0, "id": "w_dec1" },
+    { "sourceId": "dec", "sourceOutputIndex": 2, "targetId": "dec2", "targetInputIndex": 0, "id": "w_dec2" },
+    { "sourceId": "dec", "sourceOutputIndex": 3, "targetId": "dec3", "targetInputIndex": 0, "id": "w_dec3" },
+
+    { "sourceId": "i0", "targetId": "enc", "targetInputIndex": 0, "id": "w_i0" },
+    { "sourceId": "i1", "targetId": "enc", "targetInputIndex": 1, "id": "w_i1" },
+    { "sourceId": "i2", "targetId": "enc", "targetInputIndex": 2, "id": "w_i2" },
+    { "sourceId": "i3", "targetId": "enc", "targetInputIndex": 3, "id": "w_i3" },
+    { "sourceId": "enc", "sourceOutputIndex": 0, "targetId": "b0", "targetInputIndex": 0, "id": "w_b0" },
+    { "sourceId": "enc", "sourceOutputIndex": 1, "targetId": "b1", "targetInputIndex": 0, "id": "w_b1" }
+  ]
+}
