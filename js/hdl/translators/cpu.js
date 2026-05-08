@@ -138,11 +138,13 @@ registerTranslator(COMPONENT_TYPES.PC, (node, ctx) => {
 // Op encoding (3-bit OP):
 //   0 ADD, 1 SUB, 2 AND, 3 OR, 4 XOR, 5 SHL, 6 SHR, 7 CMP (or SRA when sraMode)
 //
-// Result (R) is built as a nested-ternary chain on OP. Z = (R == 0).
-// C combines ADD overflow (high bit of width-extended sum), SUB
-// borrow (a < b), and 0 for the rest. To pick up the ADD carry we
-// declare an extra (W+1)-bit internal wire `<id>_addext = {1'b0,a}+{1'b0,b}`
-// so its top bit can be sliced cleanly.
+// Lowering: a single `always @(*) case (op) ... endcase` block sets R
+// and C together — same idiom as the CU translator. R and C are upgraded
+// to `reg` (out.regNets); Z stays a continuous assign that compares R
+// to zero. ADD carry comes from a (W+1)-bit width-extended sum; SUB
+// borrow is `a < b`; CMP carry is `a > b`; everything else is 0.
+// A `default` arm zeroes both outputs so no opcode value can infer a
+// latch even if OP is somehow out-of-range at simulation time.
 registerTranslator(COMPONENT_TYPES.ALU, (node, ctx) => {
   const sr = SourceRef.fromNode(node.id);
   const W  = node.bitWidth || 8;
@@ -159,83 +161,99 @@ registerTranslator(COMPONENT_TYPES.ALU, (node, ctx) => {
 
   const a  = makeRef(aNet.name, W);
   const b  = makeRef(bNet.name, W);
-  const op = makeRef(opNet.name, opNet.width || 3);
-  const opLit = (n) => makeLiteral(n, opNet.width || 3, sr);
+  const opW = opNet.width || 3;
+  const op = makeRef(opNet.name, opW);
+  const opLit = (n) => makeLiteral(n, opW, sr);
+  const lit0W = makeLiteral(0, W, sr);
+  const lit01 = makeLiteral(0, 1, sr);
 
-  // Build the result chain. OP=7 is CMP (a == b ? 0 : a - b) unless
-  // sraMode is set; we follow the canvas default and emit CMP. SRA
-  // requires shift-by-variable on signed which iverilog handles
-  // with $signed, but our canvas usage of OP=7 is mostly CMP.
-  const ops = [
-    makeBinaryOp('+', a, b, W, sr),                                                 // ADD
-    makeBinaryOp('-', a, b, W, sr),                                                 // SUB
-    makeBinaryOp('&', a, b, W, sr),                                                 // AND
-    makeBinaryOp('|', a, b, W, sr),                                                 // OR
-    makeBinaryOp('^', a, b, W, sr),                                                 // XOR
-    makeBinaryOp('<<', a, b, W, sr),                                                // SHL
-    makeBinaryOp('>>', a, b, W, sr),                                                // SHR
-    makeTernary(                                                                    // CMP / SRA
-      makeBinaryOp('==', a, b, 1, sr),
-      makeLiteral(0, W, sr),
-      makeBinaryOp('-', a, b, W, sr),
-      W, sr,
-    ),
+  const rRef = makeRef(rNet.name, W);
+  const cRef = cNet ? makeRef(cNet.name, 1) : null;
+
+  // Width-extended addition wire so we can slice the carry-out cleanly.
+  // Continuous-assigned outside the always block; the case body just
+  // references its top bit.
+  const extName = `${rNet.name}_addext`;
+  const extraNets = [
+    makeNet({ name: extName, width: W + 1, kind: NET_KIND.WIRE, sourceRef: sr }),
   ];
-  let rExpr = ops[ops.length - 1];
-  for (let k = ops.length - 2; k >= 0; k--) {
-    rExpr = makeTernary(
-      makeBinaryOp('==', op, opLit(k), 1, sr),
-      ops[k], rExpr, W, sr,
-    );
-  }
-
+  const aExt = { kind: 'Concat', sourceRef: sr, attributes: [],
+    parts: [makeLiteral(0, 1, sr), a], width: W + 1 };
+  const bExt = { kind: 'Concat', sourceRef: sr, attributes: [],
+    parts: [makeLiteral(0, 1, sr), b], width: W + 1 };
   const assigns = [{
     kind: 'Assign', sourceRef: sr, attributes: [],
-    lhs: makeRef(rNet.name, W),
-    rhs: rExpr,
+    lhs: makeRef(extName, W + 1),
+    rhs: makeBinaryOp('+', aExt, bExt, W + 1, sr),
   }];
 
+  // Per-op (rExpr, cExpr) tuples. The R column produces a value of W
+  // bits; the C column produces a 1-bit flag (0 when not meaningful
+  // for that op so it never goes "stuck" between cycles).
+  const addCarry  = makeSlice(extName, W, W, sr);
+  const subBorrow = makeBinaryOp('<', a, b, 1, sr);
+  const cmpGT     = makeBinaryOp('>', a, b, 1, sr);
+  const arms = [
+    { op: 0, r: makeBinaryOp('+',  a, b, W, sr),                              c: addCarry  },
+    { op: 1, r: makeBinaryOp('-',  a, b, W, sr),                              c: subBorrow },
+    { op: 2, r: makeBinaryOp('&',  a, b, W, sr),                              c: lit01     },
+    { op: 3, r: makeBinaryOp('|',  a, b, W, sr),                              c: lit01     },
+    { op: 4, r: makeBinaryOp('^',  a, b, W, sr),                              c: lit01     },
+    { op: 5, r: makeBinaryOp('<<', a, b, W, sr),                              c: lit01     },
+    { op: 6, r: makeBinaryOp('>>', a, b, W, sr),                              c: lit01     },
+    { op: 7, r: makeTernary(                                                                    // CMP
+        makeBinaryOp('==', a, b, 1, sr),
+        lit0W,
+        makeBinaryOp('-', a, b, W, sr),
+        W, sr),
+      c: cmpGT },
+  ];
+
+  const cases = arms.map(arm => ({
+    label: opLit(arm.op),
+    body: cRef
+      ? [
+          { kind: 'BlockingAssign', sourceRef: sr, lhs: rRef, rhs: arm.r },
+          { kind: 'BlockingAssign', sourceRef: sr, lhs: cRef, rhs: arm.c },
+        ]
+      : [
+          { kind: 'BlockingAssign', sourceRef: sr, lhs: rRef, rhs: arm.r },
+        ],
+  }));
+  const defaultBody = cRef
+    ? [
+        { kind: 'BlockingAssign', sourceRef: sr, lhs: rRef, rhs: lit0W },
+        { kind: 'BlockingAssign', sourceRef: sr, lhs: cRef, rhs: lit01 },
+      ]
+    : [
+        { kind: 'BlockingAssign', sourceRef: sr, lhs: rRef, rhs: lit0W },
+      ];
+
+  const alwaysBlk = {
+    kind: 'Always', sourceRef: sr, attributes: [],
+    sensitivity: { star: true },
+    body: [{ kind: 'CaseStmt', sourceRef: sr,
+      selector: op, cases, default: defaultBody }],
+  };
+
+  // Z is a clean continuous assign — there's no benefit to driving it
+  // from inside the always block.
   if (zNet) {
     assigns.push({
       kind: 'Assign', sourceRef: sr, attributes: [],
       lhs: makeRef(zNet.name, 1),
-      rhs: makeBinaryOp('==', makeRef(rNet.name, W), makeLiteral(0, W, sr), 1, sr),
+      rhs: makeBinaryOp('==', rRef, lit0W, 1, sr),
     });
   }
 
-  // C flag: extra (W+1)-bit wire for the ADD carry, then a ternary
-  // chain selecting the right "carry" based on op.
-  const extraNets = [];
-  if (cNet) {
-    const extName = `${rNet.name}_addext`;
-    extraNets.push(makeNet({ name: extName, width: W + 1, kind: NET_KIND.WIRE, sourceRef: sr }));
-    // {1'b0, a} + {1'b0, b}  via concat — re-uses makeConcat through
-    // a hand-built Concat node so we don't have to import it just for one use.
-    const aExt = { kind: 'Concat', sourceRef: sr, attributes: [],
-      parts: [makeLiteral(0, 1, sr), a], width: W + 1 };
-    const bExt = { kind: 'Concat', sourceRef: sr, attributes: [],
-      parts: [makeLiteral(0, 1, sr), b], width: W + 1 };
-    assigns.push({
-      kind: 'Assign', sourceRef: sr, attributes: [],
-      lhs: makeRef(extName, W + 1),
-      rhs: makeBinaryOp('+', aExt, bExt, W + 1, sr),
-    });
-    const addCarry = makeSlice(extName, W, W, sr);
-    const subBorrow = makeBinaryOp('<', a, b, 1, sr);
-    const cmpGT     = makeBinaryOp('>', a, b, 1, sr);
-    // op == 0 → ADD carry; op == 1 → SUB borrow; op == 7 → CMP greater; else 0.
-    let cExpr = makeLiteral(0, 1, sr);
-    cExpr = makeTernary(makeBinaryOp('==', op, opLit(7), 1, sr), cmpGT,    cExpr, 1, sr);
-    cExpr = makeTernary(makeBinaryOp('==', op, opLit(1), 1, sr), subBorrow,cExpr, 1, sr);
-    cExpr = makeTernary(makeBinaryOp('==', op, opLit(0), 1, sr), addCarry, cExpr, 1, sr);
-    assigns.push({
-      kind: 'Assign', sourceRef: sr, attributes: [],
-      lhs: makeRef(cNet.name, 1),
-      rhs: cExpr,
-    });
-  }
-
-  return { assigns, nets: extraNets };
+  const regNets = [rNet.name];
+  if (cNet) regNets.push(cNet.name);
+  return {
+    assigns,
+    nets: extraNets,
+    alwaysBlocks: [alwaysBlk],
+    regNets,
+  };
 });
 
 // ── REG_FILE (single-port read, single-port write) ──────────

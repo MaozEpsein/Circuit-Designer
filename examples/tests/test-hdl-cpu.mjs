@@ -119,18 +119,22 @@ console.log('ALU');
       { id: 'wc', sourceId: 'alu', sourceOutputIndex: 2, targetId: 'c', targetInputIndex: 0 },
     ],
   }, { topName: 'alu_test', header: false });
-  check('ALU: ADD branch (op == 3\'h0) → (a + b)',
-    /\(op\s*==\s*3'h0\)\s*\?\s*\(a\s*\+\s*b\)/.test(v));
-  check('ALU: SUB branch (op == 3\'h1) → (a - b)',
-    /\(op\s*==\s*3'h1\)\s*\?\s*\(a\s*-\s*b\)/.test(v));
+  check('ALU: emits always @(*) with case (op)',
+    /always\s+@\(\*\)[\s\S]*case\s*\(op\)/.test(v));
+  check('ALU: ADD arm (3\'h0) sets R = a + b',
+    /3'h0:\s*begin[\s\S]*?net_alu_0\s*=\s*\(a\s*\+\s*b\)/.test(v));
+  check('ALU: SUB arm (3\'h1) sets R = a - b',
+    /3'h1:\s*begin[\s\S]*?net_alu_0\s*=\s*\(a\s*-\s*b\)/.test(v));
   check('ALU: Z = (R == 0)',
     /assign\s+net_alu_1\s*=\s*\(net_alu_0\s*==\s*8'h0\)/.test(v));
   check('ALU: extra addext wire is W+1 bits',
     /wire\s+\[8:0\]\s+net_alu_0_addext/.test(v));
-  check('ALU: C selects addext[W] for ADD',
-    /\(op\s*==\s*3'h0\)\s*\?\s*net_alu_0_addext\[8\]/.test(v));
-  check('ALU: Z and C nets are 1-bit',
-    /wire\s+net_alu_1\b/.test(v) && /wire\s+net_alu_2\b/.test(v));
+  check('ALU: ADD arm sets C = addext[W]',
+    /3'h0:\s*begin[\s\S]*?net_alu_2\s*=\s*net_alu_0_addext\[8\]/.test(v));
+  check('ALU: default arm zeroes R and C',
+    /default:\s*begin[\s\S]*?net_alu_0\s*=\s*8'h0[\s\S]*?net_alu_2\s*=\s*1'h0/.test(v));
+  check('ALU: R is reg (driven from always block)',
+    /reg\s+\[7:0\]\s+net_alu_0/.test(v));
   if (isIverilogAvailable()) {
     const r = parseCheck(v);
     check('ALU: iverilog parses', r.ok, r.stderr);
