@@ -1,0 +1,28 @@
+{
+  "_doc": "Phase-4d demo: a 3-channel pipeline register exported to Verilog. Click VERILOG to see the result — every PIPE_REG channel becomes its own `reg [W-1:0]` net, all driven from a single `always @(posedge clk)` block whose body is a priority chain:\n  • if (flush) → every channel cleared to 0\n  • else if (!stall) → every channel latches its data input\n  • else → hold (no assignment fires)\nThis is exactly the engine's runtime behaviour, ported to RTL. The translator degrades gracefully when STALL or FLUSH pins are unconnected — only the wired control signals appear in the always-block guards.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -180, "fixedValue": 5,  "bitWidth": 8, "label": "d0", "id": "d0" },
+    { "type": "INPUT", "x": -380, "y": -130, "fixedValue": 17, "bitWidth": 8, "label": "d1", "id": "d1" },
+    { "type": "INPUT", "x": -380,  "y": -80, "fixedValue": 99, "bitWidth": 8, "label": "d2", "id": "d2" },
+    { "type": "INPUT", "x": -380,    "y": 0, "fixedValue": 0, "label": "stall", "id": "stall" },
+    { "type": "INPUT", "x": -380,   "y": 50, "fixedValue": 0, "label": "flush", "id": "flush" },
+    { "type": "CLOCK", "x": -380,  "y": 110, "value": 0, "id": "clk" },
+
+    { "type": "PIPE_REG", "x": -80, "y": -50, "channels": 3, "bitWidth": 8, "label": "PIPE 3×8", "id": "pr" },
+
+    { "type": "OUTPUT", "x": 220, "y": -180, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q0", "id": "q0" },
+    { "type": "OUTPUT", "x": 220, "y": -130, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q1", "id": "q1" },
+    { "type": "OUTPUT", "x": 220,  "y": -80, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q2", "id": "q2" }
+  ],
+  "wires": [
+    { "sourceId": "d0",    "targetId": "pr", "targetInputIndex": 0, "id": "wd0" },
+    { "sourceId": "d1",    "targetId": "pr", "targetInputIndex": 1, "id": "wd1" },
+    { "sourceId": "d2",    "targetId": "pr", "targetInputIndex": 2, "id": "wd2" },
+    { "sourceId": "stall", "targetId": "pr", "targetInputIndex": 3, "id": "ws" },
+    { "sourceId": "flush", "targetId": "pr", "targetInputIndex": 4, "id": "wf" },
+    { "sourceId": "clk",   "targetId": "pr", "targetInputIndex": 5, "isClockWire": true, "id": "wc" },
+    { "sourceId": "pr", "sourceOutputIndex": 0, "targetId": "q0", "targetInputIndex": 0, "id": "wq0" },
+    { "sourceId": "pr", "sourceOutputIndex": 1, "targetId": "q1", "targetInputIndex": 0, "id": "wq1" },
+    { "sourceId": "pr", "sourceOutputIndex": 2, "targetId": "q2", "targetInputIndex": 0, "id": "wq2" }
+  ]
+}

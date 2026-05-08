@@ -330,6 +330,73 @@ console.log('DFT (SCAN_FF + LFSR)');
   }
 }
 
+// ── PIPE_REG (pipeline register with stall/flush) ───────────
+console.log('PIPE_REG');
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd0', type: 'INPUT', label: 'd0', bitWidth: 8 },
+      { id: 'd1', type: 'INPUT', label: 'd1', bitWidth: 8 },
+      { id: 'd2', type: 'INPUT', label: 'd2', bitWidth: 8 },
+      { id: 'stall', type: 'INPUT', label: 'stall' },
+      { id: 'flush', type: 'INPUT', label: 'flush' },
+      { id: 'clk', type: 'CLOCK', label: 'clk' },
+      { id: 'p',  type: 'PIPE_REG', channels: 3, bitWidth: 8, label: 'p' },
+      { id: 'q0', type: 'OUTPUT', label: 'q0', bitWidth: 8 },
+      { id: 'q1', type: 'OUTPUT', label: 'q1', bitWidth: 8 },
+      { id: 'q2', type: 'OUTPUT', label: 'q2', bitWidth: 8 },
+    ],
+    wires: [
+      { id: 'wd0', sourceId: 'd0', targetId: 'p', targetInputIndex: 0 },
+      { id: 'wd1', sourceId: 'd1', targetId: 'p', targetInputIndex: 1 },
+      { id: 'wd2', sourceId: 'd2', targetId: 'p', targetInputIndex: 2 },
+      { id: 'ws',  sourceId: 'stall', targetId: 'p', targetInputIndex: 3 },
+      { id: 'wf',  sourceId: 'flush', targetId: 'p', targetInputIndex: 4 },
+      { id: 'wc',  sourceId: 'clk', targetId: 'p', targetInputIndex: 5, isClockWire: true },
+      { id: 'wq0', sourceId: 'p', sourceOutputIndex: 0, targetId: 'q0', targetInputIndex: 0 },
+      { id: 'wq1', sourceId: 'p', sourceOutputIndex: 1, targetId: 'q1', targetInputIndex: 0 },
+      { id: 'wq2', sourceId: 'p', sourceOutputIndex: 2, targetId: 'q2', targetInputIndex: 0 },
+    ],
+  }, { topName: 'pipe3', header: false });
+  check('PIPE_REG: declares one 8-bit reg per channel',
+    /reg\s+\[7:0\]\s+net_p_0/.test(v) &&
+    /reg\s+\[7:0\]\s+net_p_1/.test(v) &&
+    /reg\s+\[7:0\]\s+net_p_2/.test(v));
+  check('PIPE_REG: FLUSH branch clears every channel',
+    /if\s*\(flush\)\s*begin[\s\S]*net_p_0\s*<=\s*8'h0[\s\S]*net_p_1\s*<=\s*8'h0[\s\S]*net_p_2\s*<=\s*8'h0/.test(v));
+  check('PIPE_REG: nested `if (!stall)` for normal latch',
+    /if\s*\(\(?!stall\)?\)/.test(v) || /\(!stall\)/.test(v));
+  check('PIPE_REG: latch branch assigns each d_i to its channel',
+    /net_p_0\s*<=\s*d0[\s\S]*net_p_1\s*<=\s*d1[\s\S]*net_p_2\s*<=\s*d2/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('PIPE_REG: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// PIPE_REG with no STALL pin — degrades to FLUSH-only behaviour
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd0', type: 'INPUT', label: 'd0', bitWidth: 4 },
+      { id: 'flush', type: 'INPUT', label: 'flush' },
+      { id: 'clk', type: 'CLOCK', label: 'clk' },
+      // Channels=1 so the pin layout is D0(0), STALL(1), FLUSH(2), CLK(3).
+      { id: 'p', type: 'PIPE_REG', channels: 1, bitWidth: 4, label: 'p' },
+      { id: 'q0', type: 'OUTPUT', label: 'q0', bitWidth: 4 },
+    ],
+    wires: [
+      { id: 'wd0', sourceId: 'd0', targetId: 'p', targetInputIndex: 0 },
+      // STALL pin (index 1) intentionally unwired
+      { id: 'wf',  sourceId: 'flush', targetId: 'p', targetInputIndex: 2 },
+      { id: 'wc',  sourceId: 'clk',   targetId: 'p', targetInputIndex: 3, isClockWire: true },
+      { id: 'wq0', sourceId: 'p', sourceOutputIndex: 0, targetId: 'q0', targetInputIndex: 0 },
+    ],
+  }, { topName: 'pipe1_nostall', header: false });
+  check('PIPE_REG (no STALL): emits if/else without stall guard',
+    /if\s*\(flush\)/.test(v) && !/!stall/.test(v));
+}
+
 // ── Empty FF_SLOT (ffType unset) — silently skipped ──────────
 console.log('Empty FF_SLOT (ffType unset)');
 {

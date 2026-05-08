@@ -4013,6 +4013,13 @@ const EXAMPLES = [
     file: 'examples/circuits/verilog-phase4c-registers.json',
   },
   {
+    id: 'verilog-phase4d-pipe-reg',
+    title: '4d. VERILOG — pipeline register (3-channel, stall/flush)',
+    desc: 'Phase-4d demo: a 3-channel pipeline register with STALL and FLUSH. Click VERILOG to see how it lowers — every channel becomes its own `reg [W-1:0]` net, all driven from a single `always @(posedge clk)` block whose body is a priority chain: `if (flush) → every channel cleared`, `else if (!stall) → every channel latches its data input`, else hold. This is the engine\'s runtime behaviour ported to RTL. The translator degrades gracefully when STALL or FLUSH pins are unconnected — only the wired control signals appear in the guards.',
+    tags: ['verilog', 'phase4', 'phase4d', 'pipe-reg', 'pipeline', 'sequential'],
+    file: 'examples/circuits/verilog-phase4d-pipe-reg.json',
+  },
+  {
     id: 'verilog-phase4e-dft',
     title: '4e. VERILOG — SCAN-FF + LFSR (DFT)',
     desc: 'Phase-4e demo: the two DFT primitives we built on the simulator side now have Verilog translators. SCAN-FF lowers to a D-FF with a 2:1 mux on its input gated by TE (`q <= te ? ti : d`). LFSR adds three idioms Phase 4 hasn\'t shown yet: an internal `reg [N-1:0]` net not tied to any canvas wire, a Verilog `initial begin ... end` block to seed the register at sim start, and a slice-XOR shift expression `{state[N-2:0], state[t1] ^ state[t0]}` for the next state. Click VERILOG to see both forms, both parsing cleanly with iverilog.',

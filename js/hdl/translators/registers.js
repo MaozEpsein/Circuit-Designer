@@ -144,6 +144,118 @@ registerTranslator(COMPONENT_TYPES.COUNTER, (node, ctx) => {
   return result;
 });
 
+// ── PIPE_REG ─────────────────────────────────────────────────
+// Pipeline register with N parallel channels, STALL, FLUSH, CLK.
+// Pin layout (mirroring SimulationEngine):
+//   D0..D(N-1) : channels                        (indices 0..N-1)
+//   STALL      : freeze update                   (index N)
+//   FLUSH      : clear all channels to 0         (index N+1)
+//   CLK        : rising edge                     (index N+2)
+//   __out0..__out(N-1) : one output per channel
+//
+// Priority semantics (matches engine):
+//   FLUSH        → q_i <= 0           (all channels cleared)
+//   else !STALL  → q_i <= d_i         (latch each channel)
+//   else         → hold               (no assignment fires)
+//
+// Verilog form (one always block, multiple non-blocking assigns
+// inside each branch):
+//   always @(posedge clk) begin
+//     if (flush) begin
+//       q_0 <= 0;
+//       q_1 <= 0;
+//       ...
+//     end else if (!stall) begin
+//       q_0 <= d_0;
+//       ...
+//     end
+//   end
+registerTranslator(COMPONENT_TYPES.PIPE_REG, (node, ctx) => {
+  const sr = SourceRef.fromNode(node.id);
+  const ch = node.channels || 4;
+  const W  = node.bitWidth || 8;
+
+  const dataNets = [];
+  for (let i = 0; i < ch; i++) dataNets.push(ctx.inputNet(node.id, i));
+  const stallNet = ctx.inputNet(node.id, ch);
+  const flushNet = ctx.inputNet(node.id, ch + 1);
+  const clkNet   = ctx.inputNet(node.id, ch + 2);
+  if (!clkNet) return {};
+
+  const qNets = [];
+  for (let i = 0; i < ch; i++) qNets.push(_outNet(ctx, node.id, i));
+  // Need at least one connected output to emit anything.
+  if (qNets.every(n => !n)) return {};
+
+  const sr_ = sr;
+  const lit0 = makeLiteral(0, W, sr_);
+
+  // Build the FLUSH branch: one `q_i <= 0;` per channel.
+  const flushBody = qNets
+    .filter(n => n)
+    .map(n => ({
+      kind: 'NonBlockingAssign',
+      lhs: makeRef(n.name, W),
+      rhs: lit0,
+    }));
+
+  // Build the LATCH branch: one `q_i <= d_i;` per connected channel.
+  const latchBody = [];
+  for (let i = 0; i < ch; i++) {
+    if (qNets[i] && dataNets[i]) {
+      latchBody.push({
+        kind: 'NonBlockingAssign',
+        lhs: makeRef(qNets[i].name, W),
+        rhs: makeRef(dataNets[i].name, W),
+      });
+    }
+  }
+
+  // Compose the body. STALL and FLUSH are optional pins — translator
+  // degrades gracefully when either is missing (pure latch when both
+  // absent, FLUSH-only chain when STALL absent, etc.).
+  let body;
+  if (flushNet && stallNet) {
+    body = [{
+      kind: 'IfStmt', sourceRef: sr_,
+      cond: makeRef(flushNet.name, 1),
+      then: flushBody,
+      else: [{
+        kind: 'IfStmt', sourceRef: sr_,
+        cond: makeUnaryOp('!', makeRef(stallNet.name, 1), 1, sr_),
+        then: latchBody,
+        else: null,
+      }],
+    }];
+  } else if (flushNet) {
+    body = [{
+      kind: 'IfStmt', sourceRef: sr_,
+      cond: makeRef(flushNet.name, 1),
+      then: flushBody,
+      else: latchBody,
+    }];
+  } else if (stallNet) {
+    body = [{
+      kind: 'IfStmt', sourceRef: sr_,
+      cond: makeUnaryOp('!', makeRef(stallNet.name, 1), 1, sr_),
+      then: latchBody,
+      else: null,
+    }];
+  } else {
+    body = latchBody;     // pure pipeline register, always latches
+  }
+
+  return {
+    regNets: qNets.filter(n => n).map(n => n.name),
+    alwaysBlocks: [{
+      kind: 'Always', sourceRef: sr_, attributes: [],
+      sensitivity: { triggers: [{ edge: 'posedge', signal: clkNet.name }] },
+      body,
+    }],
+    assigns: [],
+  };
+});
+
 // ── SHIFT_REG ────────────────────────────────────────────────
 // Bidirectional shift register. DIR=1 → left (DIN enters at LSB),
 // DIR=0 → right (DIN enters at MSB). Matches the engine semantics.
