@@ -2213,12 +2213,76 @@
 #verilog-preview-body {
   flex: 1 1 auto;
   margin: 0;
-  padding: 14px 18px;
+  padding: 14px 0;
   overflow: auto;
   background: #07090d;
   color: #d0d8e4;
   font: 12px/1.5 'JetBrains Mono', monospace;
   white-space: pre;
+  counter-reset: vlineno;
+}
+/* Line numbers: each top-level line is a row that puts its index in
+   a fixed-width gutter via CSS counter. Stays clickable-friendly and
+   doesn't interfere with text selection of the code itself. */
+#verilog-preview-body .vp-line { display: block; counter-increment: vlineno; }
+#verilog-preview-body .vp-line::before {
+  content: counter(vlineno);
+  display: inline-block;
+  width: 38px; padding-right: 12px;
+  text-align: right;
+  color: #455060;
+  user-select: none;
+}
+/* Verilog syntax-highlight tokens. Subtle palette tuned to the rest
+   of the app's dark amber/teal scheme so it doesn't fight the chrome. */
+#verilog-preview-body .tok-kw  { color: #ffb878; font-weight: 600; }
+#verilog-preview-body .tok-ty  { color: #80c0ff; }
+#verilog-preview-body .tok-num { color: #f0a060; }
+#verilog-preview-body .tok-cmt { color: #5a6a78; font-style: italic; }
+#verilog-preview-body .tok-op  { color: #d090c0; }
+#verilog-preview-body .tok-todo{ color: #ff6060; font-weight: 600; }
+#verilog-preview-headeropt,
+#verilog-preview-topopt {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; color: #c8b89a; letter-spacing: 0.5px;
+  padding: 2px 6px; cursor: pointer; user-select: none;
+}
+#verilog-preview-headeropt input { margin: 0; cursor: pointer; }
+#txt-verilog-topname {
+  width: 90px; background: #1a2030; color: #ffb878;
+  border: 1px solid #3a4658; border-radius: 3px;
+  padding: 2px 6px; font: 10px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+}
+#txt-verilog-topname:focus { outline: none; border-color: #aa6a2a; }
+#verilog-preview-stats {
+  display: flex; gap: 14px; align-items: center;
+  padding: 6px 18px; background: #0c1118; border-bottom: 1px solid #1a2230;
+  font: 10px/1 'JetBrains Mono', monospace; color: #8898a8; letter-spacing: 0.5px;
+}
+#verilog-preview-stats b { color: #d8e4f0; font-weight: 600; margin-right: 3px; }
+#verilog-preview-stats .hidden { display: none; }
+#vp-stat-todo b { color: #ff8080; }
+#verilog-preview-warnings {
+  padding: 8px 18px; background: #2a1a08; border-bottom: 1px solid #5a3a18;
+  font: 10px/1.5 'JetBrains Mono', monospace; color: #ffb878;
+  max-height: 100px; overflow-y: auto;
+}
+#verilog-preview-warnings.hidden { display: none; }
+#verilog-preview-warnings .vp-warn-title {
+  font-weight: 600; color: #ff8060; letter-spacing: 0.5px; margin-right: 8px;
+}
+#verilog-preview-warnings ul { margin: 4px 0 0 16px; padding: 0; }
+#verilog-preview-warnings li { color: #d8c8a0; }
+#verilog-preview-warnings li code {
+  color: #ffd0a0; background: #1a1208; padding: 0 4px; border-radius: 2px;
+}
+#verilog-preview-hint {
+  padding: 8px 18px; background: #0c1118; border-top: 1px solid #1a2230;
+  font: 10px/1.4 'JetBrains Mono', monospace; color: #6a7a8a;
+}
+#verilog-preview-hint code {
+  color: #c8b89a; background: #1a2030; padding: 1px 5px; border-radius: 3px;
 }
 
 #examples-modal {

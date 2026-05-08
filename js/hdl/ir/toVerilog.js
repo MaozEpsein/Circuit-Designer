@@ -203,7 +203,36 @@ export function toVerilog(ir, opts = {}) {
 
   const bodyLines = [];
   for (const a of ir.assigns) bodyLines.push(emitAssign(a));
-  for (const inst of ir.instances) bodyLines.push(emitInstance(inst));
+  // Group instances by their `stage` attribute (set by the pipeline
+  // analyzer in fromCircuit). When any instance carries a stage tag,
+  // emit `// ─── Stage N ───` dividers between groups so a reader can
+  // skim the datapath stage-by-stage. Untagged instances form a final
+  // "unstaged" group with no header. The relative order of instances
+  // within each stage is preserved (ir.instances is already sorted
+  // deterministically by fromCircuit).
+  const stageOf = (inst) => {
+    const attr = (inst.attributes || []).find(a => a.key === 'stage');
+    return attr ? attr.value : null;
+  };
+  const anyStaged = ir.instances.some(i => stageOf(i) !== null);
+  if (anyStaged) {
+    const groups = new Map();           // stage → instances[]
+    const unstaged = [];
+    for (const inst of ir.instances) {
+      const s = stageOf(inst);
+      if (s === null) { unstaged.push(inst); continue; }
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(inst);
+    }
+    const sortedStages = [...groups.keys()].sort((a, b) => a - b);
+    for (const s of sortedStages) {
+      bodyLines.push(`  // ─── Stage ${s} ───`);
+      for (const inst of groups.get(s)) bodyLines.push(emitInstance(inst));
+    }
+    for (const inst of unstaged) bodyLines.push(emitInstance(inst));
+  } else {
+    for (const inst of ir.instances) bodyLines.push(emitInstance(inst));
+  }
   for (const blk of (ir.alwaysBlocks || [])) bodyLines.push(emitAlways(blk));
   if (Array.isArray(ir._unmapped)) {
     for (const u of ir._unmapped) {

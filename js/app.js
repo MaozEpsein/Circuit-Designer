@@ -276,6 +276,50 @@ ctxMenu?.addEventListener('click', (e) => {
       }
       break;
 
+    case 'copy-verilog':
+      // Export just this node + the wires touching it as a one-block
+      // Verilog snippet, then copy to clipboard. Useful for grabbing
+      // a single component's translator output without scanning the
+      // whole module. Inputs/outputs that the node connects to become
+      // ad-hoc INPUT/OUTPUT ports so the snippet is a valid module.
+      if (node) {
+        const wires = scene.wires.filter(
+          w => w.sourceId === node.id || w.targetId === node.id,
+        );
+        const portStubs = [];
+        const seen = new Set([node.id]);
+        for (const w of wires) {
+          for (const otherId of [w.sourceId, w.targetId]) {
+            if (seen.has(otherId)) continue;
+            seen.add(otherId);
+            const other = scene.getNode(otherId);
+            if (!other) continue;
+            const isUpstream = (otherId === w.sourceId);
+            portStubs.push({
+              id: otherId,
+              type: isUpstream ? 'INPUT' : 'OUTPUT',
+              label: other.label || otherId,
+              bitWidth: other.bitWidth || 1,
+              x: other.x, y: other.y,
+            });
+          }
+        }
+        const subCircuit = {
+          nodes: [node, ...portStubs],
+          wires,
+        };
+        const snippet = exportVerilog(subCircuit, {
+          topName: (node.label || node.type || 'block').toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+          header: false,
+        });
+        navigator.clipboard?.writeText(snippet).then(() => {
+          bus.emit('toast:show', { text: 'Verilog snippet copied to clipboard', kind: 'ok' });
+        }).catch(() => {
+          bus.emit('toast:show', { text: 'Clipboard write failed', kind: 'err' });
+        });
+      }
+      break;
+
     case 'paste':
       selection.paste();
       break;
@@ -2808,10 +2852,9 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// Verilog export — opens a preview modal with COPY + DOWNLOAD instead
-// of going straight to download. Lets the user inspect the generated
-// HDL before saving. Phase-7 of the HDL plan replaces this with a
-// richer modal (syntax highlight, options, testbench bundle).
+// Verilog export — opens a preview modal with syntax-highlit output,
+// at-a-glance stats, header toggle, copy / download actions, and a
+// command hint for verifying with iverilog. Phase-7 of the HDL plan.
 (function initVerilogPreview() {
   const btnOpen     = document.getElementById('btn-export-verilog');
   const overlay     = document.getElementById('verilog-preview-overlay');
@@ -2819,25 +2862,285 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   const btnCopy     = document.getElementById('btn-verilog-copy');
   const btnDownload = document.getElementById('btn-verilog-download');
   const btnClose    = document.getElementById('btn-verilog-close');
+  const btnTB       = document.getElementById('btn-verilog-tb');
+  const btnZip      = document.getElementById('btn-verilog-zip');
+  const warnEl      = document.getElementById('verilog-preview-warnings');
+  const chkHeader   = document.getElementById('chk-verilog-header');
+  const txtTopName  = document.getElementById('txt-verilog-topname');
+  const fnameEl     = document.getElementById('vp-filename');
   if (!btnOpen || !overlay || !body) return;
 
-  let _lastVerilog = '';
-
-  const openPreview = () => {
-    _lastVerilog = exportVerilog(scene.serialize(), { topName: 'top' });
-    body.textContent = _lastVerilog;
-    overlay.classList.remove('hidden');
+  // Sanitize the user-typed top-name to a legal Verilog identifier:
+  //   • starts with letter or underscore
+  //   • body contains [A-Za-z0-9_$]
+  //   • blank input → fall back to "top"
+  const sanitizeTop = (s) => {
+    let v = (s || '').trim().replace(/[^A-Za-z0-9_$]/g, '_');
+    if (!v) return 'top';
+    if (!/^[A-Za-z_]/.test(v)) v = '_' + v;
+    return v;
   };
+
+  // Reserved Verilog-2001 keywords we care to highlight. Split into
+  // structural keywords (kw) and net/data types (ty) so the eye can
+  // skim by category. Anything not in either set stays default colour.
+  const KW = new Set([
+    'module','endmodule','begin','end','if','else','case','endcase',
+    'default','assign','always','initial','posedge','negedge','or',
+    'parameter','localparam','generate','endgenerate','for','while',
+    'function','endfunction','task','endtask','return',
+  ]);
+  const TY = new Set([
+    'wire','reg','input','output','inout','integer','genvar','tri',
+    'tri0','tri1','wand','wor','supply0','supply1',
+  ]);
+
+  // Tiny streaming tokenizer. Emits HTML strings with token classes
+  // so we don't depend on a syntax-highlight library. Order of tests
+  // matters: comments before operators, numbers before identifiers.
+  function highlightVerilog(src) {
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const out = [];
+    let i = 0;
+    while (i < src.length) {
+      const c = src[i];
+      // Line comment
+      if (c === '/' && src[i + 1] === '/') {
+        const nl = src.indexOf('\n', i);
+        const end = nl < 0 ? src.length : nl;
+        const text = src.slice(i, end);
+        const isTodo = /TODO/.test(text);
+        out.push(`<span class="tok-cmt${isTodo ? ' tok-todo' : ''}">${esc(text)}</span>`);
+        i = end;
+        continue;
+      }
+      // Block comment
+      if (c === '/' && src[i + 1] === '*') {
+        const end = src.indexOf('*/', i + 2);
+        const stop = end < 0 ? src.length : end + 2;
+        out.push(`<span class="tok-cmt">${esc(src.slice(i, stop))}</span>`);
+        i = stop;
+        continue;
+      }
+      // Sized literal: `4'h0`, `8'b1010`, `1'bz`. Match width-prime-base-digits
+      // so Verilog's primary numeric form stays distinct from operators.
+      const litMatch = src.slice(i).match(/^\d+'[bdohBDOH][0-9a-fA-FxzXZ?_]+/);
+      if (litMatch) {
+        out.push(`<span class="tok-num">${esc(litMatch[0])}</span>`);
+        i += litMatch[0].length;
+        continue;
+      }
+      // Bare decimal
+      if (/[0-9]/.test(c)) {
+        const m = src.slice(i).match(/^[0-9_]+/)[0];
+        out.push(`<span class="tok-num">${esc(m)}</span>`);
+        i += m.length;
+        continue;
+      }
+      // Identifier / keyword
+      if (/[A-Za-z_]/.test(c)) {
+        const m = src.slice(i).match(/^[A-Za-z_][A-Za-z0-9_$]*/)[0];
+        const cls = KW.has(m) ? 'tok-kw' : TY.has(m) ? 'tok-ty' : null;
+        out.push(cls ? `<span class="${cls}">${m}</span>` : esc(m));
+        i += m.length;
+        continue;
+      }
+      // Operator-ish punctuation we want to tint subtly
+      if ('=<>!&|^+-*/?:'.includes(c)) {
+        out.push(`<span class="tok-op">${esc(c)}</span>`);
+        i++;
+        continue;
+      }
+      // Anything else (whitespace, parens, brackets) — emit as-is.
+      out.push(esc(c));
+      i++;
+    }
+    return out.join('');
+  }
+
+  // Quick pattern-based stats from the rendered Verilog text. Keeping
+  // the count source = the same string the user is reading avoids
+  // surprises ("the modal says 5 nets but I counted 6").
+  function statsOf(src) {
+    const lines = src.split('\n').length;
+    // Module port lines: the first contiguous run of "input "/"output "
+    // declarations after `module`. A simpler over-counter would also
+    // catch port declarations elsewhere; this is the minimal proxy.
+    const ports   = (src.match(/^\s*(input|output|inout)\s/gm) || []).length;
+    const nets    = (src.match(/^\s*(wire|reg|tri)\s/gm) || []).length;
+    const assigns = (src.match(/^\s*assign\s/gm) || []).length;
+    const alwBlks = (src.match(/^\s*always\s/gm) || []).length
+                  + (src.match(/^\s*initial\s/gm) || []).length;
+    const mem     = (src.match(/^\s*reg\s+(\[[^\]]*\]\s*)?\w+\s+\[/gm) || []).length;
+    const todos   = (src.match(/\/\/\s*TODO/g) || []).length;
+    return { lines, ports, nets, assigns, alwBlks, mem, todos };
+  }
+
+  // Wrap each line of highlighted HTML in a <span class="vp-line"> so
+  // CSS counters can render line numbers in the gutter without us
+  // having to compute them in JS. Splitting on '\n' is safe because
+  // tokens never span multi-line — comments stop at end-of-line and
+  // block comments are emitted whole into the output stream.
+  function withLineNumbers(html) {
+    return html.split('\n').map(l => `<span class="vp-line">${l}</span>`).join('\n');
+  }
+
+  // Pull the top module's port list out of the rendered Verilog header.
+  // Expected lines look like `  input  [3:0] op,` or `  output halt`.
+  // Returns: [{ dir, width, name }, ...] preserving declaration order.
+  function parseTopPorts(src) {
+    const ports = [];
+    const re = /^\s*(input|output|inout)\s+(?:\[(\d+):(\d+)\]\s+)?([A-Za-z_][A-Za-z0-9_$]*)/gm;
+    let m;
+    while ((m = re.exec(src))) {
+      const dir = m[1];
+      const width = m[2] ? Math.abs(+m[2] - +m[3]) + 1 : 1;
+      ports.push({ dir, width, name: m[4] });
+    }
+    return ports;
+  }
+
+  // Build a self-contained testbench. Heuristics:
+  //   • clk / clock (case-insensitive, 1-bit input) becomes the clock
+  //     driven by `always #5 ... = ~...;`
+  //   • All other inputs are zeroed in `initial`. The user is expected
+  //     to edit the stimulus block — we add a TODO marker pointing at it.
+  //   • $dumpfile / $dumpvars wraps the whole module so VCD viewers
+  //     (GTKWave, surfer-circuit) load it without extra config.
+  //   • Run for 200 simulation time units (~20 clock cycles at #5 toggle)
+  //     before $finish. Plenty for a smoke test; trivial to extend.
+  function generateTestbench(verilog, topName) {
+    const ports = parseTopPorts(verilog);
+    const inputs  = ports.filter(p => p.dir === 'input');
+    const outputs = ports.filter(p => p.dir !== 'input');
+    const clkPort = inputs.find(p => /^(clk|clock)$/i.test(p.name) && p.width === 1);
+
+    const declLine = (p, kind) => {
+      const w = p.width > 1 ? `[${p.width - 1}:0] ` : '';
+      return `  ${kind} ${w}${p.name};`;
+    };
+    const lines = [];
+    lines.push(`// Auto-generated testbench for module \`${topName}\`.`);
+    lines.push(`// Edit the stimulus block below to drive the design.`);
+    lines.push(`// Run with:  iverilog -g2005 -o sim circuit.v circuit_tb.v && vvp sim`);
+    lines.push(``);
+    lines.push(`\`timescale 1ns/1ps`);
+    lines.push(``);
+    lines.push(`module ${topName}_tb;`);
+    for (const p of inputs)  lines.push(declLine(p, 'reg'));
+    for (const p of outputs) lines.push(declLine(p, 'wire'));
+    lines.push(``);
+    lines.push(`  ${topName} dut (`);
+    lines.push(ports.map(p => `    .${p.name}(${p.name})`).join(',\n'));
+    lines.push(`  );`);
+    lines.push(``);
+    if (clkPort) {
+      lines.push(`  // Clock: 100 MHz (period 10 ns).`);
+      lines.push(`  initial ${clkPort.name} = 0;`);
+      lines.push(`  always #5 ${clkPort.name} = ~${clkPort.name};`);
+      lines.push(``);
+    }
+    lines.push(`  initial begin`);
+    lines.push(`    $dumpfile("${topName}.vcd");`);
+    lines.push(`    $dumpvars(0, ${topName}_tb);`);
+    const stimInputs = inputs.filter(p => p !== clkPort);
+    if (stimInputs.length) {
+      lines.push(`    // Initial stimulus — TODO: replace with real test vectors.`);
+      for (const p of stimInputs) {
+        lines.push(`    ${p.name} = ${p.width}'h0;`);
+      }
+    }
+    if (outputs.length) {
+      const fmt = outputs.map(p => p.width > 1 ? `${p.name}=%h` : `${p.name}=%b`).join(' ');
+      const args = outputs.map(p => p.name).join(', ');
+      lines.push(`    $monitor("[%0t] ${fmt}", $time, ${args});`);
+    }
+    lines.push(`    #200 $finish;`);
+    lines.push(`  end`);
+    lines.push(`endmodule`);
+    lines.push(``);
+    return lines.join('\n');
+  }
+
+  let _lastVerilog = '';
+  let _lastTop = 'top';
+
+  const refresh = () => {
+    const includeHeader = !!chkHeader?.checked;
+    const top = sanitizeTop(txtTopName?.value);
+    _lastTop = top;
+    if (txtTopName && txtTopName.value !== top) txtTopName.value = top;
+    if (fnameEl) fnameEl.textContent = `${top}.v`;
+    _lastVerilog = exportVerilog(scene.serialize(), {
+      topName: top,
+      header: includeHeader,
+    });
+    body.innerHTML = withLineNumbers(highlightVerilog(_lastVerilog));
+    const s = statsOf(_lastVerilog);
+    document.getElementById('vp-stat-lines').textContent   = s.lines;
+    document.getElementById('vp-stat-ports').textContent   = s.ports;
+    document.getElementById('vp-stat-nets').textContent    = s.nets;
+    document.getElementById('vp-stat-assigns').textContent = s.assigns;
+    document.getElementById('vp-stat-always').textContent  = s.alwBlks;
+    document.getElementById('vp-stat-mem').textContent     = s.mem;
+    const todoEl = document.getElementById('vp-stat-todo');
+    if (s.todos > 0) {
+      todoEl.classList.remove('hidden');
+      todoEl.querySelector('b').textContent = s.todos;
+    } else {
+      todoEl.classList.add('hidden');
+    }
+    // Error surface — list every unmapped component the exporter
+    // flagged with a `// TODO: translator for X (id) ...` line. Each
+    // entry shows the component type, its node id, and the line
+    // number in the preview, so the user can locate it instantly.
+    if (warnEl) {
+      const todoLines = [];
+      _lastVerilog.split('\n').forEach((line, i) => {
+        const m = line.match(/\/\/\s*TODO:\s*translator for (\S+)\s+\((\S+)\)/);
+        if (m) todoLines.push({ type: m[1], id: m[2], line: i + 1 });
+      });
+      if (todoLines.length === 0) {
+        warnEl.classList.add('hidden');
+        warnEl.innerHTML = '';
+      } else {
+        warnEl.classList.remove('hidden');
+        const items = todoLines.map(t =>
+          `<li><code>${t.type}</code> (id <code>${t.id}</code>) — line ${t.line}</li>`
+        ).join('');
+        warnEl.innerHTML =
+          `<span class="vp-warn-title">⚠ ${todoLines.length} component(s) lack a translator:</span>` +
+          `<ul>${items}</ul>`;
+      }
+    }
+  };
+
+  const openPreview = () => { refresh(); overlay.classList.remove('hidden'); };
   const closePreview = () => overlay.classList.add('hidden');
 
   btnOpen.addEventListener('click', openPreview);
   btnClose?.addEventListener('click', closePreview);
+  chkHeader?.addEventListener('change', refresh);
+  // Live update on top-name edit. Don't sanitize on every keystroke —
+  // wait for blur — so the user can finish typing without the cursor
+  // jumping. But still refresh the preview so they see the effect.
+  txtTopName?.addEventListener('input', () => {
+    const top = sanitizeTop(txtTopName.value);
+    if (fnameEl) fnameEl.textContent = `${top}.v`;
+    _lastVerilog = exportVerilog(scene.serialize(), {
+      topName: top,
+      header: !!chkHeader?.checked,
+    });
+    _lastTop = top;
+    body.innerHTML = withLineNumbers(highlightVerilog(_lastVerilog));
+  });
+  txtTopName?.addEventListener('blur', () => {
+    txtTopName.value = sanitizeTop(txtTopName.value);
+  });
 
-  // Close on backdrop click (but not when click started inside the modal).
   overlay.addEventListener('mousedown', (e) => {
     if (e.target === overlay) closePreview();
   });
-  // Close on Escape.
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closePreview();
   });
@@ -2855,7 +3158,114 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'circuit.v';
+    a.download = `${_lastTop}.v`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Minimal store-mode (no compression) ZIP writer. Builds a valid
+  // PKZip archive byte-by-byte: per file a Local File Header + raw
+  // bytes, then a Central Directory at the end. CRC-32 is required
+  // by the format. Compression is intentionally skipped (method=0)
+  // to avoid pulling in a deflate library — text payloads are tiny.
+  function makeZip(files) {
+    const enc = new TextEncoder();
+    const crcTable = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })();
+    const crc32 = (bytes) => {
+      let c = 0xffffffff;
+      for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const u16 = (n) => [n & 0xff, (n >>> 8) & 0xff];
+    const u32 = (n) => [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff];
+
+    const local = []; const central = []; let offset = 0;
+    for (const { name, content } of files) {
+      const data = typeof content === 'string' ? enc.encode(content) : content;
+      const nameBytes = enc.encode(name);
+      const crc = crc32(data);
+      const size = data.length;
+      // Local file header (signature 0x04034b50)
+      const lfh = [
+        ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
+        ...u16(0), ...u16(0),                           // mod time/date — unused
+        ...u32(crc), ...u32(size), ...u32(size),        // crc + comp + uncomp size
+        ...u16(nameBytes.length), ...u16(0),
+        ...nameBytes,
+      ];
+      local.push(...lfh, ...data);
+      // Central directory entry (signature 0x02014b50)
+      const cdh = [
+        ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+        ...u16(0), ...u16(0),
+        ...u32(crc), ...u32(size), ...u32(size),
+        ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+        ...u32(0), ...u32(offset),
+        ...nameBytes,
+      ];
+      central.push(...cdh);
+      offset += lfh.length + data.length;
+    }
+    // End of central directory (signature 0x06054b50)
+    const cdSize = central.length;
+    const eocd = [
+      ...u32(0x06054b50), ...u16(0), ...u16(0),
+      ...u16(files.length), ...u16(files.length),
+      ...u32(cdSize), ...u32(offset),
+      ...u16(0),
+    ];
+    return new Uint8Array([...local, ...central, ...eocd]);
+  }
+
+  btnZip?.addEventListener('click', () => {
+    const top = _lastTop;
+    const tb = generateTestbench(_lastVerilog, top);
+    const readme = [
+      `# ${top} — Verilog export`,
+      ``,
+      `Auto-generated by Circuit Designer.`,
+      ``,
+      `## Files`,
+      `- \`${top}.v\` — the design under test.`,
+      `- \`${top}_tb.v\` — testbench skeleton (clock + zeroed inputs +`,
+      `  VCD dump). Edit the stimulus block before running.`,
+      ``,
+      `## Run`,
+      `\`\`\``,
+      `iverilog -g2005 -o sim ${top}.v ${top}_tb.v`,
+      `vvp sim`,
+      `gtkwave ${top}.vcd     # optional waveform viewer`,
+      `\`\`\``,
+    ].join('\n');
+    const zip = makeZip([
+      { name: `${top}.v`,    content: _lastVerilog },
+      { name: `${top}_tb.v`, content: tb },
+      { name: `README.md`,   content: readme },
+    ]);
+    const blob = new Blob([zip], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${top}_project.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  btnTB?.addEventListener('click', () => {
+    const tb = generateTestbench(_lastVerilog, _lastTop);
+    const blob = new Blob([tb], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${_lastTop}_tb.v`;
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -4032,6 +4442,13 @@ const EXAMPLES = [
     desc: 'Phase-5a demo: the first two CPU components export to Verilog. IMM is purely combinational — one `assign net = 8\'h2a;` and that\'s it, no clock and no state. PC is a clocked register with a CLR > JUMP > EN priority chain: CLR resets to 0; JUMP loads JUMP_ADDR; EN increments. The pcRelative variant (when set on the node) replaces the JUMP branch with `pc + 1 + offset` for the canonical PC-relative form. Click VERILOG to see both side by side.',
     tags: ['verilog', 'phase5', 'phase5a', 'imm', 'pc', 'cpu'],
     file: 'examples/circuits/verilog-phase5a-imm-pc.json',
+  },
+  {
+    id: 'verilog-phase7-export-ux',
+    title: '7. VERILOG — export UX showcase',
+    desc: 'Phase-7 demo: small mixed circuit (counter → XOR-mask → register → adder) tagged with `stage` attributes so the export shows the new `// ─── Stage N ───` dividers. Use it to exercise the full export modal: line-numbered syntax-highlit preview, live top-name editing, stats bar, header toggle, error-surface warnings panel, TESTBENCH download (clock + VCD dump skeleton), PROJECT .ZIP bundle (.v + _tb.v + README, ready for `iverilog -g2005`), and right-click → Copy as Verilog on any block to grab a single-component snippet.',
+    tags: ['verilog', 'phase7', 'export', 'ux'],
+    file: 'examples/circuits/verilog-phase7-export-ux.json',
   },
   {
     id: 'verilog-phase5f-fifo-stack',

@@ -527,6 +527,7 @@
     <div class="ctx-sep ctx-block-only hidden"></div>
     <div class="ctx-item" data-action="copy">Copy</div>
     <div class="ctx-item" data-action="paste">Paste</div>
+    <div class="ctx-item" data-action="copy-verilog">Copy as Verilog</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="bringfront">Bring to Front</div>
     <div class="ctx-item" data-action="sendback">Send to Back</div>
@@ -652,14 +653,37 @@
   <div id="verilog-preview-overlay" class="hidden">
     <div id="verilog-preview-modal">
       <div id="verilog-preview-header">
-        <span>VERILOG PREVIEW — circuit.v</span>
+        <span>VERILOG PREVIEW — <span id="vp-filename">circuit.v</span></span>
         <div>
+          <label id="verilog-preview-topopt" title="Top-level module name (Verilog identifier)">
+            top:
+            <input type="text" id="txt-verilog-topname" value="top" maxlength="40" spellcheck="false">
+          </label>
+          <label id="verilog-preview-headeropt" title="Prepend a generated comment header to the file">
+            <input type="checkbox" id="chk-verilog-header"> header
+          </label>
           <button id="btn-verilog-copy"     class="btn-secondary" style="font-size:9px;background:#1a2030;border-color:#3a8a4a;color:#80f0a0">COPY</button>
           <button id="btn-verilog-download" class="btn-secondary" style="font-size:9px;background:#2a1a08;border-color:#aa6a2a;color:#ffb878">DOWNLOAD .v</button>
+          <button id="btn-verilog-tb"       class="btn-secondary" style="font-size:9px;background:#1a1828;border-color:#7a5aaa;color:#c0a8ff" title="Download an auto-generated testbench (clock driver + initial stimulus + VCD dump)">TESTBENCH</button>
+          <button id="btn-verilog-zip"      class="btn-secondary" style="font-size:9px;background:#1a2820;border-color:#5a8a7a;color:#90d8c0" title="Download a project bundle (.v + _tb.v + README) ready for iverilog">PROJECT .ZIP</button>
           <button id="btn-verilog-close"    class="btn-secondary" style="font-size:9px">CLOSE</button>
         </div>
       </div>
+      <div id="verilog-preview-warnings" class="hidden"></div>
+      <div id="verilog-preview-stats">
+        <span><b id="vp-stat-lines">0</b> lines</span>
+        <span><b id="vp-stat-ports">0</b> ports</span>
+        <span><b id="vp-stat-nets">0</b> nets</span>
+        <span><b id="vp-stat-assigns">0</b> assigns</span>
+        <span><b id="vp-stat-always">0</b> always</span>
+        <span><b id="vp-stat-mem">0</b> mem</span>
+        <span id="vp-stat-todo" class="hidden"><b>0</b> TODOs</span>
+      </div>
       <pre id="verilog-preview-body"></pre>
+      <div id="verilog-preview-hint">
+        Verify with <code>iverilog -g2005 -o sim circuit.v &amp;&amp; vvp sim</code>.
+        Tested clean against Icarus Verilog.
+      </div>
     </div>
   </div>
 

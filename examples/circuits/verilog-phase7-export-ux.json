@@ -1,0 +1,37 @@
+{
+  "_doc": "Phase-7 demo: small mixed circuit that exercises the full Export UX. Click VERILOG to see:\n  • Syntax highlight + line numbers + stats bar (lines / ports / nets / assigns / always / mem).\n  • Header toggle on the right — flip on to add the file header.\n  • TOP-name text field — rename the module live; filename + DOWNLOAD .v update with it.\n  • TESTBENCH button — emits a self-contained `_tb.v` that drives the clock, zeroes inputs, dumps a VCD, ready for `iverilog -g2005 design.v design_tb.v && vvp ./a.out`.\n  • PROJECT .ZIP button — bundles design + testbench + a README into one archive.\n  • Stage comment dividers — the COUNTER and stage_reg carry `stage` attributes, so the body shows `// ─── Stage 0 ───` / `// ─── Stage 1 ───` separators.\n  • Right-click any block on canvas → `Copy as Verilog` to grab a single-component snippet to the clipboard.",
+  "nodes": [
+    { "type": "CLOCK", "x": -360, "y": -40, "label": "clk", "id": "clk" },
+    { "type": "INPUT", "x": -360, "y":   0, "fixedValue": 0, "label": "rst", "id": "rst" },
+    { "type": "INPUT", "x": -360, "y":  40, "fixedValue": 1, "label": "a", "id": "a" },
+    { "type": "INPUT", "x": -360, "y":  80, "fixedValue": 0, "label": "b", "id": "b" },
+
+    { "type": "COUNTER", "x": -120, "y": -20, "bitWidth": 4, "label": "cntr", "id": "cntr", "stage": 0 },
+
+    { "type": "GATE_SLOT", "x": 100, "y": 30, "gate": "XOR", "label": "g_xor", "id": "g_xor", "stage": 0 },
+    { "type": "GATE_SLOT", "x": 100, "y": 80, "gate": "AND", "label": "g_and", "id": "g_and", "stage": 0 },
+
+    { "type": "FULL_ADDER", "x": 320, "y": 60, "label": "fa", "id": "fa", "stage": 1 },
+
+    { "type": "OUTPUT", "x": 540, "y":  40, "targetValue": 0, "sandbox": true, "label": "tc",    "id": "tc" },
+    { "type": "OUTPUT", "x": 540, "y":  80, "targetValue": 0, "sandbox": true, "label": "sum",   "id": "sum" },
+    { "type": "OUTPUT", "x": 540, "y": 120, "targetValue": 0, "sandbox": true, "label": "carry", "id": "carry" }
+  ],
+  "wires": [
+    { "sourceId": "clk", "targetId": "cntr", "targetInputIndex": 3, "id": "wclk1" },
+    { "sourceId": "rst", "targetId": "cntr", "targetInputIndex": 2, "id": "wrst1" },
+
+    { "sourceId": "a", "targetId": "g_xor", "targetInputIndex": 0, "id": "wax" },
+    { "sourceId": "b", "targetId": "g_xor", "targetInputIndex": 1, "id": "wbx" },
+    { "sourceId": "a", "targetId": "g_and", "targetInputIndex": 0, "id": "waa" },
+    { "sourceId": "b", "targetId": "g_and", "targetInputIndex": 1, "id": "wba" },
+
+    { "sourceId": "g_xor", "sourceOutputIndex": 0, "targetId": "fa", "targetInputIndex": 0, "id": "wfa_a" },
+    { "sourceId": "g_and", "sourceOutputIndex": 0, "targetId": "fa", "targetInputIndex": 1, "id": "wfa_b" },
+    { "sourceId": "cntr",  "sourceOutputIndex": 1, "targetId": "fa", "targetInputIndex": 2, "id": "wfa_cin" },
+
+    { "sourceId": "cntr", "sourceOutputIndex": 1, "targetId": "tc",    "targetInputIndex": 0, "id": "wtc" },
+    { "sourceId": "fa",   "sourceOutputIndex": 0, "targetId": "sum",   "targetInputIndex": 0, "id": "wsum" },
+    { "sourceId": "fa",   "sourceOutputIndex": 1, "targetId": "carry", "targetInputIndex": 0, "id": "wcarry" }
+  ]
+}
