@@ -104,6 +104,9 @@ const wireNetName       = document.getElementById('wire-netname');
 const wireColorGroup    = document.getElementById('wire-color-group');
 const wireClockToggle   = document.getElementById('wire-clock-toggle');
 const wireStuckAt       = document.getElementById('wire-stuckat');
+const wireOpenToggle    = document.getElementById('wire-open-toggle');
+const wireBridge        = document.getElementById('wire-bridge');
+const wireBridgeMode    = document.getElementById('wire-bridge-mode');
 const wireClearWaypoints = document.getElementById('wire-clear-waypoints');
 let _selectedWireId = null;
 
@@ -1139,18 +1142,30 @@ function _updateWirePropsPanel() {
   wireColorGroup.value = wire.colorGroup || '';
   wireClockToggle.textContent = wire.isClockWire ? 'ON' : 'OFF';
   if (wireStuckAt) wireStuckAt.value = (wire.stuckAt === 0 || wire.stuckAt === 1) ? String(wire.stuckAt) : '';
+  if (wireOpenToggle) wireOpenToggle.textContent = wire.open ? 'ON' : 'OFF';
+  // Populate Bridge target dropdown with every OTHER wire in the scene.
+  if (wireBridge) {
+    const others = scene.wires.filter(w => w.id !== wire.id);
+    wireBridge.innerHTML =
+      '<option value="">none</option>' +
+      others.map(w => `<option value="${w.id}">${w.id || (w.sourceId + '→' + w.targetId)}</option>`).join('');
+    wireBridge.value = wire.bridgedWith || '';
+  }
+  if (wireBridgeMode) wireBridgeMode.value = wire.bridgeMode || 'or';
 }
 
 // Wire selection: when clicking a wire in select mode, show wire props
 bus.on('wire:selected', ({ wireId }) => {
   _selectedWireId = wireId;
   state.selectedNodeId = null;
+  Renderer.setSelectedWire(wireId);
   _updateWirePropsPanel();
 });
 
 bus.on('selection:changed', () => {
   if (state.selectedNodeId) {
     _selectedWireId = null;
+    Renderer.setSelectedWire(null);
     wireProps.classList.add('hidden');
   }
 });
@@ -1180,10 +1195,37 @@ wireStuckAt?.addEventListener('change', () => {
   bus.emit('node:props-changed');
 });
 
+wireOpenToggle?.addEventListener('click', () => {
+  const wire = _getSelectedWire();
+  if (!wire) return;
+  wire.open = !wire.open;
+  wireOpenToggle.textContent = wire.open ? 'ON' : 'OFF';
+  bus.emit('node:props-changed');
+});
+
+wireBridge?.addEventListener('change', () => {
+  const wire = _getSelectedWire();
+  if (!wire) return;
+  wire.bridgedWith = wireBridge.value || null;
+  bus.emit('node:props-changed');
+});
+
+wireBridgeMode?.addEventListener('change', () => {
+  const wire = _getSelectedWire();
+  if (!wire) return;
+  wire.bridgeMode = wireBridgeMode.value;
+  bus.emit('node:props-changed');
+});
+
 wireClearWaypoints?.addEventListener('click', () => {
   const wire = _getSelectedWire();
   if (!wire) return;
   wire.waypoints = [];
+  // Emit so any cached panel re-renders, and flash the button so the user
+  // sees the click registered even when the wire was already auto-routed.
+  bus.emit('node:props-changed');
+  wireClearWaypoints.style.background = '#003a4a';
+  setTimeout(() => { wireClearWaypoints.style.background = ''; }, 180);
 });
 
 // ── Simulation Controls ─────────────────────────────────────
@@ -3765,9 +3807,9 @@ const EXAMPLES = [
   // ── Test & DFT tab — one demo per layer of the DFT track.
   {
     id: 'dft-faults-tour',
-    title: '1. DFT — stuck-at faults tour',
-    desc: 'Tiny combinational scene: 4 INPUTs → 2 ANDs → 1 OR → 1 OUTPUT. The wire from AND1 to OR is pre-injected with a stuck-at-1 fault — rendered as an orange dashed line with an "S1" badge. OUT is forced to 1 regardless of inputs A/B. Open the DFT panel (T) to see the fault list enumerate all 7 wires × 2 stuck-at types = 14 possible fault sites, with the injected one highlighted. Select the orange wire and change its "Stuck-at" prop in the wire panel to "none" — propagation resumes normally.',
-    tags: ['dft', 'stuck-at', 'fault'],
+    title: '1. DFT — wire fault models tour',
+    desc: 'Side-by-side tour of all four wire-level fault models. Five parallel paths, each INPUT → BUF → OUTPUT, every path demonstrating one fault in isolation:\n  • A=1 → s-a-0 (orange) → OUT shows 0  (the wire is "stuck at 0")\n  • B=0 → s-a-1 (orange) → OUT shows 1  (stuck at 1)\n  • C=1 → open (red dashed) → OUT shows null  (broken / floating)\n  • D=0 ⟷ E=1 bridged (purple dotted link) → OUT_D shows 1  (wired-OR of both sources)\n  • E=1 → reference path → OUT shows 1\n\nOpen the DFT panel (T) to see the FAULT LIST: each wire enumerated, columns for s-a-0 / s-a-1 / open / bridge, the four injected sites highlighted with coloured pills, the rest dim. The "Injected" line in TESTABILITY OVERVIEW breaks them down by type. Select any orange/red/purple wire and toggle its fault off in the wire-properties panel — propagation resumes.',
+    tags: ['dft', 'stuck-at', 'open', 'bridge', 'fault'],
     file: 'examples/circuits/dft-faults-tour.json',
   },
 ];

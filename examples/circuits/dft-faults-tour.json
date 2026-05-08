@@ -1,21 +1,39 @@
 {
   "nodes": [
-    { "type": "INPUT",     "x": -260, "y": -120, "fixedValue": 0, "label": "A", "id": "in_a" },
-    { "type": "INPUT",     "x": -260,  "y": -50, "fixedValue": 0, "label": "B", "id": "in_b" },
-    { "type": "INPUT",     "x": -260,   "y": 50, "fixedValue": 1, "label": "C", "id": "in_c" },
-    { "type": "INPUT",     "x": -260,  "y": 120, "fixedValue": 1, "label": "D", "id": "in_d" },
-    { "type": "GATE_SLOT", "x":  -90,  "y": -85, "gate": "AND", "label": "AND1", "id": "and1" },
-    { "type": "GATE_SLOT", "x":  -90,   "y": 85, "gate": "AND", "label": "AND2", "id": "and2" },
-    { "type": "GATE_SLOT", "x":   80,    "y": 0, "gate": "OR",  "label": "OR",   "id": "or1"  },
-    { "type": "OUTPUT",    "x":  240,    "y": 0, "targetValue": 1, "label": "OUT", "sandbox": true, "id": "out_1" }
+    { "type": "INPUT",     "x": -360, "y": -200, "fixedValue": 1, "label": "A=1",  "id": "in_a" },
+    { "type": "GATE_SLOT", "x": -120, "y": -200, "gate": "BUF",   "label": "BUF",  "id": "buf_sa0" },
+    { "type": "OUTPUT",    "x":  140, "y": -200, "targetValue": 1, "sandbox": true, "label": "OUT (s-a-0)",  "id": "out_sa0" },
+
+    { "type": "INPUT",     "x": -360,  "y": -80, "fixedValue": 0, "label": "B=0",  "id": "in_b" },
+    { "type": "GATE_SLOT", "x": -120,  "y": -80, "gate": "BUF",   "label": "BUF",  "id": "buf_sa1" },
+    { "type": "OUTPUT",    "x":  140,  "y": -80, "targetValue": 0, "sandbox": true, "label": "OUT (s-a-1)",  "id": "out_sa1" },
+
+    { "type": "INPUT",     "x": -360,   "y": 40, "fixedValue": 1, "label": "C=1",  "id": "in_c" },
+    { "type": "GATE_SLOT", "x": -120,   "y": 40, "gate": "BUF",   "label": "BUF",  "id": "buf_open" },
+    { "type": "OUTPUT",    "x":  140,   "y": 40, "targetValue": 1, "sandbox": true, "label": "OUT (open)",   "id": "out_open" },
+
+    { "type": "INPUT",     "x": -360,  "y": 160, "fixedValue": 0, "label": "D=0",  "id": "in_d" },
+    { "type": "GATE_SLOT", "x": -120,  "y": 160, "gate": "BUF",   "label": "BUF",  "id": "buf_brd_d" },
+    { "type": "OUTPUT",    "x":  140,  "y": 160, "targetValue": 0, "sandbox": true, "label": "OUT (bridge D)", "id": "out_brd_d" },
+
+    { "type": "INPUT",     "x": -360,  "y": 220, "fixedValue": 1, "label": "E=1",  "id": "in_e" },
+    { "type": "GATE_SLOT", "x": -120,  "y": 220, "gate": "BUF",   "label": "BUF",  "id": "buf_brd_e" },
+    { "type": "OUTPUT",    "x":  140,  "y": 220, "targetValue": 1, "sandbox": true, "label": "OUT (E ref)",  "id": "out_brd_e" }
   ],
   "wires": [
-    { "sourceId": "in_a", "targetId": "and1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a" },
-    { "sourceId": "in_b", "targetId": "and1",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b" },
-    { "sourceId": "in_c", "targetId": "and2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_c" },
-    { "sourceId": "in_d", "targetId": "and2",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_d" },
-    { "sourceId": "and1", "targetId": "or1",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_q1", "stuckAt": 1 },
-    { "sourceId": "and2", "targetId": "or1",   "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_q2" },
-    { "sourceId": "or1",  "targetId": "out_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o" }
+    { "sourceId": "in_a",      "targetId": "buf_sa0",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_sa0",  "stuckAt": 0 },
+    { "sourceId": "buf_sa0",   "targetId": "out_sa0",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o_sa0" },
+
+    { "sourceId": "in_b",      "targetId": "buf_sa1",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_sa1",  "stuckAt": 1 },
+    { "sourceId": "buf_sa1",   "targetId": "out_sa1",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o_sa1" },
+
+    { "sourceId": "in_c",      "targetId": "buf_open",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_open", "open": true },
+    { "sourceId": "buf_open",  "targetId": "out_open",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o_open" },
+
+    { "sourceId": "in_d",      "targetId": "buf_brd_d", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_brd_d", "bridgedWith": "w_brd_e", "bridgeMode": "or" },
+    { "sourceId": "buf_brd_d", "targetId": "out_brd_d", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o_brd_d" },
+
+    { "sourceId": "in_e",      "targetId": "buf_brd_e", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_brd_e" },
+    { "sourceId": "buf_brd_e", "targetId": "out_brd_e", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o_brd_e" }
   ]
 }

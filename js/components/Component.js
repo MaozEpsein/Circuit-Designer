@@ -213,5 +213,14 @@ export function createWire(sourceId, targetId, targetInputIndex = 0, sourceOutpu
     // 1 = stuck-at-1. SimulationEngine intercepts wireValues.set and forces
     // the stuck value into the wire whenever this is non-null.
     stuckAt: opts.stuckAt ?? null,
+    // DFT (Layer 1.5): open fault — physically broken wire that floats.
+    // The downstream consumer sees null (engine already understands floating
+    // values from TRIBUF in high-Z mode).
+    open: opts.open ?? false,
+    // DFT (Layer 1.5): bridging fault — this wire is shorted to another
+    // wire `bridgedWith`. The effective value is the wired-OR (default,
+    // dominant-1) or wired-AND (dominant-0) of the two source values.
+    bridgedWith: opts.bridgedWith ?? null,
+    bridgeMode: opts.bridgeMode || 'or',
   };
 }

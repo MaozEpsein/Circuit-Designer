@@ -228,22 +228,42 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
   // Centralizing the override here means the 25+ wireValues.set sites
   // throughout evaluate() don't each need to be patched.
   const _wireById = new Map(wires.map(w => [w.id, w]));
-  const _origSet  = wireValues.set.bind(wireValues);
-  wireValues.set  = (id, val) => {
-    const w = _wireById.get(id);
-    if (w && (w.stuckAt === 0 || w.stuckAt === 1)) val = w.stuckAt;
-    return _origSet(id, val);
+  // Resolve the upstream source value of a wire (without applying its own
+  // faults — used internally by bridging which combines two source vals).
+  const _rawSource = (w) => {
+    const outIdx = w.sourceOutputIndex || 0;
+    const key = outIdx === 0 ? w.sourceId : (w.sourceId + '__out' + outIdx);
+    return nodeValues.get(key);
   };
+  // Apply per-wire fault model to a freshly propagated value. Order:
+  //   open       → null (broken)
+  //   stuck-at   → forced 0 / 1
+  //   bridging   → wired-OR / wired-AND with the bridged wire's source
+  const _applyWireFault = (w, val) => {
+    if (!w) return val;
+    if (w.open) return null;
+    if (w.stuckAt === 0 || w.stuckAt === 1) return w.stuckAt;
+    if (w.bridgedWith) {
+      const other = _wireById.get(w.bridgedWith);
+      if (other) {
+        const a = (val === 0 || val === 1) ? val : 0;
+        const b0 = _rawSource(other);
+        const b  = (b0 === 0 || b0 === 1) ? b0 : 0;
+        return w.bridgeMode === 'and' ? (a & b) : (a | b);
+      }
+    }
+    return val;
+  };
+  const _origSet  = wireValues.set.bind(wireValues);
+  wireValues.set  = (id, val) => _origSet(id, _applyWireFault(_wireById.get(id), val));
   // Slot-aware reader. When a downstream consumer pulls a value via an
-  // input slot, this helper applies the wire's stuck-at fault before
-  // returning. Use this anywhere a slot read can replace a hand-rolled
+  // input slot, this helper applies the wire's faults before returning.
+  // Use this anywhere a slot read can replace a hand-rolled
   // `outIdx + key + nodeValues.get(key)` triple.
   const _readSlot = (slot, fallback = undefined) => {
     const w = slot.wire;
-    if (w && (w.stuckAt === 0 || w.stuckAt === 1)) return w.stuckAt;
-    const outIdx = w.sourceOutputIndex || 0;
-    const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
-    const v = nodeValues.get(key);
+    const raw = _rawSource(w);
+    const v = _applyWireFault(w, raw);
     return (v === undefined && fallback !== undefined) ? fallback : v;
   };
 

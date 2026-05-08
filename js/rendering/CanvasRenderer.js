@@ -23,6 +23,12 @@ let _stepCount = 0;
 // ── Value display format (shared with Memory Inspector) ─────
 let _valueFmt = 'dec'; // 'hex' | 'dec' | 'bin'
 export function setValueFormat(fmt) { _valueFmt = fmt; }
+
+// Selected-wire highlight: app.js calls this when the user clicks a wire
+// (or clears the selection). The renderer paints a cyan glow on top of the
+// matching wire so the user can see which one is bound to the props panel.
+let _selectedWireId = null;
+export function setSelectedWire(wireId) { _selectedWireId = wireId; }
 function _fmt(val, bits) {
   const v = (val >>> 0);
   if (_valueFmt === 'hex') return '0x' + v.toString(16).toUpperCase().padStart(Math.ceil((bits || 16) / 4), '0');
@@ -567,31 +573,141 @@ function _drawWires(nodes, wires, wireValues) {
 
     if (isCLK) ctx.setLineDash([]);
 
-    // DFT (Layer 1): stuck-at fault overlay — orange dashed restroke + S0/S1 badge.
-    if (wire.stuckAt === 0 || wire.stuckAt === 1) {
-      ctx.strokeStyle  = '#ff9933';
+    // Selected-wire highlight: cyan halo + small endpoint markers so the
+    // user knows which wire the side panel is editing. Drawn UNDER the
+    // fault overlay so faulted-and-selected wires keep their fault badge.
+    if (_selectedWireId === wire.id) {
+      ctx.save();
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth   = width + 4;
+      ctx.shadowColor = '#00e5ff';
+      ctx.shadowBlur  = 12;
+      ctx.globalAlpha = 0.55;
+      _drawManhattanPath(path);
+      ctx.stroke();
+      ctx.shadowBlur  = 0;
+      ctx.globalAlpha = 1;
+      // Endpoint markers (open rings at each end of the path).
+      const endA = path[0], endB = path[path.length - 1];
+      ctx.fillStyle   = '#001a20';
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth   = 1.5;
+      [endA, endB].forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    // DFT (Layer 1 / 1.5): per-wire fault overlays. Order matters — only
+    // ONE badge is rendered (priority: open > stuck-at > bridging) so a
+    // wire can't display three icons stacked.
+    let _faultBadge = null;     // { color, label }
+    let _faultStrokeColor = null;
+    let _faultDash = [6, 3];
+    if (wire.open) {
+      _faultStrokeColor = '#ff4040';
+      _faultDash        = [3, 6];           // wider gaps suggest "broken"
+      _faultBadge       = { color: '#ff4040', text: '#ffd0d0', label: 'OPN' };
+    } else if (wire.stuckAt === 0 || wire.stuckAt === 1) {
+      _faultStrokeColor = '#ff9933';
+      _faultDash        = [6, 3];
+      _faultBadge       = { color: '#ff9933', text: '#ffb878', label: 'S' + wire.stuckAt };
+    } else if (wire.bridgedWith) {
+      _faultStrokeColor = '#cc66ff';
+      _faultDash        = [2, 4];           // tight dotted, distinct from S/O
+      _faultBadge       = { color: '#cc66ff', text: '#e0c0ff', label: 'B' };
+    }
+    if (_faultBadge) {
+      ctx.strokeStyle  = _faultStrokeColor;
       ctx.lineWidth    = Math.max(2, width);
-      ctx.setLineDash([6, 3]);
+      ctx.setLineDash(_faultDash);
       ctx.lineDashOffset = (Date.now() / 90) % 9;
-      ctx.shadowColor  = '#ff9933';
+      ctx.shadowColor  = _faultStrokeColor;
       ctx.shadowBlur   = 6;
       _drawManhattanPath(path);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.shadowBlur   = 0;
-      const mid = path[Math.floor(path.length / 2)];
-      ctx.fillStyle    = 'rgba(0,0,0,0.78)';
+      // Place the badge at the GEOMETRIC midpoint of the Manhattan path —
+      // not the midpoint of the array indices, which lands on a corner for
+      // 4-segment routes. Walk segments accumulating length, stop at
+      // total/2. The path follows wire waypoints, so users who reroute the
+      // wire automatically get the badge re-centred. A `wire.faultBadgePos`
+      // override (future feature) can short-circuit this with absolute coords.
+      let mid;
+      if (wire.faultBadgePos) {
+        mid = wire.faultBadgePos;
+      } else {
+        let total = 0;
+        for (let i = 1; i < path.length; i++) {
+          total += Math.abs(path[i].x - path[i-1].x) + Math.abs(path[i].y - path[i-1].y);
+        }
+        let target = total / 2, walked = 0;
+        mid = path[0];
+        for (let i = 1; i < path.length; i++) {
+          const segLen = Math.abs(path[i].x - path[i-1].x) + Math.abs(path[i].y - path[i-1].y);
+          if (walked + segLen >= target) {
+            const t = (target - walked) / (segLen || 1);
+            mid = {
+              x: path[i-1].x + (path[i].x - path[i-1].x) * t,
+              y: path[i-1].y + (path[i].y - path[i-1].y) * t,
+            };
+            break;
+          }
+          walked += segLen;
+        }
+      }
+      ctx.fillStyle    = 'rgba(0,0,0,0.85)';
       ctx.beginPath();
-      ctx.arc(mid.x, mid.y, 9, 0, Math.PI * 2);
+      ctx.arc(mid.x, mid.y, 16, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle  = '#ff9933';
-      ctx.lineWidth    = 1;
+      ctx.strokeStyle  = _faultBadge.color;
+      ctx.lineWidth    = 2;
       ctx.stroke();
-      ctx.fillStyle    = '#ffb878';
-      ctx.font         = 'bold 9px monospace';
+      ctx.fillStyle    = _faultBadge.text;
+      ctx.font         = 'bold 11px monospace';
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('S' + wire.stuckAt, mid.x, mid.y);
+      ctx.fillText(_faultBadge.label, mid.x, mid.y);
+    }
+    // For a bridging fault, also draw a thin dotted purple link from this
+    // wire's midpoint to the partner wire's midpoint, so the user sees the
+    // "short" between the two physical paths.
+    if (wire.bridgedWith) {
+      const partnerPath = _wirePaths.get(wire.bridgedWith);
+      if (partnerPath && partnerPath.length >= 2) {
+        const _geomMid = (p) => {
+          let total = 0;
+          for (let i = 1; i < p.length; i++)
+            total += Math.abs(p[i].x - p[i-1].x) + Math.abs(p[i].y - p[i-1].y);
+          let target = total / 2, walked = 0;
+          for (let i = 1; i < p.length; i++) {
+            const segLen = Math.abs(p[i].x - p[i-1].x) + Math.abs(p[i].y - p[i-1].y);
+            if (walked + segLen >= target) {
+              const t = (target - walked) / (segLen || 1);
+              return {
+                x: p[i-1].x + (p[i].x - p[i-1].x) * t,
+                y: p[i-1].y + (p[i].y - p[i-1].y) * t,
+              };
+            }
+            walked += segLen;
+          }
+          return p[0];
+        };
+        const a = _geomMid(path);
+        const b = _geomMid(partnerPath);
+        ctx.strokeStyle = 'rgba(204,102,255,0.6)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     // Signal dot at source

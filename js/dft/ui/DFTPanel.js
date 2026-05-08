@@ -120,24 +120,27 @@ export class DFTPanel {
     if (!this._body || !this._summary) return;
     const wires    = this._scene?.wires || [];
     const wireCnt  = wires.length;
-    const injected = wires.filter(w => w.stuckAt === 0 || w.stuckAt === 1).length;
-    const faultCnt = wireCnt * 2;
+    const injStuck = wires.filter(w => w.stuckAt === 0 || w.stuckAt === 1).length;
+    const injOpen  = wires.filter(w => w.open).length;
+    const injBrdg  = wires.filter(w => w.bridgedWith).length;
+    const injTotal = injStuck + injOpen + injBrdg;
+    const faultCnt = wireCnt * 2;       // potential s-a-0 + s-a-1 sites
 
     this._summary.innerHTML = `
       <span class="k">Wires</span><span class="v">${wireCnt}</span>
       <span class="k">Faults possible (s-a-0 + s-a-1)</span><span class="v">${faultCnt}</span>
-      <span class="k">Currently injected</span><span class="v">${injected}</span>
+      <span class="k">Injected (stuck / open / bridge)</span><span class="v">${injStuck} / ${injOpen} / ${injBrdg}</span>
     `;
 
     this._body.innerHTML =
-      this._renderTestabilityOverview(wires, injected) +
+      this._renderTestabilityOverview(wires, { injStuck, injOpen, injBrdg, injTotal }) +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
   }
 
   // ── TESTABILITY OVERVIEW ────────────────────────────────────
-  _renderTestabilityOverview(wires, injected) {
+  _renderTestabilityOverview(wires, inj) {
     const wireCnt   = wires.length;
     const faultCnt  = wireCnt * 2;
     const nodeCnt   = this._scene?.nodes?.length || 0;
@@ -149,8 +152,10 @@ export class DFTPanel {
       <div class="dft-perf-row">
         <span class="k">Nodes / Wires</span><span class="v">${nodeCnt} / ${wireCnt}</span>
         <span class="k">FFs (state-holding)</span><span class="v">${ffCnt}</span>
-        <span class="k">Total faults possible</span><span class="v">${faultCnt}</span>
-        <span class="k">Currently injected</span><span class="v">${injected}</span>
+        <span class="k">Total faults possible (s-a)</span><span class="v">${faultCnt}</span>
+        <span class="k">Injected — stuck-at</span><span class="v" style="color:#ff9933">${inj.injStuck}</span>
+        <span class="k">Injected — open</span><span class="v" style="color:#ff4040">${inj.injOpen}</span>
+        <span class="k">Injected — bridging</span><span class="v" style="color:#cc66ff">${inj.injBrdg}</span>
       </div>
     `;
   }
@@ -163,30 +168,50 @@ export class DFTPanel {
         <div class="dft-empty">no wires in scene — drop components and connect them to enumerate fault sites.</div>
       `;
     }
-    // Visual conventions:
-    //   inactive cell  → muted dim dot
-    //   injected cell  → solid orange pill with the stuck value inside
-    //   injected row   → subtle orange row tint + bold wire-id
+    // Visual conventions per fault type:
+    //   stuck-at  → orange pill with S0 / S1
+    //   open      → red pill "OPN"
+    //   bridging  → purple pill "B→<other>"
+    //   inactive  → dim dot
     const cellInactive = '<span style="color:#444">·</span>';
-    const cellInject   = (val) =>
-      `<span style="display:inline-block;min-width:22px;padding:1px 6px;background:#ff9933;color:#1a0d00;border-radius:10px;font-weight:bold;font-size:0.85em;letter-spacing:0.5px;box-shadow:0 0 6px rgba(255,153,51,0.6)">S${val}</span>`;
+    const pill = (bg, fg, text) =>
+      `<span style="display:inline-block;min-width:22px;padding:1px 6px;background:${bg};color:${fg};border-radius:10px;font-weight:bold;font-size:0.85em;letter-spacing:0.5px;box-shadow:0 0 6px ${bg}99">${text}</span>`;
 
     const rows = wires.map(w => {
-      const id        = (w.id || `${w.sourceId}→${w.targetId}`).slice(0, 22);
-      const isInject  = (w.stuckAt === 0 || w.stuckAt === 1);
-      const sa0       = w.stuckAt === 0 ? cellInject(0) : cellInactive;
-      const sa1       = w.stuckAt === 1 ? cellInject(1) : cellInactive;
-      const status    = isInject
-        ? `<span style="color:#ffb878;font-weight:bold">s-a-${w.stuckAt} ◀</span>`
+      const id   = (w.id || `${w.sourceId}→${w.targetId}`).slice(0, 22);
+      const hasStuck  = (w.stuckAt === 0 || w.stuckAt === 1);
+      const hasOpen   = !!w.open;
+      const hasBridge = !!w.bridgedWith;
+      const isInject  = hasStuck || hasOpen || hasBridge;
+
+      const sa0 = w.stuckAt === 0 ? pill('#ff9933', '#1a0d00', 'S0') : cellInactive;
+      const sa1 = w.stuckAt === 1 ? pill('#ff9933', '#1a0d00', 'S1') : cellInactive;
+      const op  = hasOpen           ? pill('#ff4040', '#1a0000', 'OPN') : cellInactive;
+      const br  = hasBridge
+        ? pill('#cc66ff', '#1a001a', 'B→' + (w.bridgedWith || '').slice(0, 6))
+        : cellInactive;
+
+      // Row tint follows the dominant fault (open > stuck > bridge).
+      let rowStyle = '';
+      let idColor  = '#f0e2cf';
+      if (hasOpen)        { rowStyle = 'background:rgba(255,64,64,0.10)';  idColor = '#ffb0b0'; }
+      else if (hasStuck)  { rowStyle = 'background:rgba(255,153,51,0.08)'; idColor = '#ffb878'; }
+      else if (hasBridge) { rowStyle = 'background:rgba(204,102,255,0.08)';idColor = '#e0c0ff'; }
+
+      const status = isInject
+        ? `<span style="color:${idColor};font-weight:bold">${
+            hasOpen ? 'open' : hasStuck ? 's-a-' + w.stuckAt : 'bridge ' + w.bridgeMode
+          } ◀</span>`
         : '<span style="color:#555">—</span>';
-      const rowStyle  = isInject ? 'background:rgba(255,153,51,0.08)' : '';
-      const idStyle   = isInject ? 'color:#ffb878;font-weight:bold' : 'color:#f0e2cf';
+
       return `<tr style="${rowStyle}">
-        <td style="padding:2px 8px;${idStyle}">${id}</td>
+        <td style="padding:2px 8px;color:${idColor};${isInject ? 'font-weight:bold' : ''}">${id}</td>
         <td style="padding:2px 8px">${(w.sourceId || '').slice(0, 12)}</td>
         <td style="padding:2px 8px">${(w.targetId || '').slice(0, 12)}[${w.targetInputIndex ?? 0}]</td>
         <td style="padding:2px 8px;text-align:center">${sa0}</td>
         <td style="padding:2px 8px;text-align:center">${sa1}</td>
+        <td style="padding:2px 8px;text-align:center">${op}</td>
+        <td style="padding:2px 8px;text-align:center">${br}</td>
         <td style="padding:2px 8px">${status}</td>
       </tr>`;
     }).join('');
@@ -201,6 +226,8 @@ export class DFTPanel {
               <th style="padding:3px 8px;text-align:left">target[in]</th>
               <th style="padding:3px 8px">s-a-0</th>
               <th style="padding:3px 8px">s-a-1</th>
+              <th style="padding:3px 8px">open</th>
+              <th style="padding:3px 8px">bridge</th>
               <th style="padding:3px 8px;text-align:left">injected</th>
             </tr>
           </thead>

@@ -279,15 +279,32 @@
         <span>Clock Wire</span>
         <button id="wire-clock-toggle" class="design-prop-toggle">OFF</button>
       </div>
-      <div class="design-prop-row" id="wire-stuckat-row" title="DFT — inject a stuck-at fault on this wire (orange dashed render)">
+      <div class="design-prop-row" id="wire-stuckat-row" title="DFT — inject a stuck-at fault on this wire">
         <span>Stuck-at</span>
-        <select id="wire-stuckat" style="background:#1a1208;color:#ffb878;border:1px solid #6a4020;font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px">
+        <select id="wire-stuckat">
           <option value="">none</option>
           <option value="0">s-a-0</option>
           <option value="1">s-a-1</option>
         </select>
       </div>
-      <button id="wire-clear-waypoints" class="design-action" style="margin-top:6px;font-size:10px">RESET ROUTE</button>
+      <div class="design-prop-row" id="wire-open-row" title="DFT — wire is physically broken (floats / null)">
+        <span>Open</span>
+        <button id="wire-open-toggle" class="design-prop-toggle">OFF</button>
+      </div>
+      <div class="design-prop-row" id="wire-bridge-row" title="DFT — bridging fault: wire is shorted to another wire (wired-OR / wired-AND)">
+        <span>Bridge w/</span>
+        <select id="wire-bridge">
+          <option value="">none</option>
+        </select>
+      </div>
+      <div class="design-prop-row" id="wire-bridge-mode-row" title="Wired-OR (dominant-1) or Wired-AND (dominant-0)">
+        <span>Bridge mode</span>
+        <select id="wire-bridge-mode">
+          <option value="or">wired-OR</option>
+          <option value="and">wired-AND</option>
+        </select>
+      </div>
+      <button id="wire-clear-waypoints" class="design-action" title="Clears any manually-dragged waypoints on this wire and reverts it to the auto-routed (Manhattan) path." style="margin-top:6px;font-size:10px">RESET ROUTE</button>
     </div>
     <div id="design-actions">
       <button id="btn-design-export" class="design-action" data-shortcut="E">EXPORT</button>
