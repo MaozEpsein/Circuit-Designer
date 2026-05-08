@@ -2963,7 +2963,7 @@
    — opening one closes the other (handled in DFTPanel.show / hide).  */
 #dft-panel {
   position: fixed;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: 440px;
   height: 45vh;
@@ -2973,8 +2973,8 @@
   max-height: 95vh;
   background: #14100a;
   border: 1px solid #aa6a2a;
-  border-right: none;
-  border-top-left-radius: 8px;
+  border-left: none;
+  border-top-right-radius: 8px;
   z-index: 160;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
@@ -2986,11 +2986,11 @@
 
 #dft-resize-grip {
   position: absolute;
-  left: 0; top: 0;
+  right: 0; top: 0;
   width: 18px; height: 100%;
   cursor: ew-resize;
   background: rgba(255,160,40,0.04);
-  border-right: 1px dashed rgba(255,160,40,0.18);
+  border-left: 1px dashed rgba(255,160,40,0.18);
   z-index: 1;
 }
 #dft-resize-grip:hover { background: rgba(255,160,40,0.12); }
@@ -2999,7 +2999,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.8em 1.2em 0.8em 2.6em;
+  padding: 0.8em 2.6em 0.8em 1.2em;
   border-bottom: 1px solid #6a4020;
   color: #ffb878;
   font-weight: bold;

@@ -51,6 +51,7 @@ globalThis.document = {
     return mockEls.get(id);
   },
   createElement() { return stubElement(); },
+  addEventListener() {},
 };
 
 const { DFTPanel } = await import('../../js/dft/ui/DFTPanel.js');

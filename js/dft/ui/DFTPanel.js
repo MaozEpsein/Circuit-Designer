@@ -30,6 +30,11 @@ export class DFTPanel {
 
     if (this._closeBtn) this._closeBtn.addEventListener('click', () => this.hide());
     if (this._fsBtn)    this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this._el?.classList.contains('dft-fullscreen')) {
+        this._toggleFullscreen();
+      }
+    });
     // Top-toolbar DFT button — parallel to the ANALYSIS button.
     document.getElementById('btn-dft-toggle')?.addEventListener('click', () => this.toggle());
 
@@ -56,12 +61,6 @@ export class DFTPanel {
 
   show() {
     if (!this._el) return;
-    // Mutual exclusion with the Pipeline panel.
-    const pipe = document.getElementById('pipeline-panel');
-    if (pipe && !pipe.classList.contains('hidden')) {
-      pipe.classList.add('hidden');
-      document.getElementById('btn-pipeline-toggle')?.classList.remove('active');
-    }
     this._el.classList.remove('hidden');
     document.getElementById('btn-dft-toggle')?.classList.add('active');
     this._visible = true;
@@ -82,7 +81,31 @@ export class DFTPanel {
 
   _toggleFullscreen() {
     if (!this._el) return;
-    this._el.classList.toggle('dft-fullscreen');
+    const on = this._el.classList.toggle('dft-fullscreen');
+    if (this._fsBtn) this._fsBtn.textContent = on ? 'EXIT FS' : 'FULLSCREEN';
+    if (on) {
+      this._fsSaved = {
+        width:    this._el.style.width,
+        height:   this._el.style.height,
+        fontSize: this._el.style.fontSize,
+      };
+      this._el.style.width    = '';
+      this._el.style.height   = '';
+      this._el.style.fontSize = '';
+      if (this._summary && this._body && this._summary.parentNode !== this._body) {
+        this._body.insertBefore(this._summary, this._body.firstChild);
+      }
+    } else {
+      if (this._fsSaved) {
+        this._el.style.width    = this._fsSaved.width;
+        this._el.style.height   = this._fsSaved.height;
+        this._el.style.fontSize = this._fsSaved.fontSize;
+        this._fsSaved = null;
+      }
+      if (this._summary && this._body && this._summary.parentNode === this._body) {
+        this._el.insertBefore(this._summary, this._body);
+      }
+    }
   }
 
   // Render pass. Layer 0 only emits the placeholder body — every

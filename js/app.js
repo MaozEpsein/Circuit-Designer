@@ -2096,6 +2096,51 @@ document.getElementById('btn-mem-close')?.addEventListener('click', _toggleMemIn
   });
 })();
 
+// DFT panel resize grip — mirrors the Pipeline panel handler verbatim.
+(function initDftResize() {
+  const grip  = document.getElementById('dft-resize-grip');
+  const panel = document.getElementById('dft-panel');
+  if (!grip || !panel) return;
+
+  function _applyDftFontTier(height) {
+    let base;
+    if (height < 300)       base = 12;
+    else if (height < 550)  base = 14;
+    else                    base = 16;
+    panel.style.fontSize = base + 'px';
+  }
+  panel.style.top = '';
+  _applyDftFontTier(panel.getBoundingClientRect().height);
+
+  let dragging = false, startX = 0, startY = 0, startW = 0, startH = 0;
+  grip.addEventListener('mousedown', (e) => {
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    startX = e.clientX; startY = e.clientY;
+    startW = r.width;   startH = r.height;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'nwse-resize';
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const newW = Math.max(220, Math.min(window.innerWidth  * 0.95, startW + dx));
+    const newH = Math.max(150, Math.min(window.innerHeight * 0.95, startH - dy));
+    panel.style.width  = newW + 'px';
+    panel.style.height = newH + 'px';
+    _applyDftFontTier(newH);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  });
+})();
+
 document.getElementById('btn-mem-format')?.addEventListener('click', () => {
   const btn = document.getElementById('btn-mem-format');
   if (_memFormat === 'hex') { _memFormat = 'bin'; btn.textContent = 'BIN'; }
@@ -3704,27 +3749,37 @@ const EXAMPLES = [
     tags: ['cache', 'advanced', 'CACHE', 'write-back', 'write-through', 'dirty'],
     file: 'examples/circuits/cache-write-back-vs-through.json',
   },
+  // ── Test & DFT tab — one demo per layer of the DFT track.
+  {
+    id: 'dft-welcome',
+    title: '0. DFT — welcome (panel scaffold)',
+    desc: 'Trivial scene (one INPUT → one OUTPUT) whose only job is to seed the new "Test & DFT" tab. Press T to open the DFT panel — it shows the empty scaffold. Subsequent layers add real DFT structure: stuck-at faults, fault coverage, scan chains, BIST, JTAG.',
+    tags: ['dft', 'scaffold'],
+    file: 'examples/circuits/dft-welcome.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');
 const examplesList = document.getElementById('examples-list');
 
 const EXAMPLES_CATEGORIES = [
-  { id: 'beginner',     label: 'Beginner'         },
-  { id: 'intermediate', label: 'Intermediate'     },
-  { id: 'advanced',     label: 'Advanced'         },
+  { id: 'beginner',     label: 'Logic & FSM'      },
+  { id: 'advanced',     label: 'CPU'              },
   { id: 'pipeline',     label: 'Pipeline'         },
   { id: 'predictor',    label: 'Branch Predictor' },
   { id: 'cache',        label: 'Cache & Memory'   },
+  { id: 'dft',          label: 'Test & DFT'       },
 ];
 let _examplesActiveTab = 'beginner';
 
 function _categoryOf(ex) {
   // Category is the first tag that matches a known category id.
+  // Legacy 'intermediate' tag folds into the Logic & FSM bucket.
   for (const t of (ex.tags || [])) {
+    if (t === 'intermediate') return 'beginner';
     if (EXAMPLES_CATEGORIES.some(c => c.id === t)) return t;
   }
-  return 'advanced';   // fallback bucket for un-categorized examples
+  return 'beginner';   // fallback bucket for un-categorized examples
 }
 
 function _renderExamplesCards(category) {
