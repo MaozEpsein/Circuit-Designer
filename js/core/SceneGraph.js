@@ -168,12 +168,16 @@ export class SceneGraph {
       if (m) maxId = Math.max(maxId, parseInt(m[1]));
     }
     setIdCounter(maxId + 1);
+    // Preserve scene-level extension fields. _dft carries the test
+    // vectors + fault-sim metadata used by Layer 2 of the DFT track.
+    this._dft = data._dft || null;
     bus.emit('scene:loaded', data);
   }
 
   clear() {
     this._nodes.clear();
     this._wires.clear();
+    this._dft = null;
     bus.emit('scene:cleared');
   }
 

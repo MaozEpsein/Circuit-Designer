@@ -17,6 +17,7 @@
 // is active.
 
 import { bus } from '../../core/EventBus.js';
+import { simulateFaults } from '../FaultSimulator.js';
 
 export class DFTPanel {
   constructor(sceneRef = null) {
@@ -31,8 +32,14 @@ export class DFTPanel {
     this._fsBtn      = document.getElementById('btn-dft-fullscreen');
     this._visible    = false;
 
+    this._runBtn  = document.getElementById('btn-dft-run');
+    // Layer 2 — last fault-sim result. null until the user clicks RUN.
+    // Cleared when the scene mutates (vectors / topology may have changed).
+    this._lastSim = null;
+
     if (this._closeBtn) this._closeBtn.addEventListener('click', () => this.hide());
     if (this._fsBtn)    this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
+    if (this._runBtn)   this._runBtn.addEventListener('click', () => this._runFaultSim());
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._el?.classList.contains('dft-fullscreen')) {
         this._toggleFullscreen();
@@ -42,9 +49,12 @@ export class DFTPanel {
     document.getElementById('btn-dft-toggle')?.addEventListener('click', () => this.toggle());
 
     // Re-render on scene mutations so the panel reflects the current
-    // circuit. Layers 1+ will read the scene for fault enumeration,
-    // scan-chain detection, etc.
-    const refresh = () => { if (this._visible) this._render(); };
+    // circuit. Topology changes invalidate the cached fault-sim result —
+    // a stale coverage % over a different netlist would be misleading.
+    const refresh = () => {
+      this._lastSim = null;
+      if (this._visible) this._render();
+    };
     bus.on('node:added',     refresh);
     bus.on('node:removed',   refresh);
     bus.on('wire:added',     refresh);
@@ -134,9 +144,74 @@ export class DFTPanel {
 
     this._body.innerHTML =
       this._renderTestabilityOverview(wires, { injStuck, injOpen, injBrdg, injTotal }) +
+      this._renderFaultCoverage() +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
+  }
+
+  // ── Run the combinational fault simulator on the current scene ─
+  // Vectors come from `scene._dft?.vectors` (set by demo JSONs or by
+  // future UI). If absent, fall back to a small canonical sweep:
+  // all-zero, all-one, walking-1. Result is cached on this._lastSim
+  // and surfaced via _renderFaultCoverage + the detection column in
+  // _renderFaultList.
+  _runFaultSim() {
+    if (!this._scene) return;
+    const vectors = this._scene._dft?.vectors || this._defaultVectors();
+    if (!vectors.length) return;
+    this._lastSim = simulateFaults(this._scene.nodes, this._scene.wires, vectors, {
+      models: ['stuck-at-0', 'stuck-at-1', 'open'],
+    });
+    this._lastSim._vectors = vectors;     // remembered for the per-vector display
+    if (this._visible) this._render();
+  }
+
+  // Default vector sweep when the scene doesn't ship its own: all-zero,
+  // all-one, then one walking-1 per primary input. Modest coverage but
+  // always available — the user can override by editing `scene._dft.vectors`.
+  _defaultVectors() {
+    const inputs = (this._scene?.nodes || [])
+      .filter(n => n.type === 'INPUT')
+      .sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+    const N = inputs.length;
+    if (N === 0) return [];
+    const allZero = Array(N).fill(0);
+    const allOne  = Array(N).fill(1);
+    const walking = Array.from({ length: N }, (_, i) => {
+      const v = Array(N).fill(0); v[i] = 1; return v;
+    });
+    return [allZero, allOne, ...walking];
+  }
+
+  // ── FAULT COVERAGE ──────────────────────────────────────────
+  _renderFaultCoverage() {
+    if (!this._lastSim) {
+      return `
+        <div class="dft-coverage-header dft-section-header">FAULT COVERAGE</div>
+        <div class="dft-empty">Click <b style="color:#ffb878">RUN FAULT SIM</b> in the header to score the test vectors against every wire fault. Coverage and per-fault detection rows will populate the table below.</div>
+      `;
+    }
+    const { coverage, _vectors } = this._lastSim;
+    const pct = coverage.percent;
+    const barW = Math.max(2, pct);
+    // Colour the bar by quality tier — under 70 red-ish, 70-90 amber,
+    // 90+ green (the industry rule of thumb for "shippable").
+    const tier = pct < 70 ? '#cc4040' : pct < 90 ? '#cca040' : '#40cc60';
+    return `
+      <div class="dft-coverage-header dft-section-header">FAULT COVERAGE</div>
+      <div class="dft-perf-row" style="grid-template-columns: 1fr">
+        <div style="display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px;background:#1a1208;border:1px solid #401a00;border-radius:3px;height:18px;position:relative;overflow:hidden">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${barW}%;background:linear-gradient(90deg,${tier}88,${tier});box-shadow:0 0 8px ${tier}66;transition:width 0.3s"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff;font-size:0.92em;text-shadow:0 0 4px #000">
+              ${pct}% — ${coverage.detected} of ${coverage.total} faults
+            </div>
+          </div>
+          <span style="color:#876;font-size:0.92em">${_vectors.length} vector${_vectors.length === 1 ? '' : 's'}</span>
+        </div>
+      </div>
+    `;
   }
 
   // ── TESTABILITY OVERVIEW ────────────────────────────────────
@@ -177,12 +252,29 @@ export class DFTPanel {
     const pill = (bg, fg, text) =>
       `<span style="display:inline-block;min-width:22px;padding:1px 6px;background:${bg};color:${fg};border-radius:10px;font-weight:bold;font-size:0.85em;letter-spacing:0.5px;box-shadow:0 0 6px ${bg}99">${text}</span>`;
 
+    // Build a per-wire detection summary if a fault-sim result is cached.
+    // Maps wireId → { sa0: [vec idx...], sa1: [...], open: [...] }.
+    const det = new Map();
+    if (this._lastSim) {
+      this._lastSim.perFault.forEach(f => {
+        if (!det.has(f.wireId)) det.set(f.wireId, {});
+        det.get(f.wireId)[f.kind] = f.detectedBy;
+      });
+    }
+    const fmtDetect = (arr) => {
+      if (!arr) return '';
+      if (arr.length === 0) return '<span style="color:#cc4040">UND</span>';
+      if (arr.length <= 3)  return '<span style="color:#40cc60">v' + arr.join(',v') + '</span>';
+      return `<span style="color:#40cc60">v${arr.slice(0,2).join(',v')} +${arr.length-2}</span>`;
+    };
+
     const rows = wires.map(w => {
       const id   = (w.id || `${w.sourceId}→${w.targetId}`).slice(0, 22);
       const hasStuck  = (w.stuckAt === 0 || w.stuckAt === 1);
       const hasOpen   = !!w.open;
       const hasBridge = !!w.bridgedWith;
       const isInject  = hasStuck || hasOpen || hasBridge;
+      const d         = det.get(w.id);
 
       const sa0 = w.stuckAt === 0 ? pill('#ff9933', '#1a0d00', 'S0') : cellInactive;
       const sa1 = w.stuckAt === 1 ? pill('#ff9933', '#1a0d00', 'S1') : cellInactive;
@@ -204,6 +296,17 @@ export class DFTPanel {
           } ◀</span>`
         : '<span style="color:#555">—</span>';
 
+      // "detected by" column. Shows the per-fault detection summary
+      // when fault sim has been run. Compact: "sa0 v2 · sa1 UND · op v0".
+      let detectedHtml = '<span style="color:#444">—</span>';
+      if (d) {
+        const parts = [];
+        if (d.sa0)  parts.push(`<span style="color:#876">sa0</span> ${fmtDetect(d.sa0)}`);
+        if (d.sa1)  parts.push(`<span style="color:#876">sa1</span> ${fmtDetect(d.sa1)}`);
+        if (d.open) parts.push(`<span style="color:#876">op</span> ${fmtDetect(d.open)}`);
+        detectedHtml = parts.join(' · ');
+      }
+
       return `<tr style="${rowStyle}">
         <td style="padding:2px 8px;color:${idColor};${isInject ? 'font-weight:bold' : ''}">${id}</td>
         <td style="padding:2px 8px">${(w.sourceId || '').slice(0, 12)}</td>
@@ -213,6 +316,7 @@ export class DFTPanel {
         <td style="padding:2px 8px;text-align:center">${op}</td>
         <td style="padding:2px 8px;text-align:center">${br}</td>
         <td style="padding:2px 8px">${status}</td>
+        <td style="padding:2px 8px;font-size:0.88em">${detectedHtml}</td>
       </tr>`;
     }).join('');
     return `
@@ -229,6 +333,7 @@ export class DFTPanel {
               <th style="padding:3px 8px">open</th>
               <th style="padding:3px 8px">bridge</th>
               <th style="padding:3px 8px;text-align:left">injected</th>
+              <th style="padding:3px 8px;text-align:left">detected by</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>

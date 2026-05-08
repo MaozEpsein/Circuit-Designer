@@ -3058,13 +3058,16 @@
 
 /* Generic key/value row for sections like TESTABILITY OVERVIEW. */
 .dft-perf-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.25em 1.2em;
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 1em;
+  row-gap: 0.3em;
+  padding: 0.5em 1.2em;
   font-size: 0.95em;
+  align-items: center;
 }
-.dft-perf-row .k { color: #876; }
-.dft-perf-row .v { color: #f0e2cf; }
+.dft-perf-row .k { color: #876;     white-space: nowrap; }
+.dft-perf-row .v { color: #f0e2cf;  font-weight: bold; }
 
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {

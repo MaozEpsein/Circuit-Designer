@@ -3812,6 +3812,13 @@ const EXAMPLES = [
     tags: ['dft', 'stuck-at', 'open', 'bridge', 'fault'],
     file: 'examples/circuits/dft-faults-tour.json',
   },
+  {
+    id: 'dft-fault-coverage',
+    title: '2. DFT — fault coverage simulation',
+    desc: '3-input AND-OR network: Y = (A & B) | C. Five wires × 2 stuck-at + 5 open = 15 fault candidates total. The demo ships 4 carefully-chosen test vectors (000, 110, 001, 100). Open the DFT panel (T), click RUN FAULT SIM in the header, and watch the FAULT COVERAGE bar fill — each per-wire row in the FAULT LIST gains a "detected by" annotation showing which vectors caught each fault. Some faults will read "UND" (undetected) — those are the gaps a real ATPG tool would close with extra targeted vectors.',
+    tags: ['dft', 'fault-coverage', 'fault-sim'],
+    file: 'examples/circuits/dft-fault-coverage.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

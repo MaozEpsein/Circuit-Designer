@@ -1,0 +1,26 @@
+{
+  "_dft": {
+    "vectors": [
+      [0, 0, 0],
+      [1, 1, 0],
+      [0, 0, 1],
+      [1, 0, 0]
+    ],
+    "_doc": "4 test vectors over (A,B,C). Y = (A&B) | C. Covers most s-a faults; expect ~90% coverage. Add a 5th vector via the panel (in a future layer) to push coverage to 100%."
+  },
+  "nodes": [
+    { "type": "INPUT",     "x": -260, "y": -100, "fixedValue": 0, "label": "A", "id": "in_a" },
+    { "type": "INPUT",     "x": -260,    "y": 0, "fixedValue": 0, "label": "B", "id": "in_b" },
+    { "type": "INPUT",     "x": -260,  "y": 100, "fixedValue": 0, "label": "C", "id": "in_c" },
+    { "type": "GATE_SLOT", "x":  -80,  "y": -50, "gate": "AND",   "label": "AND", "id": "and1" },
+    { "type": "GATE_SLOT", "x":  100,    "y": 0, "gate": "OR",    "label": "OR",  "id": "or1"  },
+    { "type": "OUTPUT",    "x":  260,    "y": 0, "targetValue": 0, "sandbox": true, "label": "Y", "id": "out_y" }
+  ],
+  "wires": [
+    { "sourceId": "in_a", "targetId": "and1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a" },
+    { "sourceId": "in_b", "targetId": "and1",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b" },
+    { "sourceId": "and1", "targetId": "or1",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_q" },
+    { "sourceId": "in_c", "targetId": "or1",   "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_c" },
+    { "sourceId": "or1",  "targetId": "out_y", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o" }
+  ]
+}
