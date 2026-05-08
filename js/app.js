@@ -8,6 +8,8 @@ import { CommandManager } from './core/CommandManager.js';
 import { SceneGraph } from './core/SceneGraph.js';
 import * as Renderer from './rendering/CanvasRenderer.js';
 import * as Waveform from './waveform/WaveformController.js';
+import { state as waveformState } from './waveform/WaveformState.js';
+import { sanitizeIdentifier as sanitizeIdent } from './hdl/core/identifiers.js';
 import * as Input from './interaction/InputHandler.js';
 import { MEMORY_TYPE_SET, COMPONENT_TYPES, createComponent, createWire } from './components/Component.js';
 import { SetNodePropsCommand, RemoveNodeCommand, AddNodeCommand, AddWireCommand } from './components/CircuitCommands.js';
@@ -3027,9 +3029,15 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
       return `  ${kind} ${w}${p.name};`;
     };
     const lines = [];
+    const haveHistory = (waveformState?.history?.length || 0) > 1;
     lines.push(`// Auto-generated testbench for module \`${topName}\`.`);
-    lines.push(`// Edit the stimulus block below to drive the design.`);
-    lines.push(`// Run with:  iverilog -g2005 -o sim circuit.v circuit_tb.v && vvp sim`);
+    if (haveHistory) {
+      lines.push(`// Stimulus block was REPLAYED from the session waveform —`);
+      lines.push(`// values reproduce the canvas simulation cycle-by-cycle.`);
+    } else {
+      lines.push(`// Edit the stimulus block below to drive the design.`);
+    }
+    lines.push(`// Run with:  iverilog -g2005 -o sim ${topName}.v ${topName}_tb.v && vvp sim`);
     lines.push(``);
     lines.push(`\`timescale 1ns/1ps`);
     lines.push(``);
@@ -3047,22 +3055,81 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
       lines.push(`  always #5 ${clkPort.name} = ~${clkPort.name};`);
       lines.push(``);
     }
+
+    // Stimulus: replay the recorded waveform if the user has run the
+    // simulation in this session, otherwise fall back to the zeroed
+    // skeleton so the TB still compiles. Replay maps each TB input
+    // port back to its scene node by label-sanitisation, then walks
+    // state.history per step. We sample on the negative clock edge
+    // (#10 between samples → just after the rising edge in the always
+    // block above), keeping setup time generous and avoiding races.
+    const stimInputs = inputs.filter(p => p !== clkPort);
+    const history = waveformState?.history || [];
+    const sigById = new Map((waveformState?.signals || []).map(s => [s.parentId, s]));
+    let replayed = false;
+    const replayLines = [];
+    if (history.length > 1 && stimInputs.length) {
+      // Build TB-port-name → scene-node map for input ports.
+      const portToNode = new Map();
+      const used = new Set();
+      for (const n of (scene?.nodes || [])) {
+        if (n.type !== 'INPUT' && n.type !== 'CLOCK') continue;
+        const candidate = sanitizeIdent(n.label || n.id);
+        // Don't overwrite a previous match; first match by declaration
+        // order wins (mirrors fromCircuit's uniqueIdentifier behaviour
+        // for unique labels). Collisions silently lose the second;
+        // those ports just stay zeroed in the stimulus.
+        if (!used.has(candidate)) {
+          portToNode.set(candidate, n);
+          used.add(candidate);
+        }
+      }
+      const tracked = stimInputs
+        .map(p => ({ port: p, node: portToNode.get(p.name) }))
+        .filter(x => x.node && sigById.has(x.node.id));
+      if (tracked.length) {
+        replayed = true;
+        // Cap replay length so a long recording doesn't bloat the TB.
+        const MAX = 200;
+        const steps = Math.min(history.length, MAX);
+        replayLines.push(`    // Stimulus replay — captured from the session waveform`);
+        replayLines.push(`    // (${history.length} step(s) recorded${steps < history.length ? `, first ${steps} replayed` : ''}).`);
+        for (let i = 0; i < steps; i++) {
+          const sample = history[i].signals;
+          const assigns = [];
+          for (const t of tracked) {
+            const sig = sigById.get(t.node.id);
+            const v = sample.get(sig.id);
+            if (v == null) continue;
+            const hex = (Number(v) >>> 0).toString(16);
+            assigns.push(`${t.port.name} = ${t.port.width}'h${hex};`);
+          }
+          if (assigns.length) replayLines.push(`    #10 ${assigns.join(' ')}`);
+        }
+      }
+    }
+
     lines.push(`  initial begin`);
     lines.push(`    $dumpfile("${topName}.vcd");`);
     lines.push(`    $dumpvars(0, ${topName}_tb);`);
-    const stimInputs = inputs.filter(p => p !== clkPort);
-    if (stimInputs.length) {
-      lines.push(`    // Initial stimulus — TODO: replace with real test vectors.`);
-      for (const p of stimInputs) {
-        lines.push(`    ${p.name} = ${p.width}'h0;`);
+    if (replayed) {
+      // Initialise everything to 0 first, so any input we couldn't map
+      // back to a recorded signal still drives a defined value.
+      for (const p of stimInputs) lines.push(`    ${p.name} = ${p.width}'h0;`);
+      lines.push(...replayLines);
+      lines.push(`    #20 $finish;`);
+    } else {
+      if (stimInputs.length) {
+        lines.push(`    // Initial stimulus — TODO: replace with real test vectors.`);
+        for (const p of stimInputs) lines.push(`    ${p.name} = ${p.width}'h0;`);
       }
+      if (outputs.length) {
+        const fmt = outputs.map(p => p.width > 1 ? `${p.name}=%h` : `${p.name}=%b`).join(' ');
+        const args = outputs.map(p => p.name).join(', ');
+        lines.push(`    $monitor("[%0t] ${fmt}", $time, ${args});`);
+      }
+      lines.push(`    #200 $finish;`);
     }
-    if (outputs.length) {
-      const fmt = outputs.map(p => p.width > 1 ? `${p.name}=%h` : `${p.name}=%b`).join(' ');
-      const args = outputs.map(p => p.name).join(', ');
-      lines.push(`    $monitor("[%0t] ${fmt}", $time, ${args});`);
-    }
-    lines.push(`    #200 $finish;`);
     lines.push(`  end`);
     lines.push(`endmodule`);
     lines.push(``);
