@@ -4026,6 +4026,27 @@ const EXAMPLES = [
     tags: ['verilog', 'phase4', 'phase4e', 'dft', 'scan-ff', 'lfsr'],
     file: 'examples/circuits/verilog-phase4e-dft.json',
   },
+  {
+    id: 'verilog-phase5a-imm-pc',
+    title: '5a. VERILOG — IMM constant + PC counter',
+    desc: 'Phase-5a demo: the first two CPU components export to Verilog. IMM is purely combinational — one `assign net = 8\'h2a;` and that\'s it, no clock and no state. PC is a clocked register with a CLR > JUMP > EN priority chain: CLR resets to 0; JUMP loads JUMP_ADDR; EN increments. The pcRelative variant (when set on the node) replaces the JUMP branch with `pc + 1 + offset` for the canonical PC-relative form. Click VERILOG to see both side by side.',
+    tags: ['verilog', 'phase5', 'phase5a', 'imm', 'pc', 'cpu'],
+    file: 'examples/circuits/verilog-phase5a-imm-pc.json',
+  },
+  {
+    id: 'verilog-phase5c-reg-files',
+    title: '5c. VERILOG — register files (single-port + dual-port)',
+    desc: 'Phase-5c demo: REG_FILE and REG_FILE_DP, the first translators that emit a Verilog memory array. Click VERILOG to see one `reg [W-1:0] regs [0:DEPTH-1];` per register file plus async-read assigns (`rd_data = regs[rd_addr]`) and a synchronous write inside `always @(posedge clk) if (we) regs[wr_addr] <= wr_data;`. The IR gained two new primitives — `Index` (the `name[idx]` expression) and the existing `Memory` IR node + `out.memories` translator return field — so future RAM, ROM, FIFO, and STACK translators can reuse the same machinery.',
+    tags: ['verilog', 'phase5', 'phase5c', 'reg-file', 'cpu'],
+    file: 'examples/circuits/verilog-phase5c-reg-files.json',
+  },
+  {
+    id: 'verilog-phase5b-alu-ir',
+    title: '5b. VERILOG — ALU + IR (instruction register)',
+    desc: 'Phase-5b demo: ALU and IR. ALU is pure combinational — R is a nested-ternary chain over a 3-bit OP encoding (ADD / SUB / AND / OR / XOR / SHL / SHR / CMP), Z = (R == 0), and C uses an extra (W+1)-bit `addext = {1\'b0,a} + {1\'b0,b}` so its top bit can be sliced as the ADD carry. IR is clocked: the full instruction word lives in an internal `reg [15:0]` not tied to any canvas wire (translator-supplied via `out.nets`); on rising clock + LD it latches INSTR; the OP / RD / RS1 / RS2 outputs are continuous slices of the reg.',
+    tags: ['verilog', 'phase5', 'phase5b', 'alu', 'ir', 'cpu'],
+    file: 'examples/circuits/verilog-phase5b-alu-ir.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

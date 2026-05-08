@@ -1,0 +1,25 @@
+{
+  "_doc": "Phase-5a demo: IMM (constant injector) and PC (program counter) — the first two CPU components reach Verilog. Click VERILOG to see how each lowers:\n  • IMM — pure combinational. One `assign net = 8'h2a;` line and that's it. No clock, no state.\n  • PC — clocked register, structurally a COUNTER cousin. Priority chain: CLR > JUMP > EN > hold. JUMP loads the absolute address from JUMP_ADDR; EN increments by 1; CLR resets to 0.\nA pcRelative variant exists too — when set on the node, the JUMP branch becomes `pc + 1 + offset` (the canonical PC-relative branch), but this demo shows the simpler absolute-jump form.",
+  "nodes": [
+    { "type": "IMM",    "x": -200, "y": -150, "value": 42, "bitWidth": 8, "label": "IMM=42",  "id": "imm" },
+    { "type": "OUTPUT", "x":  120, "y": -150, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "imm_q", "id": "imm_q" },
+
+    { "type": "INPUT", "x": -380, "y":   0, "fixedValue": 100, "bitWidth": 8, "label": "jaddr", "id": "jaddr" },
+    { "type": "INPUT", "x": -380,  "y": 50, "fixedValue": 0,                   "label": "jump",  "id": "jump" },
+    { "type": "INPUT", "x": -380, "y": 100, "fixedValue": 1,                   "label": "en",    "id": "en" },
+    { "type": "INPUT", "x": -380, "y": 150, "fixedValue": 0,                   "label": "clr",   "id": "clr" },
+    { "type": "CLOCK", "x": -380, "y": 210, "value": 0, "id": "clk" },
+    { "type": "PC",    "x":  -80,  "y": 80, "bitWidth": 8, "label": "PC", "id": "pc" },
+    { "type": "OUTPUT","x":  220,  "y": 80, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "pc_q", "id": "pc_q" }
+  ],
+  "wires": [
+    { "sourceId": "imm", "targetId": "imm_q", "targetInputIndex": 0, "id": "w_imm" },
+
+    { "sourceId": "jaddr", "targetId": "pc", "targetInputIndex": 0, "id": "wj_addr" },
+    { "sourceId": "jump",  "targetId": "pc", "targetInputIndex": 1, "id": "wj" },
+    { "sourceId": "en",    "targetId": "pc", "targetInputIndex": 2, "id": "we" },
+    { "sourceId": "clr",   "targetId": "pc", "targetInputIndex": 3, "id": "wc" },
+    { "sourceId": "clk",   "targetId": "pc", "targetInputIndex": 4, "isClockWire": true, "id": "wk" },
+    { "sourceId": "pc",    "targetId": "pc_q", "targetInputIndex": 0, "id": "wp" }
+  ]
+}

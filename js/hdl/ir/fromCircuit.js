@@ -17,6 +17,16 @@ function nodeBitWidth(node, outIdx = 0) {
   // different widths. Listed before the generic bitWidth fallback.
   if (node?.type === 'COUNTER' && outIdx === 1) return 1;        // TC is 1-bit
   if (node?.type === 'LFSR')                     return 1;        // serial Q is 1-bit (MSB)
+  // ALU: out0 = R (bitWidth), out1 = Z (1-bit), out2 = C (1-bit).
+  if (node?.type === 'ALU' && outIdx >= 1)       return 1;
+  // IR fields: out0=OP, out1=RD, out2=RS1, out3=RS2 — each uses its
+  // own bit-count field. Width sum = instrWidth.
+  if (node?.type === 'IR') {
+    if (outIdx === 0) return Math.max(1, (node.opBits  ?? 4) | 0);
+    if (outIdx === 1) return Math.max(1, (node.rdBits  ?? 4) | 0);
+    if (outIdx === 2) return Math.max(1, (node.rs1Bits ?? 4) | 0);
+    if (outIdx === 3) return Math.max(1, (node.rs2Bits ?? 4) | 0);
+  }
   if (node?.type === 'BUS'     && outIdx === 1) return 1;        // ERR is 1-bit
   if (node?.type === 'HANDSHAKE')                return 1;        // S, F both 1-bit
   if (node?.type === 'COMPARATOR')               return 1;        // EQ / GT / LT all 1-bit
@@ -26,6 +36,10 @@ function nodeBitWidth(node, outIdx = 0) {
   if (node?.type === 'ENCODER')                  return 1;        // every output 1-bit
   // Component-specific overrides for the primary output width:
   if (node?.type === 'SIGN_EXT') return Math.max(1, (node.outBits ?? 8) | 0);
+  // REG_FILE family: outputs carry one register's worth of data.
+  if (node?.type === 'REG_FILE' || node?.type === 'REG_FILE_DP') {
+    return Math.max(1, (node.dataBits ?? node.bitWidth ?? 8) | 0);
+  }
   const w = node?.bitWidth ?? node?.dataBits ?? node?.width ?? 1;
   return Math.max(1, w | 0);
 }
@@ -161,6 +175,7 @@ export function fromCircuit(circuitJSON) {
   const assigns = [];       // populated by translators that emit assign-form output
                             // and by the post-loop OUTPUT-port wiring pass.
   const alwaysBlocks = [];  // populated by sequential translators (FFs, registers, …)
+  const memories = [];      // memory arrays — populated by REG_FILE / RAM / ROM
   const unmapped = [];      // [{ type, nodeId }] — caller renders as // TODO
   const instUsedNames = new Set();
   // Net-name → kind override map. Translators that drive a net from an
@@ -228,6 +243,12 @@ export function fromCircuit(circuitJSON) {
     // IRNet objects here. They're appended to the module's `nets` list.
     if (Array.isArray(out.nets)) {
       for (const n of out.nets) nets.push(n);
+    }
+    // Memory arrays — REG_FILE, RAM, ROM declare `reg [W-1:0] mem [0:D-1]`
+    // here. fromCircuit forwards them to ir.memories; toVerilog renders
+    // the canonical Verilog memory declaration.
+    if (Array.isArray(out.memories)) {
+      for (const m of out.memories) memories.push(m);
     }
   }
 
@@ -299,7 +320,7 @@ export function fromCircuit(circuitJSON) {
     instances,
     assigns,
     alwaysBlocks,
-    memories: [],
+    memories,
     submodules: [],
   });
   // Non-IR metadata used by the pretty printer to render // TODO markers.

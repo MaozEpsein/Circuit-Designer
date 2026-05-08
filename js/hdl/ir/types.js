@@ -46,6 +46,7 @@ export const IR_KIND = Object.freeze({
   ZeroExtend: 'ZeroExtend',
   SignExtend: 'SignExtend',
   Ternary:    'Ternary',
+  Index:      'Index',
 });
 
 export const PORT_DIR = Object.freeze({
@@ -152,6 +153,13 @@ export function makeUnaryOp(op, operand, width, sourceRef) {
 
 export function makeTernary(cond, then, else_, width, sourceRef) {
   return { ...base(IR_KIND.Ternary, sourceRef), cond, then, else: else_, width };
+}
+
+// Indexed access into a memory or array net: emits `name[indexExpr]`.
+// Used by REG_FILE / RAM / ROM translators where the index is a runtime
+// signal (not a compile-time constant — Slice covers that case).
+export function makeIndex(name, indexExpr, width, sourceRef) {
+  return { ...base(IR_KIND.Index, sourceRef), name, indexExpr, width };
 }
 
 export function makeConcat(parts, sourceRef) {

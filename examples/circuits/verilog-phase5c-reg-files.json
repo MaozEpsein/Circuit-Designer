@@ -1,0 +1,38 @@
+{
+  "_doc": "Phase-5c demo: REG_FILE (single-port read) and REG_FILE_DP (dual-port read), each with one synchronous write port. Click VERILOG to see how memory arrays land in Verilog: a single `reg [W-1:0] regs_<id> [0:DEPTH-1];` declaration, async read via `assign rd_data = regs[rd_addr];`, synchronous write inside `always @(posedge clk) if (we) regs[wr_addr] <= wr_data;`. The IR gained a new `Index` expression node (renders `name[idx]`) and a memory-array declaration path (`out.memories` from translators flows into `ir.memories`, rendered as the canonical Verilog memory decl). Both forms parse cleanly with iverilog.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -200, "fixedValue": 0, "bitWidth": 3, "label": "rd_a", "id": "rd_a" },
+    { "type": "INPUT", "x": -380, "y": -160, "fixedValue": 0, "bitWidth": 3, "label": "wr_a", "id": "wr_a" },
+    { "type": "INPUT", "x": -380, "y": -120, "fixedValue": 0, "bitWidth": 8, "label": "wr_d", "id": "wr_d" },
+    { "type": "INPUT", "x": -380,  "y": -80, "fixedValue": 0,                "label": "we",   "id": "we" },
+    { "type": "CLOCK", "x": -380,    "y": 0, "value": 0, "id": "clk" },
+    { "type": "REG_FILE", "x":  -80, "y": -150, "dataBits": 8, "regCount": 8, "label": "RF 8×8", "id": "rf" },
+    { "type": "OUTPUT", "x": 220, "y": -150, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "rf_q", "id": "rf_q" },
+
+    { "type": "INPUT", "x": -380,   "y": 80, "fixedValue": 0, "bitWidth": 3, "label": "dp_rd1", "id": "dp_rd1" },
+    { "type": "INPUT", "x": -380,  "y": 120, "fixedValue": 0, "bitWidth": 3, "label": "dp_rd2", "id": "dp_rd2" },
+    { "type": "INPUT", "x": -380,  "y": 160, "fixedValue": 0, "bitWidth": 3, "label": "dp_wa",  "id": "dp_wa" },
+    { "type": "INPUT", "x": -380,  "y": 200, "fixedValue": 0, "bitWidth": 8, "label": "dp_wd",  "id": "dp_wd" },
+    { "type": "INPUT", "x": -380,  "y": 240, "fixedValue": 0,                "label": "dp_we",  "id": "dp_we" },
+    { "type": "REG_FILE_DP", "x":  -80, "y": 150, "dataBits": 8, "regCount": 8, "label": "RF-DP", "id": "rfdp" },
+    { "type": "OUTPUT", "x": 220, "y": 120, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "dp_q1", "id": "dp_q1" },
+    { "type": "OUTPUT", "x": 220, "y": 170, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "dp_q2", "id": "dp_q2" }
+  ],
+  "wires": [
+    { "sourceId": "rd_a", "targetId": "rf", "targetInputIndex": 0, "id": "wr1" },
+    { "sourceId": "wr_a", "targetId": "rf", "targetInputIndex": 1, "id": "wr2" },
+    { "sourceId": "wr_d", "targetId": "rf", "targetInputIndex": 2, "id": "wr3" },
+    { "sourceId": "we",   "targetId": "rf", "targetInputIndex": 3, "id": "wr4" },
+    { "sourceId": "clk",  "targetId": "rf", "targetInputIndex": 4, "isClockWire": true, "id": "wr5" },
+    { "sourceId": "rf",   "targetId": "rf_q", "targetInputIndex": 0, "id": "wrq" },
+
+    { "sourceId": "dp_rd1", "targetId": "rfdp", "targetInputIndex": 0, "id": "wd0" },
+    { "sourceId": "dp_rd2", "targetId": "rfdp", "targetInputIndex": 1, "id": "wd1" },
+    { "sourceId": "dp_wa",  "targetId": "rfdp", "targetInputIndex": 2, "id": "wd2" },
+    { "sourceId": "dp_wd",  "targetId": "rfdp", "targetInputIndex": 3, "id": "wd3" },
+    { "sourceId": "dp_we",  "targetId": "rfdp", "targetInputIndex": 4, "id": "wd4" },
+    { "sourceId": "clk",    "targetId": "rfdp", "targetInputIndex": 5, "isClockWire": true, "id": "wd5" },
+    { "sourceId": "rfdp",   "sourceOutputIndex": 0, "targetId": "dp_q1", "targetInputIndex": 0, "id": "wdq1" },
+    { "sourceId": "rfdp",   "sourceOutputIndex": 1, "targetId": "dp_q2", "targetInputIndex": 0, "id": "wdq2" }
+  ]
+}

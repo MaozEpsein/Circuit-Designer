@@ -46,6 +46,8 @@ function emitExpr(expr) {
     }
     case IR_KIND.Ternary:
       return `(${emitExpr(expr.cond)} ? ${emitExpr(expr.then)} : ${emitExpr(expr.else)})`;
+    case IR_KIND.Index:
+      return `${expr.name}[${emitExpr(expr.indexExpr)}]`;
     default:
       return `/*<${expr.kind}>*/`;
   }
@@ -160,6 +162,17 @@ export function toVerilog(ir, opts = {}) {
     lines.push('');
     for (const net of ir.nets) {
       lines.push(`  ${net.netKind} ${widthSpec(net.width)}${net.name};`);
+    }
+  }
+
+  // Memory arrays — `reg [W-1:0] <name> [0:DEPTH-1];`. If the memory
+  // ships pre-loaded contents, follow with an `initial` block that
+  // assigns each cell. Translators populate ir.memories via their
+  // out.memories return field; fromCircuit shuttles that into the IR.
+  if (Array.isArray(ir.memories) && ir.memories.length > 0) {
+    lines.push('');
+    for (const mem of ir.memories) {
+      lines.push(`  reg ${widthSpec(mem.width)}${mem.instanceName} [0:${mem.depth - 1}];`);
     }
   }
 

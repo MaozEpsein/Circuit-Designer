@@ -1,0 +1,37 @@
+{
+  "_doc": "Phase-5b demo: ALU and IR — the next two CPU components reach Verilog. Click VERILOG to see how they lower:\n  • ALU (8-bit) — pure combinational. Result R is a nested-ternary chain over the 3-bit OP encoding (ADD/SUB/AND/OR/XOR/SHL/SHR/CMP). Z = (R == 0). C is the trickier flag: an extra `wire [W:0] addext = {1'b0,a} + {1'b0,b}` is declared so its top bit can be sliced as the ADD carry; SUB borrow is `(a < b)`; CMP greater is `(a > b)`. Other ops yield C = 0.\n  • IR (16-bit, 4+4+4+4) — clocked instruction register. The full latched word lives in an internal `reg [15:0]` net not tied to any canvas wire (a translator-supplied `out.nets` entry). On rising clock when LD is high, the reg captures INSTR. The OP / RD / RS1 / RS2 outputs are continuous slices of the reg.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -180, "fixedValue": 5,  "bitWidth": 8, "label": "a", "id": "a" },
+    { "type": "INPUT", "x": -380, "y": -130, "fixedValue": 3,  "bitWidth": 8, "label": "b", "id": "b" },
+    { "type": "INPUT", "x": -380,  "y": -80, "fixedValue": 0,  "bitWidth": 3, "label": "op", "id": "op" },
+    { "type": "ALU",   "x":  -80, "y": -130, "bitWidth": 8, "label": "ALU 8b", "id": "alu" },
+    { "type": "OUTPUT","x":  220, "y": -180, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "r", "id": "r" },
+    { "type": "OUTPUT","x":  220, "y": -130, "targetValue": 0, "sandbox": true, "label": "z", "id": "z" },
+    { "type": "OUTPUT","x":  220,  "y": -80, "targetValue": 0, "sandbox": true, "label": "c", "id": "c" },
+
+    { "type": "INPUT", "x": -380,  "y": 100, "fixedValue": 0, "bitWidth": 16, "label": "instr", "id": "instr" },
+    { "type": "INPUT", "x": -380,  "y": 150, "fixedValue": 1,                 "label": "ld", "id": "ld" },
+    { "type": "CLOCK", "x": -380,  "y": 220, "value": 0, "id": "clk" },
+    { "type": "IR",    "x":  -80,  "y": 150, "opBits": 4, "rdBits": 4, "rs1Bits": 4, "rs2Bits": 4, "label": "IR 4×4", "id": "ir" },
+    { "type": "OUTPUT","x":  220,   "y": 80, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "op_field", "id": "op_field" },
+    { "type": "OUTPUT","x":  220,  "y": 130, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "rd",       "id": "rd" },
+    { "type": "OUTPUT","x":  220,  "y": 180, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "rs1",      "id": "rs1" },
+    { "type": "OUTPUT","x":  220,  "y": 230, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "rs2",      "id": "rs2" }
+  ],
+  "wires": [
+    { "sourceId": "a",  "targetId": "alu", "targetInputIndex": 0, "id": "wa" },
+    { "sourceId": "b",  "targetId": "alu", "targetInputIndex": 1, "id": "wb" },
+    { "sourceId": "op", "targetId": "alu", "targetInputIndex": 2, "id": "wo" },
+    { "sourceId": "alu", "sourceOutputIndex": 0, "targetId": "r", "targetInputIndex": 0, "id": "wr" },
+    { "sourceId": "alu", "sourceOutputIndex": 1, "targetId": "z", "targetInputIndex": 0, "id": "wz" },
+    { "sourceId": "alu", "sourceOutputIndex": 2, "targetId": "c", "targetInputIndex": 0, "id": "wc" },
+
+    { "sourceId": "instr", "targetId": "ir", "targetInputIndex": 0, "id": "wi" },
+    { "sourceId": "ld",    "targetId": "ir", "targetInputIndex": 1, "id": "wl" },
+    { "sourceId": "clk",   "targetId": "ir", "targetInputIndex": 2, "isClockWire": true, "id": "wk" },
+    { "sourceId": "ir", "sourceOutputIndex": 0, "targetId": "op_field", "targetInputIndex": 0, "id": "wo0" },
+    { "sourceId": "ir", "sourceOutputIndex": 1, "targetId": "rd",       "targetInputIndex": 0, "id": "wr0" },
+    { "sourceId": "ir", "sourceOutputIndex": 2, "targetId": "rs1",      "targetInputIndex": 0, "id": "wr1" },
+    { "sourceId": "ir", "sourceOutputIndex": 3, "targetId": "rs2",      "targetInputIndex": 0, "id": "wr2" }
+  ]
+}
