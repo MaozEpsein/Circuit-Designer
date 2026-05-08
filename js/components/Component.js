@@ -46,6 +46,8 @@ export const COMPONENT_TYPES = {
   HANDSHAKE:    'HANDSHAKE',
   HDU:          'HDU',
   FWD:          'FWD',
+  // DFT components
+  SCAN_FF:      'SCAN_FF',
 };
 
 /**
@@ -76,7 +78,7 @@ export const FF_TYPES_LIST = ['D', 'T', 'SR', 'JK'];
 
 /** Set of all node types that are flip-flops or latches (sequential elements) */
 export const FF_TYPE_SET = new Set([
-  'FLIPFLOP_D', 'FLIPFLOP_SR', 'FLIPFLOP_JK', 'FLIPFLOP_T', 'FF_SLOT', 'LATCH_SLOT'
+  'FLIPFLOP_D', 'FLIPFLOP_SR', 'FLIPFLOP_JK', 'FLIPFLOP_T', 'FF_SLOT', 'LATCH_SLOT', 'SCAN_FF'
 ]);
 
 /** Set of all memory component types (sequential, clocked) */
@@ -105,6 +107,10 @@ export function createComponent(type, x, y) {
       return { ...base, gate: null, label: 'G' };
     case COMPONENT_TYPES.FF_SLOT:
       return { ...base, ffType: null, initialQ: 0, label: 'FF' };
+    case COMPONENT_TYPES.SCAN_FF:
+      // DFT scan flip-flop: D + TI inputs, TE select, CLK. On rising
+      // edge, Q ← (TE === 1 ? TI : D). Default initialQ = 0.
+      return { ...base, initialQ: 0, label: 'SCAN-FF' };
     case COMPONENT_TYPES.LATCH_SLOT:
       return { ...base, latchType: null, initialQ: 0, label: 'LATCH' };
     case COMPONENT_TYPES.CLOCK:

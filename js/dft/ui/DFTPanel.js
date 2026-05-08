@@ -19,6 +19,52 @@
 import { bus } from '../../core/EventBus.js';
 import { simulateFaults } from '../FaultSimulator.js';
 
+/**
+ * Detect scan chains in a scene.
+ *
+ * A scan chain is a sequence of SCAN_FF nodes where each FF's TI
+ * (Test Input, pin index 1) is wired from the Q output of the
+ * previous SCAN_FF in the sequence. Chain heads are SCAN_FFs whose
+ * TI input is NOT driven by another SCAN_FF (they receive scan-in
+ * from a primary input or are unwired).
+ *
+ * @param {object[]} scanFFs - SCAN_FF nodes
+ * @param {object[]} wires
+ * @returns {Array<Array<object>>} list of chains, each an ordered
+ *          list of SCAN_FF nodes from head to tail.
+ */
+export function detectScanChains(scanFFs, wires) {
+  if (scanFFs.length === 0) return [];
+  const ffById = new Map(scanFFs.map(n => [n.id, n]));
+  // For each SCAN_FF, find: who drives my TI? (prev), and who do I drive's TI? (next)
+  const prevOf = new Map();   // ff.id → upstream SCAN_FF (or undefined)
+  const nextOf = new Map();   // ff.id → downstream SCAN_FF (or undefined)
+  for (const ff of scanFFs) {
+    const tiWire = wires.find(w => w.targetId === ff.id && w.targetInputIndex === 1);
+    if (tiWire && ffById.has(tiWire.sourceId)) {
+      prevOf.set(ff.id, ffById.get(tiWire.sourceId));
+      nextOf.set(tiWire.sourceId, ff);
+    }
+  }
+  // Chain heads = SCAN_FFs with no prev. Walk forward via nextOf.
+  const heads = scanFFs.filter(ff => !prevOf.has(ff.id));
+  const chains = [];
+  for (const head of heads) {
+    const chain = [head];
+    let cur = head;
+    const seen = new Set([head.id]);
+    while (nextOf.has(cur.id)) {
+      const nxt = nextOf.get(cur.id);
+      if (seen.has(nxt.id)) break;     // guard against accidental loops
+      seen.add(nxt.id);
+      chain.push(nxt);
+      cur = nxt;
+    }
+    chains.push(chain);
+  }
+  return chains;
+}
+
 export class DFTPanel {
   constructor(sceneRef = null) {
     // Optional scene reference. When provided, sections like FAULT LIST
@@ -166,6 +212,7 @@ export class DFTPanel {
     this._body.innerHTML =
       this._renderTestabilityOverview(wires, { injStuck, injOpen, injBrdg, injTotal }) +
       this._renderFaultCoverage() +
+      this._renderScanChains() +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
@@ -351,6 +398,44 @@ export class DFTPanel {
         <span class="k">Injected — open</span><span class="v" style="color:#ff4040">${inj.injOpen}</span>
         <span class="k">Injected — bridging</span><span class="v" style="color:#cc66ff">${inj.injBrdg}</span>
       </div>
+    `;
+  }
+
+  // ── SCAN CHAINS ─────────────────────────────────────────────
+  // Auto-detects scan chains in the scene by walking each SCAN_FF's
+  // TI input back to its source. If the source is the Q output of
+  // another SCAN_FF, those two are chained. We follow the chain
+  // forward (each Q can feed at most one downstream TI) until it
+  // ends. Multiple disjoint chains in the same scene are supported.
+  _renderScanChains() {
+    const scanFFs = (this._scene?.nodes || []).filter(n => n.type === 'SCAN_FF');
+    const totalFFs = (this._scene?.nodes || []).filter(
+      n => /FF|FLIPFLOP|REGISTER|LATCH/.test(n.type || '')
+    ).length;
+    if (scanFFs.length === 0) {
+      return `
+        <div class="dft-scan-header dft-section-header">SCAN CHAINS</div>
+        <div class="dft-empty">No SCAN-FF in scene — drop a SCAN-FF chip (LOGIC tab) to enable scan-based testing.</div>
+      `;
+    }
+    const chains = detectScanChains(scanFFs, this._scene.wires || []);
+    const scanInserted = scanFFs.length;
+    const scanability = totalFFs > 0 ? Math.round((scanInserted / totalFFs) * 100) : 100;
+    const rows = chains.map((chain, idx) => {
+      const arrow = chain.map(ff => ff.label || ff.id).join(' → ');
+      return `<div style="padding:2px 1.2em;color:#f0e2cf">
+        <span style="color:#876">chain_${idx}:</span>
+        ${arrow}
+        <span style="color:#876"> · length ${chain.length}</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="dft-scan-header dft-section-header">SCAN CHAINS</div>
+      <div class="dft-perf-row">
+        <span class="k">Scan FFs</span><span class="v">${scanInserted} of ${totalFFs} (${scanability}% scanability)</span>
+        <span class="k">Chains detected</span><span class="v">${chains.length}</span>
+      </div>
+      ${rows || '<div style="padding:0 1.2em;color:#876">No completed chains — wire SCAN-FF outputs into the next SCAN-FF\'s TI input to form a chain.</div>'}
     `;
   }
 

@@ -799,7 +799,7 @@ function _updatePropsPanel() {
   propStepsRow.style.display = node.type === 'INPUT' ? '' : 'none';
   propTargetRow.style.display = node.type === 'OUTPUT' ? '' : 'none';
   propStepTargetsRow.style.display = node.type === 'OUTPUT' ? '' : 'none';
-  propInitQRow.style.display = node.type === 'FF_SLOT' ? '' : 'none';
+  propInitQRow.style.display = (node.type === 'FF_SLOT' || node.type === 'SCAN_FF') ? '' : 'none';
 
   // PIPE control buttons — only shown when a PIPE_REG is selected.
   const propPipeCtrlRow = document.getElementById('prop-pipe-ctrl-row');
@@ -919,7 +919,7 @@ function _updatePropsPanel() {
     propTargetToggle.textContent = node.targetValue ?? 0;
     propStepTargets.value = (node.stepTargets || []).join(',');
   }
-  if (node.type === 'FF_SLOT') propInitQToggle.textContent = node.initialQ ?? 0;
+  if (node.type === 'FF_SLOT' || node.type === 'SCAN_FF') propInitQToggle.textContent = node.initialQ ?? 0;
 }
 
 propSizeSelect?.addEventListener('change', () => {
@@ -1119,7 +1119,7 @@ propStepTargets.addEventListener('input', () => {
 
 propInitQToggle.addEventListener('click', () => {
   const node = _getSelectedNode();
-  if (!node || node.type !== 'FF_SLOT') return;
+  if (!node || (node.type !== 'FF_SLOT' && node.type !== 'SCAN_FF')) return;
   const newVal = (node.initialQ ?? 0) ^ 1;
   commands.execute(new SetNodePropsCommand(scene, node.id, { initialQ: newVal }));
   propInitQToggle.textContent = newVal;
@@ -3846,6 +3846,13 @@ const EXAMPLES = [
     desc: 'Larger combinational scene: 3-bit equality comparator (EQ = A == B) with 6 INPUTs, 3 XNORs, 2 ANDs, 11 wires → 33 fault candidates over a 64-pattern input space. Ships 10 hand-crafted vectors achieving 100% coverage (green bar). Click GEN RANDOM (purple) to replace them with 16 random vectors — coverage typically lands in the 79-97% range and BOUNCES between runs (random testing is non-deterministic; ATPG isn\'t). Click GEN RANDOM five times in a row and watch the bar move. That variability is exactly why production DFT uses ATPG (TetraMAX, Modus) for crafted, deterministic vectors. Hover the [random] / [compaction?] tags in the coverage row for the production-flow context.',
     tags: ['dft', 'random', 'atpg', 'compaction', 'comparator'],
     file: 'examples/circuits/dft-random-vs-targeted.json',
+  },
+  {
+    id: 'dft-scan-chain-3',
+    title: '3. DFT — scan chain (3 SCAN-FFs)',
+    desc: 'Three SCAN-FFs chained for scan-based testing. Each has D, TI (test input), TE (test enable), CLK. With TE=0, each behaves like a normal D flip-flop fed from its own D input. With TE=1, each loads from TI = the previous SCAN-FF\'s Q — so a value injected at SCAN_IN shifts through the chain on every clock edge and emerges at SCAN_OUT after 3 cycles. Open the DFT panel (T) to see the SCAN CHAINS section auto-detect the chain: ff_a → ff_b → ff_c. Toggle TE in the input panel and step the clock to watch the shift in action.',
+    tags: ['dft', 'scan', 'scan-ff', 'sequential'],
+    file: 'examples/circuits/dft-scan-chain-3.json',
   },
 ];
 

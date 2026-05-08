@@ -139,6 +139,7 @@ export class CommandPalette {
       { id: 'place-tff', label: 'Place T Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-tff') },
       { id: 'place-srff', label: 'Place SR Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-srff') },
       { id: 'place-jkff', label: 'Place JK Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-jkff') },
+      { id: 'place-scanff', label: 'Place SCAN Flip-Flop (DFT)', category: 'Test', action: () => bus.emit('palette:tool', 'place-scanff') },
     ];
 
     // Actions

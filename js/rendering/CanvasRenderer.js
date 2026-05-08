@@ -1332,6 +1332,10 @@ function _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId) 
       const ffState = ffStates.get(node.id) || { q: 0, qNot: 1 };
       _drawFfSlotNode(node, ffState, hovered);
     }
+    else if (node.type === 'SCAN_FF') {
+      const ffState = ffStates.get(node.id) || { q: 0, qNot: 1 };
+      _drawScanFFNode(node, ffState, hovered);
+    }
     else if (FF_TYPE_SET.has(node.type)) {
       const ffState = ffStates.get(node.id) || { q: 0, qNot: 1 };
       _drawFlipFlopNode(node, ffState, hovered);
@@ -1794,6 +1798,80 @@ function _drawFfSlotNode(node, ffState, hovered) {
       ctx.textBaseline = 'top';
       ctx.fillText('Q\u2080=' + node.initialQ, node.x, y + h + 6);
     }
+  }
+
+  ctx.restore();
+}
+
+// ── SCAN_FF node ─────────────────────────────────────────────
+// DFT scan flip-flop. 4 inputs: D, TI, TE, CLK. 1 output: Q.
+// Visually: a slightly taller box than FF_SLOT to fit 4 inputs cleanly,
+// with pin labels D / TI / TE / CLK on the left and an orange "S" badge
+// in the corner to mark it as a scan element.
+function _drawScanFFNode(node, ffState, hovered) {
+  const w = 64;
+  const h = 70;
+  const x = node.x - w / 2;
+  const y = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(255,160,40,0.55)'; ctx.shadowBlur = 22; }
+
+  ctx.fillStyle   = 'rgba(20,16,10,0.97)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hovered ? '#ffb878' : '#aa6a2a';
+  ctx.lineWidth   = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.shadowBlur  = 0;
+
+  // Q value in centre
+  const q = ffState?.q ?? 0;
+  ctx.fillStyle    = q === 1 ? '#39ff14' : '#7a9b7a';
+  ctx.font         = 'bold 16px JetBrains Mono, monospace';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Q=' + q, node.x, node.y - 4);
+
+  // Label below Q
+  ctx.fillStyle    = '#ffb878';
+  ctx.font         = 'bold 8px JetBrains Mono, monospace';
+  ctx.fillText(node.label || 'SCAN-FF', node.x, node.y + 14);
+
+  // Pin labels — D, TI, TE, CLK on the left at 4 pin positions.
+  const inLabels = ['D', 'TI', 'TE', 'CLK'];
+  ctx.fillStyle    = '#876';
+  ctx.font         = 'bold 8px JetBrains Mono, monospace';
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < 4; i++) {
+    const py = y + (h * (i + 1)) / 5;
+    ctx.fillText(inLabels[i], x + 4, py);
+  }
+
+  // Q output label on the right.
+  ctx.textAlign = 'right';
+  ctx.fillText('Q', x + w - 4, node.y);
+
+  // Orange "S" scan-marker badge in the top-right corner.
+  ctx.fillStyle    = '#ff9933';
+  ctx.beginPath();
+  ctx.arc(x + w - 8, y + 8, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle    = '#1a0d00';
+  ctx.font         = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('S', x + w - 8, y + 8);
+
+  // Initial-Q hint while step 0 (mirrors FF_SLOT behaviour).
+  if (node.initialQ != null && _stepCount === 0) {
+    ctx.fillStyle    = node.initialQ === 1 ? '#39ff14' : '#ff4444';
+    ctx.font         = 'bold 10px JetBrains Mono, monospace';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Q₀=' + node.initialQ, node.x, y + h + 4);
   }
 
   ctx.restore();
@@ -3724,6 +3802,7 @@ function _getNodeInputCount(node) {
   if (node.type === 'LATCH_SLOT') {
     return node.latchType === 'SR_LATCH' ? 3 : 2;
   }
+  if (node.type === 'SCAN_FF') return 4;     // D, TI, TE, CLK
   if (node.type === 'MUX') {
     const n = node.inputCount || 2;
     return n + Math.ceil(Math.log2(n)); // data + select
@@ -3779,6 +3858,9 @@ function _isClockInput(node, inputIndex) {
     const dataCount = _ffDataInputCount(node);
     return inputIndex >= dataCount;
   }
+  if (node.type === 'SCAN_FF') {
+    return inputIndex === 3;     // pins: D=0, TI=1, TE=2, CLK=3
+  }
   if (MEMORY_TYPE_SET.has(node.type)) {
     return inputIndex === _getNodeInputCount(node) - 1;
   }
@@ -3829,6 +3911,8 @@ export function getInputAnchors(node) {
       label = (node.subInputs && node.subInputs[i]) ? node.subInputs[i].label : 'I' + i;
     } else if (node.type === 'CU') {
       label = ['OP', 'Z', 'C'][i] || '';
+    } else if (node.type === 'SCAN_FF') {
+      label = ['D', 'TI', 'TE', 'CLK'][i] || '';
     } else if (node.type === 'ALU') {
       label = ['A', 'B', 'OP'][i] || '';
     } else if (node.type === 'HANDSHAKE') {

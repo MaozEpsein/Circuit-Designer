@@ -1,0 +1,37 @@
+{
+  "_dft": {
+    "_doc": "Three SCAN-FFs chained for scan-based testing. Shared CLK + TE. Drop a 1 into SCAN_IN, set TE=1, and step the clock 3 times — the value shifts through ff_a → ff_b → ff_c and emerges at SCAN_OUT. With TE=0, each SCAN-FF behaves like a normal D flip-flop fed from its own D input."
+  },
+  "nodes": [
+    { "type": "INPUT",   "x": -360, "y": -200, "fixedValue": 1, "label": "SCAN_IN", "id": "in_si" },
+    { "type": "INPUT",   "x": -360, "y": -120, "fixedValue": 0, "label": "TE",      "id": "in_te" },
+    { "type": "INPUT",   "x": -360,  "y": -40, "fixedValue": 0, "label": "D_a",     "id": "in_da" },
+    { "type": "INPUT",   "x": -360,   "y": 40, "fixedValue": 0, "label": "D_b",     "id": "in_db" },
+    { "type": "INPUT",   "x": -360,  "y": 120, "fixedValue": 0, "label": "D_c",     "id": "in_dc" },
+    { "type": "CLOCK",   "x": -360,  "y": 200, "value": 0, "id": "clk" },
+
+    { "type": "SCAN_FF", "x":  -80, "y": -100, "initialQ": 0, "label": "FF_A", "id": "ff_a" },
+    { "type": "SCAN_FF", "x":   80, "y":   30, "initialQ": 0, "label": "FF_B", "id": "ff_b" },
+    { "type": "SCAN_FF", "x":  240, "y":  160, "initialQ": 0, "label": "FF_C", "id": "ff_c" },
+
+    { "type": "OUTPUT",  "x":  420, "y":  160, "targetValue": 1, "sandbox": true, "label": "SCAN_OUT", "id": "out_so" }
+  ],
+  "wires": [
+    { "sourceId": "in_da", "targetId": "ff_a", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_da" },
+    { "sourceId": "in_si", "targetId": "ff_a", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_si_a" },
+    { "sourceId": "in_te", "targetId": "ff_a", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_te_a" },
+    { "sourceId": "clk",   "targetId": "ff_a", "targetInputIndex": 3, "sourceOutputIndex": 0, "id": "w_clk_a", "isClockWire": true },
+
+    { "sourceId": "in_db", "targetId": "ff_b", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_db" },
+    { "sourceId": "ff_a",  "targetId": "ff_b", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_chain_ab" },
+    { "sourceId": "in_te", "targetId": "ff_b", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_te_b" },
+    { "sourceId": "clk",   "targetId": "ff_b", "targetInputIndex": 3, "sourceOutputIndex": 0, "id": "w_clk_b", "isClockWire": true },
+
+    { "sourceId": "in_dc", "targetId": "ff_c", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_dc" },
+    { "sourceId": "ff_b",  "targetId": "ff_c", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_chain_bc" },
+    { "sourceId": "in_te", "targetId": "ff_c", "targetInputIndex": 2, "sourceOutputIndex": 0, "id": "w_te_c" },
+    { "sourceId": "clk",   "targetId": "ff_c", "targetInputIndex": 3, "sourceOutputIndex": 0, "id": "w_clk_c", "isClockWire": true },
+
+    { "sourceId": "ff_c",  "targetId": "out_so", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_so" }
+  ]
+}

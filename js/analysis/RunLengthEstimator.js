@@ -47,7 +47,7 @@ const UNBOUNDED_CAP       = 500;  // reported cycles when the circuit cannot ter
 const STATE_HOLDING_TYPES = new Set([
   'REGISTER', 'REG_FILE', 'REG_FILE_DP', 'RAM', 'CACHE',
   'FIFO', 'STACK', 'SHIFT_REG', 'COUNTER',
-  'PC', 'IR', 'FF_SLOT', 'LATCH_SLOT',
+  'PC', 'IR', 'FF_SLOT', 'LATCH_SLOT', 'SCAN_FF',
 ]);
 
 export function estimateRunLength(scene, opts = {}) {

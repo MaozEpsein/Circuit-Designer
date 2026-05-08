@@ -1136,6 +1136,39 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       return;
     }
 
+    // ── SCAN_FF: edge-triggered, mux of D/TI by TE ─────────
+    // Pin layout: D=0, TI=1, TE=2, CLK=3. On rising clock edge,
+    // Q ← (TE === 1 ? TI : D). Reads via _readSlot so any wire-level
+    // fault (stuck-at / open / bridging) on any input is honoured.
+    if (node.type === 'SCAN_FF') {
+      const slotByIdx = new Map(inputSlots.map(s => [s.inputIndex, s]));
+      const dSlot  = slotByIdx.get(0);
+      const tiSlot = slotByIdx.get(1);
+      const teSlot = slotByIdx.get(2);
+      const ckSlot = slotByIdx.get(3);
+      if (!ckSlot) return;
+      const clkNow = wireValues.get(ckSlot.wire.id) ?? null;
+      let ffState = ffStates.get(node.id);
+      if (!ffState) {
+        ffState = { q: node.initialQ ?? 0, qNot: (node.initialQ ?? 0) ^ 1, prevClkValue: null };
+        ffStates.set(node.id, ffState);
+      }
+      const prevClk = ffState.prevClkValue;
+      if (clkNow === 1 && prevClk === 0) {
+        const te = teSlot ? (_readSlot(teSlot) ?? 0) : 0;
+        const d  = dSlot  ? (_readSlot(dSlot)  ?? 0) : 0;
+        const ti = tiSlot ? (_readSlot(tiSlot) ?? 0) : 0;
+        const newQ = te === 1 ? ti : d;
+        if (newQ !== ffState.q) {
+          ffState.q    = newQ;
+          ffState.qNot = newQ ^ 1;
+          ffUpdated = true;
+        }
+      }
+      if (clkNow !== null) ffState.prevClkValue = clkNow;
+      return;
+    }
+
     // ── FF: edge-triggered (updates on rising clock edge) ──
     const clkSlot = inputSlots.find(s => s.wire.isClockWire) ||
                     inputSlots.reduce((best, s) =>
