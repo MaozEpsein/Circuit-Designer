@@ -39,6 +39,8 @@ const DEFAULT_SHORTCUTS = {
   'pipe-panel-toggle':     { key: 'KeyP',             label: 'Toggle Pipeline Panel',  group: 'Pipeline' },
   // DFT (Design For Test)
   'dft-panel-toggle':      { key: 'KeyT',             label: 'Toggle DFT Panel',       group: 'Test' },
+  'dft-run-fault-sim':     { key: 'shift+KeyR',       label: 'Run Fault Simulation',   group: 'Test' },
+  'dft-gen-random':        { key: 'shift+KeyG',       label: 'Generate Random Vectors', group: 'Test' },
   // Learn Mode
   'tutorial-toggle':        { key: 'ctrl+shift+KeyL', label: 'Toggle Learn Mode',     group: 'Tutorial' },
   'tutorial-show-solution': { key: 'ctrl+shift+KeyS', label: 'Show Lesson Solution',  group: 'Tutorial' },

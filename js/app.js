@@ -1382,36 +1382,8 @@ document.getElementById('btn-design-redo')?.addEventListener('click', () => {
   _updateStepCount();
 });
 
-// Export
-document.getElementById('btn-design-export')?.addEventListener('click', () => {
-  if (scene.nodeCount === 0) return;
-  const data = JSON.stringify(scene.serialize(), null, 2);
-  navigator.clipboard.writeText(data).then(() => {
-    alert('Circuit JSON copied to clipboard!');
-  }).catch(() => {
-    prompt('Copy this JSON:', data);
-  });
-});
-
-// Import
-document.getElementById('btn-design-import')?.addEventListener('click', () => {
-  const json = prompt('Paste circuit JSON:');
-  if (!json) return;
-  try {
-    const data = JSON.parse(json);
-    if (data.nodes && data.wires) {
-      scene.deserialize(data);
-      state.selectedNodeId = null;
-      commands.clear();
-      state.resetSequentialState(scene.nodes);
-    }
-  } catch (_) {
-    alert('Invalid JSON.');
-  }
-});
-
-// Share (screenshot)
-document.getElementById('btn-design-share')?.addEventListener('click', () => {
+// Share (screenshot) — bound to PNG button in the bottom toolbar.
+document.getElementById('btn-export-png')?.addEventListener('click', () => {
   const w = canvas.width;
   const h = canvas.height;
   const bannerH = 60;
@@ -2398,9 +2370,9 @@ bus.on('palette:action', (action) => {
     case 'undo': commands.undo(); break;
     case 'redo': commands.redo(); break;
     case 'clear': document.getElementById('btn-design-clear')?.click(); break;
-    case 'export': document.getElementById('btn-design-export')?.click(); break;
-    case 'import': document.getElementById('btn-design-import')?.click(); break;
-    case 'screenshot': document.getElementById('btn-design-share')?.click(); break;
+    case 'export': document.getElementById('btn-export-json')?.click(); break;
+    case 'import': document.getElementById('btn-project-load')?.click(); break;
+    case 'screenshot': document.getElementById('btn-export-png')?.click(); break;
     case 'toggle-debug': _toggleDebugPanel(); break;
     case 'toggle-waveform': toggleWaveform(); break;
     case 'zoom-fit': Renderer.zoomToFit(scene.nodes); break;
@@ -2583,6 +2555,16 @@ window.addEventListener('keydown', (e) => {
     bus.emit('palette:action', 'toggle-dft-panel');
     return;
   }
+  if (match === 'dft-run-fault-sim') {
+    e.preventDefault();
+    document.getElementById('btn-dft-run')?.click();
+    return;
+  }
+  if (match === 'dft-gen-random') {
+    e.preventDefault();
+    document.getElementById('btn-dft-gen-random')?.click();
+    return;
+  }
   if (match === 'tutorial-toggle') {
     e.preventDefault();
     document.getElementById('btn-tutorial')?.click();
@@ -2630,6 +2612,24 @@ const projectNameDisplay = document.getElementById('project-name-display');
 const projectListOverlay = document.getElementById('project-list-overlay');
 const projectListContent = document.getElementById('project-list-content');
 
+// Project bar collapse/expand. Persisted across sessions so users
+// who prefer it open keep it open.
+(function initProjectBarToggle() {
+  const bar    = document.getElementById('project-bar');
+  const toggle = document.getElementById('btn-project-bar-toggle');
+  if (!bar || !toggle) return;
+  const KEY = 'project-bar-open';
+  const setOpen = (open) => {
+    bar.classList.toggle('hidden', !open);
+    toggle.textContent = open ? '▾' : '▴';
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (_) {}
+  };
+  let saved = '0';
+  try { saved = localStorage.getItem(KEY) || '0'; } catch (_) {}
+  setOpen(saved === '1');
+  toggle.addEventListener('click', () => setOpen(bar.classList.contains('hidden')));
+})();
+
 document.getElementById('btn-project-save')?.addEventListener('click', async () => {
   const name = prompt('Project name:', _currentProjectId ? '' : 'My Circuit');
   if (!name) return;
@@ -2649,8 +2649,33 @@ document.getElementById('btn-project-save')?.addEventListener('click', async () 
 });
 
 document.getElementById('btn-project-load')?.addEventListener('click', () => {
-  const json = prompt('Paste project JSON:');
+  const json = prompt('Paste project or circuit JSON:');
   if (!json) return;
+  // Smart loader: try the full project format first (wraps circuit +
+  // annotations + waveform). If that fails OR if the parsed JSON looks
+  // like a bare circuit ({ nodes, wires }), fall back to importing it
+  // as just a circuit so demo/sample JSONs work from the same button.
+  let parsed;
+  try { parsed = JSON.parse(json); }
+  catch (err) { alert('Not valid JSON: ' + err.message); return; }
+
+  const looksLikeBareCircuit = parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.wires);
+  if (looksLikeBareCircuit) {
+    try {
+      scene.deserialize(parsed);
+      state.selectedNodeId = null;
+      state.resetSequentialState(scene.nodes);
+      simCtrl.reset();
+      commands.clear();
+      _currentProjectId = null;
+      if (projectNameDisplay) projectNameDisplay.textContent = 'Imported circuit';
+    } catch (err) {
+      alert('Failed to load circuit: ' + err.message);
+    }
+    return;
+  }
+
+  // Otherwise treat as full project payload.
   try {
     const project = projectStore.importJSON(json);
     scene.deserialize(project.circuit);
@@ -2720,10 +2745,6 @@ projectListOverlay?.addEventListener('click', (e) => {
 });
 
 // ── Export Buttons ───────────────────────────────────────────
-document.getElementById('btn-export-png')?.addEventListener('click', () => {
-  document.getElementById('btn-design-share')?.click();
-});
-
 document.getElementById('btn-export-json')?.addEventListener('click', () => {
   const project = {
     name: 'Circuit Export',
@@ -3818,6 +3839,13 @@ const EXAMPLES = [
     desc: '3-input AND-OR network: Y = (A & B) | C. Five wires × 2 stuck-at + 5 open = 15 fault candidates total. The demo ships 4 carefully-chosen test vectors (000, 110, 001, 100). Open the DFT panel (T), click RUN FAULT SIM in the header, and watch the FAULT COVERAGE bar fill — each per-wire row in the FAULT LIST gains a "detected by" annotation showing which vectors caught each fault. Some faults will read "UND" (undetected) — those are the gaps a real ATPG tool would close with extra targeted vectors.',
     tags: ['dft', 'fault-coverage', 'fault-sim'],
     file: 'examples/circuits/dft-fault-coverage.json',
+  },
+  {
+    id: 'dft-random-vs-targeted',
+    title: '2.5 DFT — random vs targeted (3-bit equality comparator)',
+    desc: 'Larger combinational scene: 3-bit equality comparator (EQ = A == B) with 6 INPUTs, 3 XNORs, 2 ANDs, 11 wires → 33 fault candidates over a 64-pattern input space. Ships 10 hand-crafted vectors achieving 100% coverage (green bar). Click GEN RANDOM (purple) to replace them with 16 random vectors — coverage typically lands in the 79-97% range and BOUNCES between runs (random testing is non-deterministic; ATPG isn\'t). Click GEN RANDOM five times in a row and watch the bar move. That variability is exactly why production DFT uses ATPG (TetraMAX, Modus) for crafted, deterministic vectors. Hover the [random] / [compaction?] tags in the coverage row for the production-flow context.',
+    tags: ['dft', 'random', 'atpg', 'compaction', 'comparator'],
+    file: 'examples/circuits/dft-random-vs-targeted.json',
   },
 ];
 

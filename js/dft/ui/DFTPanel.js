@@ -33,13 +33,34 @@ export class DFTPanel {
     this._visible    = false;
 
     this._runBtn  = document.getElementById('btn-dft-run');
+    this._genBtn  = document.getElementById('btn-dft-gen-random');
     // Layer 2 — last fault-sim result. null until the user clicks RUN.
     // Cleared when the scene mutates (vectors / topology may have changed).
     this._lastSim = null;
+    // Layer 2.5 — toggled when the user clicks the [source] tag in the
+    // FAULT COVERAGE row. Expands an inline table of every test vector
+    // and per-vector output, so the user can see exactly what stimulus
+    // was applied without leaving the panel.
+    this._vectorsViewOpen = false;
 
     if (this._closeBtn) this._closeBtn.addEventListener('click', () => this.hide());
     if (this._fsBtn)    this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
     if (this._runBtn)   this._runBtn.addEventListener('click', () => this._runFaultSim());
+    if (this._genBtn)   this._genBtn.addEventListener('click', () => this._generateRandomVectors(16));
+
+    // Event delegation for clicks inside the body — used by inline
+    // toggle widgets like the [source ▸/▾] tag in the FAULT COVERAGE
+    // row that expands the vectors table.
+    if (this._body) {
+      this._body.addEventListener('click', (e) => {
+        const trg = e.target.closest('[data-action]');
+        if (!trg) return;
+        if (trg.dataset.action === 'toggle-vectors') {
+          this._vectorsViewOpen = !this._vectorsViewOpen;
+          if (this._visible) this._render();
+        }
+      });
+    }
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._el?.classList.contains('dft-fullscreen')) {
         this._toggleFullscreen();
@@ -163,8 +184,31 @@ export class DFTPanel {
     this._lastSim = simulateFaults(this._scene.nodes, this._scene.wires, vectors, {
       models: ['stuck-at-0', 'stuck-at-1', 'open'],
     });
-    this._lastSim._vectors = vectors;     // remembered for the per-vector display
+    this._lastSim._vectors = vectors;
+    // Vector source (manual / random / atpg-stub) — surfaced in the
+    // FAULT COVERAGE row so the user knows whether the % comes from a
+    // hand-crafted set or random testing.
+    this._lastSim._source =
+      this._scene._dft?.source ||
+      (this._scene._dft?.vectors ? 'manual' : 'default-sweep');
     if (this._visible) this._render();
+  }
+
+  // Layer 2.5: replace the active vector set with N random vectors.
+  // Honest baseline — production flow would use ATPG (TetraMAX, Modus)
+  // to target each fault directly. Random testing usually saturates
+  // below 100 % because hard-to-sensitise faults need crafted vectors.
+  _generateRandomVectors(N = 16) {
+    if (!this._scene) return;
+    const inputs = this._scene.nodes
+      .filter(n => n.type === 'INPUT')
+      .sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+    if (inputs.length === 0) return;
+    const vectors = Array.from({ length: N }, () =>
+      inputs.map(() => Math.random() < 0.5 ? 0 : 1)
+    );
+    this._scene._dft = { vectors, source: 'random' };
+    this._runFaultSim();
   }
 
   // Default vector sweep when the scene doesn't ship its own: all-zero,
@@ -192,12 +236,23 @@ export class DFTPanel {
         <div class="dft-empty">Click <b style="color:#ffb878">RUN FAULT SIM</b> in the header to score the test vectors against every wire fault. Coverage and per-fault detection rows will populate the table below.</div>
       `;
     }
-    const { coverage, _vectors } = this._lastSim;
+    const { coverage, _vectors, _source } = this._lastSim;
     const pct = coverage.percent;
     const barW = Math.max(2, pct);
     // Colour the bar by quality tier — under 70 red-ish, 70-90 amber,
     // 90+ green (the industry rule of thumb for "shippable").
     const tier = pct < 70 ? '#cc4040' : pct < 90 ? '#cca040' : '#40cc60';
+    // Per-source label + tooltip so the user (or interviewer reading
+    // over their shoulder) sees whether the % was achieved with a
+    // crafted set, random testing, or a fallback sweep.
+    const sourceMeta = {
+      'manual':         { label: 'manual',         color: '#ffb878', tip: 'Vectors crafted by hand for this scene (or shipped with the demo). In production this is an early starting point — ATPG quickly takes over.' },
+      'random':         { label: 'random N=' + _vectors.length, color: '#cc99ff', tip: 'Random testing — honest baseline. Production flow uses ATPG (Synopsys TetraMAX, Cadence Modus) which targets each fault directly with crafted vectors. Random tends to plateau before 100 % because hard-to-sensitise faults need carefully constructed test conditions.' },
+      'default-sweep':  { label: 'default sweep',  color: '#876',    tip: 'Default fallback set: all-zero, all-one, walking-1 per primary input. Click GEN RANDOM for a wider sample, or ship vectors via the demo JSON for a curated set.' },
+    };
+    const sm = sourceMeta[_source] || sourceMeta['default-sweep'];
+    // Test-compaction talking point: zero-code UI hint that production
+    // ATPG output (50K+ vectors) is compressed before tester delivery.
     return `
       <div class="dft-coverage-header dft-section-header">FAULT COVERAGE</div>
       <div class="dft-perf-row" style="grid-template-columns: 1fr">
@@ -208,8 +263,72 @@ export class DFTPanel {
               ${pct}% — ${coverage.detected} of ${coverage.total} faults
             </div>
           </div>
-          <span style="color:#876;font-size:0.92em">${_vectors.length} vector${_vectors.length === 1 ? '' : 's'}</span>
+          <span style="color:#876;font-size:0.92em">
+            ${_vectors.length} vector${_vectors.length === 1 ? '' : 's'}
+            <span data-action="toggle-vectors" style="color:${sm.color};margin-left:6px;cursor:pointer;border-bottom:1px dotted ${sm.color}66;user-select:none" title="${sm.tip}\n\nClick to ${this._vectorsViewOpen ? 'hide' : 'view'} the vectors used.">[${sm.label}${this._vectorsViewOpen ? ' ▾' : ' ▸'}]</span>
+            <span style="color:#666;margin-left:6px;cursor:help;border-bottom:1px dotted #66666666" title="In silicon, ATPG produces 50 000+ vectors which are then compressed via EDT (Mentor) / OPMISR (Cadence) before being shipped to the tester — sending raw vectors over 50× more tester time would be uneconomic.">[compaction?]</span>
+          </span>
         </div>
+        ${this._vectorsViewOpen ? this._renderVectorsTable() : ''}
+      </div>
+    `;
+  }
+
+  // ── Inline vectors table (toggled by clicking the [source] tag) ─
+  // Shows: vec idx, every primary input bit, the OUTPUT value(s), and
+  // a small per-vector "detected" count so the user can see which
+  // vectors are pulling their weight.
+  _renderVectorsTable() {
+    if (!this._lastSim) return '';
+    const { _vectors, primaryInputs, primaryOutputs, golden, perFault } = this._lastSim;
+
+    // Per-vector detection count — how many faults this vector caught
+    // (counted as "first vector to detect" so credit is unique).
+    const firstDetector = new Map();   // vecIdx → count
+    for (let i = 0; i < _vectors.length; i++) firstDetector.set(i, 0);
+    perFault.forEach(f => {
+      if (f.detectedBy.length > 0) {
+        const first = f.detectedBy[0];
+        firstDetector.set(first, (firstDetector.get(first) || 0) + 1);
+      }
+    });
+
+    const inHdr  = primaryInputs.map(n  => `<th style="padding:2px 6px;color:#876">${(n.label || n.id).slice(0,4)}</th>`).join('');
+    const outHdr = primaryOutputs.map(n => `<th style="padding:2px 6px;color:#cca040">${(n.label || n.id).slice(0,8)}</th>`).join('');
+
+    const rows = _vectors.map((vec, vi) => {
+      const inCells  = vec.map(b => `<td style="padding:1px 6px;text-align:center;color:${b ? '#40cc60' : '#666'};font-weight:bold">${b}</td>`).join('');
+      const outCells = (golden[vi] || []).map(o => {
+        const txt = o === null || o === undefined ? '∅' : String(o);
+        const col = o === 1 ? '#cca040' : o === 0 ? '#666' : '#cc4040';
+        return `<td style="padding:1px 6px;text-align:center;color:${col};font-weight:bold">${txt}</td>`;
+      }).join('');
+      const dCount = firstDetector.get(vi) || 0;
+      const dCol   = dCount === 0 ? '#666' : dCount < 3 ? '#cca040' : '#40cc60';
+      return `<tr>
+        <td style="padding:1px 6px;color:#876">v${vi}</td>
+        ${inCells}
+        ${outCells}
+        <td style="padding:1px 6px;text-align:right;color:${dCol};font-size:0.88em">${dCount === 0 ? '<span style="color:#555">—</span>' : '+' + dCount + ' caught'}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="margin-top:8px;padding:8px 12px;background:rgba(204,153,255,0.04);border:1px solid #2a1a3a;border-radius:4px">
+        <div style="color:#876;font-size:0.88em;margin-bottom:6px">
+          Stimulus applied to the scene's primary inputs, with the resulting OUTPUT values from the golden (fault-free) run. The right column shows how many faults each vector was the FIRST to detect — vectors with "—" are redundant under the current set.
+        </div>
+        <table style="border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:0.92em">
+          <thead>
+            <tr style="border-bottom:1px solid #401a40">
+              <th style="padding:2px 6px;color:#876;text-align:left">vec</th>
+              ${inHdr}
+              ${outHdr}
+              <th style="padding:2px 6px;color:#876;text-align:right">first to detect</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     `;
   }

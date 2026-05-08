@@ -12,12 +12,7 @@
 
   <!-- HUD -->
   <div id="hud">
-    <div id="hud-left">
-      <div id="level-label">CIRCUIT DESIGNER PRO</div>
-      <div id="level-status-row">
-        <div id="level-name">Design Mode</div>
-      </div>
-    </div>
+    <div id="hud-left"></div>
     <div id="hud-center">
       <div id="hud-title">CIRCUIT DESIGNER PRO</div>
       <div id="hud-subtitle">DIGITAL CIRCUIT DESIGN & DEBUG</div>
@@ -307,9 +302,6 @@
       <button id="wire-clear-waypoints" class="design-action" title="Clears any manually-dragged waypoints on this wire and reverts it to the auto-routed (Manhattan) path." style="margin-top:6px;font-size:10px">RESET ROUTE</button>
     </div>
     <div id="design-actions">
-      <button id="btn-design-export" class="design-action" data-shortcut="E">EXPORT</button>
-      <button id="btn-design-import" class="design-action" data-shortcut="P">IMPORT</button>
-      <button id="btn-design-share" class="design-action design-action-share" data-shortcut="R">SCREENSHOT</button>
       <button id="btn-design-clear" class="design-action design-action-danger" data-shortcut="X">CLEAR ALL</button>
     </div>
     <!-- Breakpoints Panel -->
@@ -454,7 +446,8 @@
     <div id="dft-panel-header">
       <span>DFT</span>
       <div>
-        <button id="btn-dft-run" class="btn-secondary" style="font-size:9px;background:#2a1a08;border-color:#aa6a2a;color:#ffb878" title="Run combinational fault simulation against the scene's test vectors">RUN FAULT SIM</button>
+        <button id="btn-dft-gen-random" class="btn-secondary" style="font-size:9px;background:#1a0d2a;border-color:#6a4aaa;color:#cc99ff" title="Generate N=16 random test vectors and re-run fault sim. Honest baseline — production ATPG (TetraMAX, Modus) would generate fault-targeted vectors instead.">GEN RANDOM</button>
+        <button id="btn-dft-run" class="btn-secondary" style="font-size:9px;background:#2a1a08;border-color:#aa6a2a;color:#ffb878" title="Run combinational fault simulation against the scene's current test vectors">RUN FAULT SIM</button>
         <button id="btn-dft-fullscreen" class="btn-secondary" style="font-size:9px" title="Toggle fullscreen (Esc to exit)">FULLSCREEN</button>
         <button id="btn-dft-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
       </div>
@@ -482,19 +475,24 @@
     <button id="btn-create-block" style="font-size:9px;padding:2px 8px;background:#1a1430;border:1px solid #5a3d8a;color:#c0a0f0;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-weight:bold" title="Create sub-circuit from selected nodes">CREATE BLOCK</button>
   </div>
 
-  <!-- Project save/load bar -->
-  <div id="project-bar" style="position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:200;background:#0d1320;border:1px solid #2a4060;padding:4px 12px;border-radius:6px;display:flex;gap:8px;align-items:center">
-    <button id="btn-project-save" class="design-action" style="font-size:9px">SAVE PROJECT</button>
-    <button id="btn-project-load" class="design-action" style="font-size:9px">LOAD PROJECT</button>
-    <button id="btn-project-list" class="design-action" style="font-size:9px">MY PROJECTS</button>
-    <span style="border-left:1px solid #2a4060;margin:0 4px"></span>
-    <button id="btn-export-png" class="design-action" style="font-size:9px">PNG</button>
-    <button id="btn-export-svg" class="design-action" style="font-size:9px">SVG</button>
-    <button id="btn-export-json" class="design-action" style="font-size:9px">JSON</button>
-    <button id="btn-export-verilog" class="design-action" style="font-size:9px" title="Export circuit as synthesizable Verilog (.v)">VERILOG</button>
-    <span style="border-left:1px solid #2a4060;margin:0 4px"></span>
-    <button id="btn-zoom-fit" class="design-action" style="font-size:9px">FIT</button>
-    <span id="project-name-display" style="color:#4a6080;font-size:9px;font-family:'JetBrains Mono',monospace"></span>
+  <!-- Project save/load bar — collapsible. Default: collapsed
+       (just a small ▴ tab); click to reveal full bar; click ▾ to hide. -->
+  <div id="project-bar-wrap" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;align-items:center">
+    <button id="btn-project-bar-toggle" title="Show / hide project & export bar"
+            style="background:#0d1320;border:1px solid #2a4060;border-bottom:none;color:#7a9bc4;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:bold;padding:3px 28px 1px;border-radius:8px 8px 0 0;cursor:pointer;line-height:1;letter-spacing:2px">▴</button>
+    <div id="project-bar" class="hidden" style="background:#0d1320;border:1px solid #2a4060;padding:4px 12px;border-radius:6px 6px 0 0;display:flex;gap:8px;align-items:center;margin-bottom:0">
+      <button id="btn-project-save" class="design-action" style="font-size:9px">SAVE PROJECT</button>
+      <button id="btn-project-load" class="design-action" style="font-size:9px">LOAD PROJECT</button>
+      <button id="btn-project-list" class="design-action" style="font-size:9px">MY PROJECTS</button>
+      <span style="border-left:1px solid #2a4060;margin:0 4px"></span>
+      <button id="btn-export-png" class="design-action" style="font-size:9px">PNG</button>
+      <button id="btn-export-svg" class="design-action" style="font-size:9px">SVG</button>
+      <button id="btn-export-json" class="design-action" style="font-size:9px">JSON</button>
+      <button id="btn-export-verilog" class="design-action" style="font-size:9px" title="Export circuit as synthesizable Verilog (.v)">VERILOG</button>
+      <span style="border-left:1px solid #2a4060;margin:0 4px"></span>
+      <button id="btn-zoom-fit" class="design-action" style="font-size:9px">FIT</button>
+      <span id="project-name-display" style="color:#4a6080;font-size:9px;font-family:'JetBrains Mono',monospace"></span>
+    </div>
   </div>
 
   <!-- Project list overlay -->

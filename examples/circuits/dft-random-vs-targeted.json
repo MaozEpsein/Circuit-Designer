@@ -1,0 +1,49 @@
+{
+  "_dft": {
+    "vectors": [
+      [0, 0, 0, 0, 0, 0],
+      [1, 1, 1, 1, 1, 1],
+      [0, 1, 0, 0, 0, 0],
+      [1, 0, 1, 1, 1, 1],
+      [1, 1, 0, 1, 1, 1],
+      [1, 1, 1, 1, 1, 0],
+      [0, 0, 1, 0, 0, 0],
+      [1, 1, 0, 1, 1, 0],
+      [1, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0]
+    ],
+    "source": "manual",
+    "_doc": "3-bit equality comparator: EQ = (A == B) where A=(a2,a1,a0) and B=(b2,b1,b0). 9 wires × 3 fault types = 27 fault candidates. The 8 hand-crafted vectors above hit 100% coverage. Click GEN RANDOM (N=16) — random covers only 25% of the 64-pattern input space, so coverage typically lands at 80-92%. Click GEN RANDOM 4-5 times in a row and watch the % bounce around — that variability is exactly why production DFT uses ATPG (TetraMAX, Modus) which deterministically targets every fault."
+  },
+  "nodes": [
+    { "type": "INPUT",     "x": -380, "y": -250, "fixedValue": 0, "label": "a0", "id": "in_a0" },
+    { "type": "INPUT",     "x": -380, "y": -180, "fixedValue": 0, "label": "b0", "id": "in_b0" },
+    { "type": "INPUT",     "x": -380,  "y": -80, "fixedValue": 0, "label": "a1", "id": "in_a1" },
+    { "type": "INPUT",     "x": -380,  "y": -10, "fixedValue": 0, "label": "b1", "id": "in_b1" },
+    { "type": "INPUT",     "x": -380,   "y": 90, "fixedValue": 0, "label": "a2", "id": "in_a2" },
+    { "type": "INPUT",     "x": -380,  "y": 160, "fixedValue": 0, "label": "b2", "id": "in_b2" },
+
+    { "type": "GATE_SLOT", "x": -160, "y": -215, "gate": "XNOR", "label": "XNOR0 (a0==b0)", "id": "xnor0" },
+    { "type": "GATE_SLOT", "x": -160,  "y": -45, "gate": "XNOR", "label": "XNOR1 (a1==b1)", "id": "xnor1" },
+    { "type": "GATE_SLOT", "x": -160,  "y": 125, "gate": "XNOR", "label": "XNOR2 (a2==b2)", "id": "xnor2" },
+
+    { "type": "GATE_SLOT", "x":   60, "y": -130, "gate": "AND",  "label": "AND01",  "id": "and01" },
+    { "type": "GATE_SLOT", "x":  220,    "y": 0, "gate": "AND",  "label": "AND-EQ", "id": "and_eq" },
+
+    { "type": "OUTPUT",    "x":  420,    "y": 0, "targetValue": 1, "sandbox": true, "label": "EQ", "id": "out_eq" }
+  ],
+  "wires": [
+    { "sourceId": "in_a0",  "targetId": "xnor0",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a0" },
+    { "sourceId": "in_b0",  "targetId": "xnor0",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b0" },
+    { "sourceId": "in_a1",  "targetId": "xnor1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a1" },
+    { "sourceId": "in_b1",  "targetId": "xnor1",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b1" },
+    { "sourceId": "in_a2",  "targetId": "xnor2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a2" },
+    { "sourceId": "in_b2",  "targetId": "xnor2",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b2" },
+
+    { "sourceId": "xnor0",  "targetId": "and01",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_eq0" },
+    { "sourceId": "xnor1",  "targetId": "and01",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_eq1" },
+    { "sourceId": "and01",  "targetId": "and_eq", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_and01" },
+    { "sourceId": "xnor2",  "targetId": "and_eq", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_eq2" },
+    { "sourceId": "and_eq", "targetId": "out_eq", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_out" }
+  ]
+}
