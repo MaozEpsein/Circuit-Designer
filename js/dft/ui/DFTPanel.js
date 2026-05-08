@@ -30,6 +30,8 @@ export class DFTPanel {
 
     if (this._closeBtn) this._closeBtn.addEventListener('click', () => this.hide());
     if (this._fsBtn)    this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
+    // Top-toolbar DFT button — parallel to the ANALYSIS button.
+    document.getElementById('btn-dft-toggle')?.addEventListener('click', () => this.toggle());
 
     // Re-render on scene mutations so the panel reflects the current
     // circuit. Layers 1+ will read the scene for fault enumeration,
@@ -56,8 +58,12 @@ export class DFTPanel {
     if (!this._el) return;
     // Mutual exclusion with the Pipeline panel.
     const pipe = document.getElementById('pipeline-panel');
-    if (pipe && !pipe.classList.contains('hidden')) pipe.classList.add('hidden');
+    if (pipe && !pipe.classList.contains('hidden')) {
+      pipe.classList.add('hidden');
+      document.getElementById('btn-pipeline-toggle')?.classList.remove('active');
+    }
     this._el.classList.remove('hidden');
+    document.getElementById('btn-dft-toggle')?.classList.add('active');
     this._visible = true;
     this._render();
   }
@@ -65,6 +71,7 @@ export class DFTPanel {
   hide() {
     if (!this._el) return;
     this._el.classList.add('hidden');
+    document.getElementById('btn-dft-toggle')?.classList.remove('active');
     this._visible = false;
   }
 
