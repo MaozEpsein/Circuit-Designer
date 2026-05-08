@@ -2869,6 +2869,9 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   const btnZip      = document.getElementById('btn-verilog-zip');
   const warnEl      = document.getElementById('verilog-preview-warnings');
   const violEl      = document.getElementById('verilog-preview-violations');
+  const progEl      = document.getElementById('verilog-preview-progress');
+  const progFill    = progEl?.querySelector('.vp-progress-fill');
+  const progLabel   = document.getElementById('vp-progress-label');
   // "force anyway" gate state — when true, export proceeds despite
   // pipeline violations and the Verilog gets a WARNING comment header
   // listing every offending wire. Reset on each modal open so the user
@@ -3172,14 +3175,46 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
     return !_forceViolations;
   };
 
-  const refresh = () => {
+  // Yield to the browser between phases of work so it can paint the
+  // progress overlay. requestAnimationFrame is the right primitive
+  // here — paints land on a frame boundary, not a microtask.
+  const _yield = () => new Promise(r => requestAnimationFrame(() => r()));
+  // Show the progress bar only for designs big enough that the user
+  // actually has time to see it. The threshold is intentionally
+  // conservative — at <500 nodes the export takes <30 ms and the
+  // overlay would just flicker.
+  const PROGRESS_THRESHOLD = 500;
+  const setProg = (pct, label) => {
+    if (!progEl) return;
+    if (progFill) progFill.style.width = `${pct}%`;
+    if (progLabel && label) progLabel.textContent = label;
+  };
+
+  // Re-entrancy guard: if the user types fast in the top-name input,
+  // a second refresh shouldn't fight the first. We tag every refresh
+  // with a serial number; only the latest is allowed to commit DOM
+  // updates after a yield. Stale refreshes drop out silently.
+  let _refreshSeq = 0;
+  const refresh = async () => {
+    const mySeq = ++_refreshSeq;
     const includeHeader = !!chkHeader?.checked;
     const top = sanitizeTop(txtTopName?.value);
     _lastTop = top;
     if (txtTopName && txtTopName.value !== top) txtTopName.value = top;
     if (fnameEl) fnameEl.textContent = `${top}.v`;
 
+    const nodeCount = scene?.nodes?.length || 0;
+    const showProg = nodeCount >= PROGRESS_THRESHOLD;
+    if (showProg && progEl) {
+      progEl.classList.remove('hidden');
+      setProg(5, `Analyzing ${nodeCount} components…`);
+      await _yield();
+      if (mySeq !== _refreshSeq) return;
+    }
+
     const blocked = renderViolations();
+    if (showProg) { setProg(20, 'Pipeline analysis complete…'); await _yield();
+                    if (mySeq !== _refreshSeq) return; }
     if (blocked) {
       // Don't run the exporter at all — show a placeholder body. Stats
       // and warnings panels are also cleared so they don't show stale
@@ -3190,13 +3225,18 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
       ['lines','ports','nets','assigns','always','mem'].forEach(k =>
         document.getElementById('vp-stat-'+k).textContent = '—');
       document.getElementById('vp-stat-todo').classList.add('hidden');
+      if (showProg && progEl) progEl.classList.add('hidden');
       return;
     }
 
+    if (showProg) { setProg(40, 'Generating Verilog…'); await _yield();
+                    if (mySeq !== _refreshSeq) return; }
     _lastVerilog = exportVerilog(scene.serialize(), {
       topName: top,
       header: includeHeader,
     });
+    if (showProg) { setProg(80, 'Highlighting…'); await _yield();
+                    if (mySeq !== _refreshSeq) return; }
     // When forced past violations, prepend a WARNING comment block so
     // the exported file itself records what was overridden. Listing
     // wireIds keeps the tag stable across re-exports of the same scene.
@@ -3251,6 +3291,14 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
           `<span class="vp-warn-title">⚠ ${todoLines.length} component(s) lack a translator:</span>` +
           `<ul>${items}</ul>`;
       }
+    }
+    // Hide progress when this is still the live refresh — a stale one
+    // shouldn't flash the bar after the latest already cleared it.
+    if (mySeq === _refreshSeq && progEl && !progEl.classList.contains('hidden')) {
+      setProg(100, 'Done.');
+      setTimeout(() => {
+        if (mySeq === _refreshSeq) progEl.classList.add('hidden');
+      }, 150);
     }
   };
 

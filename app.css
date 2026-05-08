@@ -2263,6 +2263,19 @@
 #verilog-preview-stats b { color: #d8e4f0; font-weight: 600; margin-right: 3px; }
 #verilog-preview-stats .hidden { display: none; }
 #vp-stat-todo b { color: #ff8080; }
+#verilog-preview-progress {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 18px; background: #0c1118; border-bottom: 1px solid #1a2230;
+  font: 10px/1 'JetBrains Mono', monospace; color: #c8b89a; letter-spacing: 0.5px;
+}
+#verilog-preview-progress.hidden { display: none; }
+#verilog-preview-progress .vp-progress-bar {
+  flex: 1 1 auto; height: 4px; background: #1a2030; border-radius: 2px; overflow: hidden;
+}
+#verilog-preview-progress .vp-progress-fill {
+  height: 100%; width: 0%; background: linear-gradient(90deg, #aa6a2a, #ffb878);
+  transition: width 0.12s linear;
+}
 #verilog-preview-violations {
   padding: 8px 18px; background: #281418; border-bottom: 1px solid #5a2030;
   font: 10px/1.5 'JetBrains Mono', monospace; color: #ff9a98;
