@@ -426,13 +426,23 @@
 
 #palette-tab-content {
   min-height: 32px;
+  /* Cap the chip area so a chip-heavy tab (LOGIC: 15 chips) wraps onto
+     a single extra row instead of stretching the whole header. */
+  max-width: 420px;
+  margin-left: auto;
+}
+/* LOGIC has the most chips (15) — give it the full cap width so it
+   fits in exactly two rows. Slimmer tabs naturally use less. */
+#palette-tab-content .palette-panel[data-panel="logic"] {
+  max-width: 420px;
 }
 
 .palette-panel {
   display: none;
-  gap: 5px;
+  gap: 3px;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .palette-panel.active {
@@ -443,13 +453,13 @@
 
 .palette-chip {
   display: inline-block;
-  padding: 5px 10px;
-  border-radius: 5px;
-  font: bold 11px 'JetBrains Mono', monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font: bold 10px 'JetBrains Mono', monospace;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   user-select: none;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 
 .palette-chip:hover {
@@ -537,19 +547,20 @@
 }
 
 /* ── Quick Toolbar (below header, left of center) ────────── */
+/* Quick placement chips at the top of the design sidebar.
+   Two-by-two grid so IN/OUT and WIRE/CLK pair visually. */
 #quick-toolbar {
-  position: fixed;
-  top: 56px;
-  left: 190px;
-  z-index: 120;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 10px;
-  background: rgba(10, 14, 20, 0.85);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 6px 8px 8px;
   border-bottom: 1px solid #1a2a3a;
-  border-right: 1px solid #1a2a3a;
-  border-radius: 0 0 8px 0;
+  margin-bottom: 6px;
+}
+#quick-toolbar .palette-chip {
+  text-align: center;
+  padding: 6px 0;
+  font-size: 11px;
 }
 
 /* ── Design Tool Groups ──────────────────────────────────── */

@@ -14,11 +14,8 @@
   <div id="hud">
     <div id="hud-left"></div>
     <div id="hud-center">
-      <div id="hud-title">CIRCUIT DESIGNER PRO</div>
-      <div id="hud-subtitle">DIGITAL CIRCUIT DESIGN & DEBUG</div>
       <!-- Clock controls -->
       <div id="clock-controls" class="hidden">
-        <div id="clock-controls-label">SEQUENTIAL MODE</div>
         <div id="clock-controls-row">
           <button id="btn-step" title="Deliver one rising clock edge">&#9654; STEP</button>
           <button id="btn-auto-clk" class="btn-secondary" title="Toggle automatic clock">AUTO CLK</button>
@@ -139,17 +136,16 @@
     </div>
   </div>
 
-  <!-- Quick Toolbar (between header and left sidebar) -->
-  <div id="quick-toolbar">
-    <span class="palette-chip palette-io" data-tool="place-input" draggable="true">IN</span>
-    <span class="palette-chip palette-io" data-tool="place-output" draggable="true">OUT</span>
-    <span class="palette-chip palette-tool" data-tool="wire">WIRE</span>
-    <span class="palette-chip palette-io" data-tool="place-clock" draggable="true">CLK</span>
-  </div>
-
   <!-- Design Mode Toolbar -->
   <div id="design-toolbar">
-    <div id="design-toolbar-title">DESIGN TOOLS</div>
+    <!-- Quick placement chips — moved into the sidebar so they're
+         always visible and live next to the design tools. -->
+    <div id="quick-toolbar">
+      <span class="palette-chip palette-io" data-tool="place-input" draggable="true">IN</span>
+      <span class="palette-chip palette-io" data-tool="place-output" draggable="true">OUT</span>
+      <span class="palette-chip palette-tool" data-tool="wire">WIRE</span>
+      <span class="palette-chip palette-io" data-tool="place-clock" draggable="true">CLK</span>
+    </div>
     <div id="design-tools">
       <button class="design-tool active" data-tool="select" data-shortcut="S">SELECT</button>
       <button class="design-tool" data-tool="multiselect" data-shortcut="Q">MULTI-SELECT</button>

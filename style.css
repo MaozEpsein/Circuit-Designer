@@ -248,7 +248,7 @@ html, body {
 
 #design-toolbar {
   position: fixed;
-  top: 90px;
+  top: 8px;
   left: 0;
   width: 200px;
   bottom: 0;
@@ -2711,12 +2711,9 @@ button:active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 8px 14px;
-  border: 1px solid rgba(0, 212, 255, 0.25);
-  border-radius: 6px;
-  background: rgba(0, 40, 60, 0.35);
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 6px;
   animation: fadeIn 0.3s ease;
 }
 
