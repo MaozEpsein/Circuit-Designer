@@ -34,6 +34,7 @@ export const DEFAULT_DELAY_PS = {
   PIPE_REG:    0,
   FF_SLOT:     0,
   SCAN_FF:     0,
+  LFSR:        0,
   LATCH_SLOT:  0,
   INPUT:       0,
   OUTPUT:      0,

@@ -48,6 +48,7 @@ export const COMPONENT_TYPES = {
   FWD:          'FWD',
   // DFT components
   SCAN_FF:      'SCAN_FF',
+  LFSR:         'LFSR',
 };
 
 /**
@@ -83,7 +84,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -111,6 +112,12 @@ export function createComponent(type, x, y) {
       // DFT scan flip-flop: D + TI inputs, TE select, CLK. On rising
       // edge, Q ← (TE === 1 ? TI : D). Default initialQ = 0.
       return { ...base, initialQ: 0, label: 'SCAN-FF' };
+    case COMPONENT_TYPES.LFSR:
+      // Linear-Feedback Shift Register (Fibonacci form). Inputs: CLK
+      // only. Output Q = the MSB that falls off on each shift. `taps`
+      // are bit positions (0-indexed from LSB) XORed to form the new
+      // bit. Default: 4-bit, taps [3, 0] → x^4+x+1, period 15.
+      return { ...base, bitWidth: 4, taps: [3, 0], seed: 1, label: 'LFSR' };
     case COMPONENT_TYPES.LATCH_SLOT:
       return { ...base, latchType: null, initialQ: 0, label: 'LATCH' };
     case COMPONENT_TYPES.CLOCK:

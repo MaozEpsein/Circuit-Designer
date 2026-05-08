@@ -78,6 +78,7 @@ const TOOL_TYPE_MAP = {
   'place-split':         COMPONENT_TYPES.SPLIT,
   'place-merge':         COMPONENT_TYPES.MERGE,
   'place-scanff':        COMPONENT_TYPES.SCAN_FF,
+  'place-lfsr':          COMPONENT_TYPES.LFSR,
 };
 
 // Direct gate placements (type + gate preset)
@@ -125,6 +126,7 @@ function _clkPinIndex(node) {
     case 'REG_FILE_DP': return 5;
     case 'IR':          return 2;
     case 'SCAN_FF':     return 3;        // pins: D=0, TI=1, TE=2, CLK=3
+    case 'LFSR':        return 0;        // single input: CLK
     case 'FF_SLOT': {
       const t = node.ffType;
       if (t === 'D' || t === 'T') return 1;

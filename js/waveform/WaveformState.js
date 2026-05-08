@@ -161,7 +161,7 @@ const PICKABLE_TYPES = new Set([
   'RAM', 'ROM', 'CACHE', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
-  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF',
+  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR',
 ]);
 
 const TYPE_TO_SIG_TYPE = {
@@ -170,7 +170,7 @@ const TYPE_TO_SIG_TYPE = {
   RAM: 'memory', ROM: 'memory', CACHE: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
   ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
-  GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff',
+  GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff', LFSR: 'memory',
 };
 
 // ── Output pins (mirror SimulationEngine __out indices) ──
@@ -199,6 +199,7 @@ const INPUT_PINS_BY_TYPE = {
   IR:          [['INSTR', 0], ['LD', 1]],
   PC:          [['JUMP_ADDR', 0], ['JUMP', 1], ['EN', 2], ['CLR', 3]],
   SCAN_FF:     [['D', 0], ['TI', 1], ['TE', 2], ['CLK', 3]],
+  LFSR:        [['CLK', 0]],
   REGISTER:    [['DATA', 0], ['EN', 1], ['CLR', 2]],
   REG_FILE:    [['RD_ADDR', 0], ['WR_ADDR', 1], ['WR_DATA', 2], ['WE', 3]],
   REG_FILE_DP: [['RD1_ADDR', 0], ['RD2_ADDR', 1], ['WR_ADDR', 2], ['WR_DATA', 3], ['WE', 4]],

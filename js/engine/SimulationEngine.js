@@ -1233,6 +1233,13 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms.stats = { hits: 0, misses: 0 };
       }
       if (node.type === 'COUNTER') ms.count = 0;
+      if (node.type === 'LFSR') {
+        // Initial state from `seed`; keep raw register in ms.reg.
+        const sz = node.bitWidth || 4;
+        const m  = _mask(sz);
+        ms.reg = (node.seed ?? 1) & m;
+        ms.q   = (ms.reg >> (sz - 1)) & 1;     // serial out = MSB
+      }
       ffStates.set(node.id, ms);
     }
 
@@ -1346,6 +1353,21 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (ms.buffer.length > 0 && !rd) ms.q = ms.buffer[0] ?? 0;
         ms.full  = ms.buffer.length >= depth ? 1 : 0;
         ms.empty = ms.buffer.length === 0 ? 1 : 0;
+
+      } else if (node.type === 'LFSR') {
+        // Fibonacci LFSR. On rising edge, compute newBit = XOR of all
+        // tap-positioned bits, shift left, drop the new bit into LSB.
+        // The serial output Q is the MSB BEFORE shift (the bit that
+        // overflows). With `seed != 0` and primitive-polynomial taps,
+        // this iterates through 2^N - 1 distinct states before repeating.
+        const sz   = node.bitWidth || 4;
+        const m    = _mask(sz);
+        const taps = Array.isArray(node.taps) ? node.taps : [sz - 1, 0];
+        if (typeof ms.reg !== 'number') ms.reg = (node.seed ?? 1) & m;
+        let xor = 0;
+        for (const t of taps) xor ^= ((ms.reg >> t) & 1);
+        ms.q   = (ms.reg >> (sz - 1)) & 1;     // emit MSB before shift
+        ms.reg = ((ms.reg << 1) | xor) & m;
 
       } else if (node.type === 'STACK') {
         // Inputs: DATA(0), PUSH(1), POP(2), CLR(3), CLK

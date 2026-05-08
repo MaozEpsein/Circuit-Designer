@@ -2189,7 +2189,8 @@ function _refreshMemInspector() {
   const memNodes = scene.nodes.filter(n =>
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
     n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
-    n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG'
+    n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG' ||
+    n.type === 'LFSR'
   );
 
   if (memNodes.length === 0) {
@@ -2197,7 +2198,7 @@ function _refreshMemInspector() {
     return;
   }
 
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR' };
   let html = '';
 
   for (const node of memNodes) {
@@ -3853,6 +3854,13 @@ const EXAMPLES = [
     desc: 'Three SCAN-FFs chained for scan-based testing. Each has D, TI (test input), TE (test enable), CLK. With TE=0, each behaves like a normal D flip-flop fed from its own D input. With TE=1, each loads from TI = the previous SCAN-FF\'s Q — so a value injected at SCAN_IN shifts through the chain on every clock edge and emerges at SCAN_OUT after 3 cycles. Open the DFT panel (T) to see the SCAN CHAINS section auto-detect the chain: ff_a → ff_b → ff_c. Toggle TE in the input panel and step the clock to watch the shift in action.',
     tags: ['dft', 'scan', 'scan-ff', 'sequential'],
     file: 'examples/circuits/dft-scan-chain-3.json',
+  },
+  {
+    id: 'dft-lfsr-prng',
+    title: '4. DFT — LFSR (two polynomials, same seed)',
+    desc: 'Two 4-bit Fibonacci LFSRs in parallel, sharing CLOCK + seed (0001) but with different feedback polynomials. LFSR_A uses x⁴+x+1 (taps [3,0]) — a primitive polynomial that cycles through all 15 non-zero values before repeating. LFSR_B uses x⁴+x³+1 (taps [3,2]) — non-primitive in Fibonacci/shift-left form, so it falls into a short orbit. Step the clock and watch both registers diverge from the same starting point. Lesson: the polynomial choice is the difference between meaningful BIST coverage (max-length) and a useless short-cycling test.',
+    tags: ['dft', 'lfsr', 'prng', 'bist', 'polynomial'],
+    file: 'examples/circuits/dft-lfsr-prng.json',
   },
 ];
 

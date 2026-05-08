@@ -1323,6 +1323,7 @@ function _drawNodes(nodes, nodeValues, ffStates, hoveredNodeId, selectedNodeId) 
     else if (node.type === 'SPLIT')     _drawSplitNode(node, val, hovered);
     else if (node.type === 'MERGE')     _drawMergeNode(node, val, hovered);
     else if (node.type === 'SUB_CIRCUIT') _drawSubCircuitNode(node, val, hovered);
+    else if (node.type === 'LFSR') _drawLFSRNode(node, hovered, ffStates);
     else if (MEMORY_TYPE_SET.has(node.type)) _drawMemoryNode(node, val, hovered, ffStates);
     else if (node.type === 'LATCH_SLOT') {
       const ffState = ffStates.get(node.id) || { q: 0, qNot: 1 };
@@ -1875,6 +1876,88 @@ function _drawScanFFNode(node, ffState, hovered) {
   }
 
   ctx.restore();
+}
+
+// ── LFSR node ───────────────────────────────────────────────
+// Linear-Feedback Shift Register. Drawn as a register strip showing
+// each bit as a coloured square + the polynomial label below. Single
+// CLK input on the left, single Q output on the right.
+function _drawLFSRNode(node, hovered, ffStates) {
+  const sz   = node.bitWidth || 4;
+  const bitW = 14;
+  const bitH = 22;
+  const padX = 14;
+  const w    = sz * bitW + padX * 2;
+  const h    = 56;
+  const x    = node.x - w / 2;
+  const y    = node.y - h / 2;
+  ctx.save();
+
+  if (hovered) { ctx.shadowColor = 'rgba(255,160,40,0.45)'; ctx.shadowBlur = 18; }
+  ctx.fillStyle   = 'rgba(20,16,10,0.97)';
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hovered ? '#ffb878' : '#aa6a2a';
+  ctx.lineWidth   = hovered ? 2 : 1.5;
+  _roundRect(ctx, x, y, w, h, 6);
+  ctx.stroke();
+  ctx.shadowBlur  = 0;
+
+  // Label at top.
+  ctx.fillStyle    = '#ffb878';
+  ctx.font         = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(node.label || 'LFSR', node.x, y + 3);
+
+  // Bit cells. Index from MSB (left) to LSB (right) so the visual
+  // matches a standard register diagram.
+  const ms  = ffStates?.get(node.id);
+  const reg = (ms && typeof ms.reg === 'number') ? ms.reg : (node.seed ?? 1);
+  const taps = Array.isArray(node.taps) ? node.taps : [];
+  const bitsY = y + 16;
+  for (let i = 0; i < sz; i++) {
+    const bitIdx = sz - 1 - i;          // visual left → MSB
+    const bx = x + padX + i * bitW;
+    const bit = (reg >> bitIdx) & 1;
+    const isTap = taps.includes(bitIdx);
+    ctx.fillStyle = bit ? '#39ff14' : 'rgba(60,40,20,0.6)';
+    ctx.fillRect(bx, bitsY, bitW - 2, bitH);
+    ctx.strokeStyle = isTap ? '#ff9933' : '#5a3a1a';
+    ctx.lineWidth   = isTap ? 1.5 : 1;
+    ctx.strokeRect(bx + 0.5, bitsY + 0.5, bitW - 3, bitH - 1);
+    ctx.fillStyle = bit ? '#000' : '#876';
+    ctx.font      = 'bold 10px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(bit), bx + (bitW - 2) / 2, bitsY + bitH / 2);
+  }
+
+  // Polynomial summary (e.g. "x⁴+x+1") at the very bottom.
+  if (taps.length) {
+    const polyTerms = [...taps].sort((a, b) => b - a).map(t => {
+      // tap position t corresponds to x^(t+1) in the convention where
+      // the implicit highest-order term is x^N.
+      const pwr = t + 1;
+      if (pwr === 1) return 'x';
+      if (pwr === 0) return '1';
+      return 'x' + _superscript(pwr);
+    });
+    polyTerms.unshift('x' + _superscript(sz));
+    polyTerms.push('1');
+    ctx.fillStyle    = '#876';
+    ctx.font         = '8px JetBrains Mono, monospace';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(polyTerms.join('+'), node.x, y + h - 2);
+  }
+
+  ctx.restore();
+}
+
+function _superscript(n) {
+  const map = ['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹'];
+  return String(n).split('').map(d => map[+d] || d).join('');
 }
 
 // ── MUX node ────────────────────────────────────────────────
@@ -3803,6 +3886,7 @@ function _getNodeInputCount(node) {
     return node.latchType === 'SR_LATCH' ? 3 : 2;
   }
   if (node.type === 'SCAN_FF') return 4;     // D, TI, TE, CLK
+  if (node.type === 'LFSR')    return 1;     // CLK only
   if (node.type === 'MUX') {
     const n = node.inputCount || 2;
     return n + Math.ceil(Math.log2(n)); // data + select
@@ -3861,6 +3945,9 @@ function _isClockInput(node, inputIndex) {
   if (node.type === 'SCAN_FF') {
     return inputIndex === 3;     // pins: D=0, TI=1, TE=2, CLK=3
   }
+  if (node.type === 'LFSR') {
+    return inputIndex === 0;     // single input is CLK
+  }
   if (MEMORY_TYPE_SET.has(node.type)) {
     return inputIndex === _getNodeInputCount(node) - 1;
   }
@@ -3913,6 +4000,8 @@ export function getInputAnchors(node) {
       label = ['OP', 'Z', 'C'][i] || '';
     } else if (node.type === 'SCAN_FF') {
       label = ['D', 'TI', 'TE', 'CLK'][i] || '';
+    } else if (node.type === 'LFSR') {
+      label = 'CLK';
     } else if (node.type === 'ALU') {
       label = ['A', 'B', 'OP'][i] || '';
     } else if (node.type === 'HANDSHAKE') {

@@ -1,0 +1,21 @@
+{
+  "_dft": {
+    "_doc": "Two 4-bit Fibonacci LFSRs running in parallel from a shared CLOCK and the same seed (0001), but with different feedback polynomials:\n  • LFSR_A: x⁴ + x + 1, taps [3, 0]  — primitive, max-length period 15.\n  • LFSR_B: x⁴ + x³ + 1, taps [3, 2] — non-primitive in this Fibonacci/shift-left form, locks into a short orbit.\n\nPress Play (or step the clock). Watch both registers from the same starting state diverge into completely different sequences. The orange highlights on each register's bits mark its tap positions. Lesson: the polynomial determines whether you get a max-length sequence (LFSR_A) or a degenerate short cycle (LFSR_B). In a real BIST, choosing a primitive polynomial is the difference between meaningful coverage and a useless test."
+  },
+  "nodes": [
+    { "type": "CLOCK",  "x": -300,    "y": 0, "value": 0, "id": "clk" },
+
+    { "type": "LFSR",   "x":   20, "y": -100, "bitWidth": 4, "taps": [3, 0], "seed": 1, "label": "LFSR_A  x⁴+x+1",   "id": "lfsr_a" },
+    { "type": "OUTPUT", "x":  240, "y": -100, "targetValue": 0, "sandbox": true, "label": "OUT_A", "id": "out_a" },
+
+    { "type": "LFSR",   "x":   20,  "y": 100, "bitWidth": 4, "taps": [3, 2], "seed": 1, "label": "LFSR_B  x⁴+x³+1",  "id": "lfsr_b" },
+    { "type": "OUTPUT", "x":  240,  "y": 100, "targetValue": 0, "sandbox": true, "label": "OUT_B", "id": "out_b" }
+  ],
+  "wires": [
+    { "sourceId": "clk",    "targetId": "lfsr_a", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_clk_a", "isClockWire": true },
+    { "sourceId": "lfsr_a", "targetId": "out_a",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_qa" },
+
+    { "sourceId": "clk",    "targetId": "lfsr_b", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_clk_b", "isClockWire": true },
+    { "sourceId": "lfsr_b", "targetId": "out_b",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_qb" }
+  ]
+}
