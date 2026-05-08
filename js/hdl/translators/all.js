@@ -4,3 +4,5 @@
 // one import line below.
 
 import './logic-gates.js';
+import './arithmetic.js';
+import './muxing.js';

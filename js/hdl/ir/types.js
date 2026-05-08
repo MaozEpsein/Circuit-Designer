@@ -45,6 +45,7 @@ export const IR_KIND = Object.freeze({
   Replicate:  'Replicate',
   ZeroExtend: 'ZeroExtend',
   SignExtend: 'SignExtend',
+  Ternary:    'Ternary',
 });
 
 export const PORT_DIR = Object.freeze({
@@ -147,6 +148,10 @@ export function makeBinaryOp(op, left, right, width, sourceRef) {
 
 export function makeUnaryOp(op, operand, width, sourceRef) {
   return { ...base(IR_KIND.UnaryOp, sourceRef), op, operand, width };
+}
+
+export function makeTernary(cond, then, else_, width, sourceRef) {
+  return { ...base(IR_KIND.Ternary, sourceRef), cond, then, else: else_, width };
 }
 
 export function makeConcat(parts, sourceRef) {

@@ -1,0 +1,45 @@
+{
+  "_doc": "Phase-3 demo: a 4-bit ripple-carry adder built out of one HALF_ADDER (LSB) and three FULL_ADDERs chained through their carry pins, plus a COMPARATOR that flags whether the sum equals A. Click VERILOG in the bottom toolbar to see the export: every gate-level component lowers to continuous assignments — `a ^ b` for sums, `(a & b) | (b & c) | (a & c)` for carries, `==` / `>` / `<` for the comparator. The downloaded `.v` parses cleanly with iverilog. This demo exercises every Phase-3a (logic gates) and Phase-3b (arithmetic) translator in one scene.",
+  "nodes": [
+    { "type": "INPUT", "x": -340, "y": -200, "fixedValue": 1, "label": "a0", "id": "a0" },
+    { "type": "INPUT", "x": -340, "y": -150, "fixedValue": 0, "label": "a1", "id": "a1" },
+    { "type": "INPUT", "x": -340, "y": -100, "fixedValue": 1, "label": "a2", "id": "a2" },
+    { "type": "INPUT", "x": -340,  "y": -50, "fixedValue": 0, "label": "a3", "id": "a3" },
+    { "type": "INPUT", "x": -340,    "y": 0, "fixedValue": 1, "label": "b0", "id": "b0" },
+    { "type": "INPUT", "x": -340,   "y": 50, "fixedValue": 1, "label": "b1", "id": "b1" },
+    { "type": "INPUT", "x": -340,  "y": 100, "fixedValue": 0, "label": "b2", "id": "b2" },
+    { "type": "INPUT", "x": -340,  "y": 150, "fixedValue": 0, "label": "b3", "id": "b3" },
+
+    { "type": "HALF_ADDER", "x": -100, "y": -180, "label": "HA0", "id": "ha0" },
+    { "type": "FULL_ADDER", "x": -100, "y": -100, "label": "FA1", "id": "fa1" },
+    { "type": "FULL_ADDER", "x": -100,  "y": -20, "label": "FA2", "id": "fa2" },
+    { "type": "FULL_ADDER", "x": -100,   "y": 60, "label": "FA3", "id": "fa3" },
+
+    { "type": "OUTPUT", "x":  140, "y": -180, "targetValue": 0, "sandbox": true, "label": "s0",   "id": "s0" },
+    { "type": "OUTPUT", "x":  140, "y": -100, "targetValue": 0, "sandbox": true, "label": "s1",   "id": "s1" },
+    { "type": "OUTPUT", "x":  140,  "y": -20, "targetValue": 0, "sandbox": true, "label": "s2",   "id": "s2" },
+    { "type": "OUTPUT", "x":  140,   "y": 60, "targetValue": 0, "sandbox": true, "label": "s3",   "id": "s3" },
+    { "type": "OUTPUT", "x":  140,  "y": 130, "targetValue": 0, "sandbox": true, "label": "cout", "id": "cout" }
+  ],
+  "wires": [
+    { "sourceId": "a0", "targetId": "ha0", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a0" },
+    { "sourceId": "b0", "targetId": "ha0", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b0" },
+    { "sourceId": "ha0", "targetId": "s0", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_s0" },
+    { "sourceId": "ha0", "targetId": "fa1","targetInputIndex": 2, "sourceOutputIndex": 1, "id": "w_c0" },
+
+    { "sourceId": "a1", "targetId": "fa1", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a1" },
+    { "sourceId": "b1", "targetId": "fa1", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b1" },
+    { "sourceId": "fa1","targetId": "s1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_s1" },
+    { "sourceId": "fa1","targetId": "fa2", "targetInputIndex": 2, "sourceOutputIndex": 1, "id": "w_c1" },
+
+    { "sourceId": "a2", "targetId": "fa2", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a2" },
+    { "sourceId": "b2", "targetId": "fa2", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b2" },
+    { "sourceId": "fa2","targetId": "s2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_s2" },
+    { "sourceId": "fa2","targetId": "fa3", "targetInputIndex": 2, "sourceOutputIndex": 1, "id": "w_c2" },
+
+    { "sourceId": "a3", "targetId": "fa3", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a3" },
+    { "sourceId": "b3", "targetId": "fa3", "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b3" },
+    { "sourceId": "fa3","targetId": "s3",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_s3" },
+    { "sourceId": "fa3","targetId": "cout","targetInputIndex": 0, "sourceOutputIndex": 1, "id": "w_cout" }
+  ]
+}

@@ -44,6 +44,8 @@ function emitExpr(expr) {
       const inner = emitExpr(expr.inner);
       return `{{${pad}{${inner}[${expr.inner.width - 1}]}}, ${inner}}`;
     }
+    case IR_KIND.Ternary:
+      return `(${emitExpr(expr.cond)} ? ${emitExpr(expr.then)} : ${emitExpr(expr.else)})`;
     default:
       return `/*<${expr.kind}>*/`;
   }

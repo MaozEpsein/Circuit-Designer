@@ -114,6 +114,154 @@ console.log('Determinism');
   check('two exports byte-identical', a === b);
 }
 
+// ── 4.5 Arithmetic: HALF_ADDER, FULL_ADDER, COMPARATOR ──────
+console.log('Arithmetic');
+
+// HALF_ADDER — sum = a^b, carry = a&b
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a', type: 'INPUT', label: 'a' },
+      { id: 'b', type: 'INPUT', label: 'b' },
+      { id: 'ha', type: 'HALF_ADDER', label: 'ha' },
+      { id: 's', type: 'OUTPUT', label: 'sum' },
+      { id: 'c', type: 'OUTPUT', label: 'carry' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'a',  sourceOutputIndex: 0, targetId: 'ha', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'b',  sourceOutputIndex: 0, targetId: 'ha', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'ha', sourceOutputIndex: 0, targetId: 's',  targetInputIndex: 0 },
+      { id: 'w4', sourceId: 'ha', sourceOutputIndex: 1, targetId: 'c',  targetInputIndex: 0 },
+    ],
+  }, { topName: 'ha_test', header: false });
+  check('HALF_ADDER: sum = a ^ b',   /assign\s+net_ha_0\s*=\s*\(a\s*\^\s*b\)/.test(v));
+  check('HALF_ADDER: carry = a & b', /assign\s+net_ha_1\s*=\s*\(a\s*&\s*b\)/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('HALF_ADDER: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// FULL_ADDER — sum = a^b^cin, cout = (a&b)|(b&cin)|(a&cin)
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a', type: 'INPUT', label: 'a' },
+      { id: 'b', type: 'INPUT', label: 'b' },
+      { id: 'cin', type: 'INPUT', label: 'cin' },
+      { id: 'fa', type: 'FULL_ADDER', label: 'fa' },
+      { id: 's', type: 'OUTPUT', label: 'sum' },
+      { id: 'co', type: 'OUTPUT', label: 'cout' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'a',   sourceOutputIndex: 0, targetId: 'fa', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'b',   sourceOutputIndex: 0, targetId: 'fa', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'cin', sourceOutputIndex: 0, targetId: 'fa', targetInputIndex: 2 },
+      { id: 'w4', sourceId: 'fa',  sourceOutputIndex: 0, targetId: 's',  targetInputIndex: 0 },
+      { id: 'w5', sourceId: 'fa',  sourceOutputIndex: 1, targetId: 'co', targetInputIndex: 0 },
+    ],
+  }, { topName: 'fa_test', header: false });
+  check('FULL_ADDER: sum nests three XORs',
+    /assign\s+net_fa_0\s*=\s*\(\(a\s*\^\s*b\)\s*\^\s*cin\)/.test(v));
+  check('FULL_ADDER: cout has all three AND terms ORed',
+    /\(a\s*&\s*b\)/.test(v) && /\(b\s*&\s*cin\)/.test(v) && /\(a\s*&\s*cin\)/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('FULL_ADDER: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// COMPARATOR — three outputs: EQ, GT, LT
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a', type: 'INPUT', label: 'a' },
+      { id: 'b', type: 'INPUT', label: 'b' },
+      { id: 'cmp', type: 'COMPARATOR', label: 'cmp' },
+      { id: 'eq', type: 'OUTPUT', label: 'eq' },
+      { id: 'gt', type: 'OUTPUT', label: 'gt' },
+      { id: 'lt', type: 'OUTPUT', label: 'lt' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'a',   sourceOutputIndex: 0, targetId: 'cmp', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'b',   sourceOutputIndex: 0, targetId: 'cmp', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'cmp', sourceOutputIndex: 0, targetId: 'eq',  targetInputIndex: 0 },
+      { id: 'w4', sourceId: 'cmp', sourceOutputIndex: 1, targetId: 'gt',  targetInputIndex: 0 },
+      { id: 'w5', sourceId: 'cmp', sourceOutputIndex: 2, targetId: 'lt',  targetInputIndex: 0 },
+    ],
+  }, { topName: 'cmp_test', header: false });
+  check('COMPARATOR: emits a == b assign', /assign\s+net_cmp_0\s*=\s*\(a\s*==\s*b\)/.test(v));
+  check('COMPARATOR: emits a > b  assign', /assign\s+net_cmp_1\s*=\s*\(a\s*>\s*b\)/.test(v));
+  check('COMPARATOR: emits a < b  assign', /assign\s+net_cmp_2\s*=\s*\(a\s*<\s*b\)/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('COMPARATOR: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// ── 4.6 Muxing: MUX (2:1 ternary, N:1 nested ternary chain) ──
+console.log('Muxing');
+
+// 2:1 MUX — clean ternary form
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd0', type: 'INPUT', label: 'd0' },
+      { id: 'd1', type: 'INPUT', label: 'd1' },
+      { id: 'sel', type: 'INPUT', label: 'sel' },
+      { id: 'm', type: 'MUX', inputCount: 2, label: 'm' },
+      { id: 'y', type: 'OUTPUT', label: 'y' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'd0',  targetId: 'm', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'd1',  targetId: 'm', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'sel', targetId: 'm', targetInputIndex: 2 },
+      { id: 'w4', sourceId: 'm',   targetId: 'y', targetInputIndex: 0 },
+    ],
+  }, { topName: 'mux21', header: false });
+  check('MUX 2:1: emits sel ? d1 : d0',
+    /assign\s+net_m_0\s*=\s*\(sel\s*\?\s*d1\s*:\s*d0\)/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('MUX 2:1: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// 4:1 MUX — nested ternary chain over a 2-bit concat select
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd0', type: 'INPUT', label: 'd0' },
+      { id: 'd1', type: 'INPUT', label: 'd1' },
+      { id: 'd2', type: 'INPUT', label: 'd2' },
+      { id: 'd3', type: 'INPUT', label: 'd3' },
+      { id: 's0', type: 'INPUT', label: 's0' },
+      { id: 's1', type: 'INPUT', label: 's1' },
+      { id: 'm', type: 'MUX', inputCount: 4, label: 'm' },
+      { id: 'y', type: 'OUTPUT', label: 'y' },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'd0', targetId: 'm', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'd1', targetId: 'm', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 'd2', targetId: 'm', targetInputIndex: 2 },
+      { id: 'w4', sourceId: 'd3', targetId: 'm', targetInputIndex: 3 },
+      { id: 'w5', sourceId: 's0', targetId: 'm', targetInputIndex: 4 },
+      { id: 'w6', sourceId: 's1', targetId: 'm', targetInputIndex: 5 },
+      { id: 'w7', sourceId: 'm',  targetId: 'y', targetInputIndex: 0 },
+    ],
+  }, { topName: 'mux41', header: false });
+  check('MUX 4:1: builds {s1, s0} concat (MSB-first)',
+    /\{s1,\s*s0\}/.test(v));
+  check('MUX 4:1: emits 2\'hN literals for sel comparison',
+    /2'h0/.test(v) && /2'h1/.test(v) && /2'h2/.test(v));
+  check('MUX 4:1: ends with bare d3 (default branch)',
+    /:\s*d3\)\)\)/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('MUX 4:1: iverilog parses', r.ok, r.stderr);
+  }
+}
+
 // ── 5. Empty GATE_SLOT (gate field unset) — silently skipped ─
 // Mirrors the canvas behaviour: an empty FF / gate slot is a "drop
 // target", not a circuit element. The translator returns nothing and

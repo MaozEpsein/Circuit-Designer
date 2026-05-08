@@ -3957,11 +3957,25 @@ const EXAMPLES = [
     file: 'examples/circuits/verilog-phase2-empty-module.json',
   },
   {
-    id: 'verilog-phase3-gates',
-    title: '3. VERILOG — combinational gates round-trip',
-    desc: 'Phase-3 demo: three primary inputs (a, b, c) feed AND, OR, XOR gates wired so y = (a & b) | (a ^ c). Click VERILOG in the bottom toolbar — each gate lowers to a Verilog primitive (`and`, `or`, `xor` with positional ports), and the downloaded `.v` parses cleanly with iverilog. Open the downloaded file to see the full module: `input` ports, `wire` declarations for internal nets, primitive instantiations, and an `assign y = ...;` driving the output port.',
-    tags: ['verilog', 'phase3', 'gates'],
-    file: 'examples/circuits/verilog-phase3-gates.json',
+    id: 'verilog-phase3a-gates',
+    title: '3a. VERILOG — logic-gate menagerie',
+    desc: 'Phase-3a demo: every Verilog logic primitive in one scene. Two shared inputs (a, b) feed eight separate gates — AND, OR, XOR, NAND, NOR, XNOR, NOT, BUF — plus a 1-bit COMPARATOR. Click VERILOG to see every gate emerge as a real Verilog primitive (`and g_and(...);`, `or g_or(...);`, with positional ports), plus three `assign` lines from the comparator (==, >, <). NOT and BUF emit the unary form (two args, no second input).',
+    tags: ['verilog', 'phase3', 'phase3a', 'gates'],
+    file: 'examples/circuits/verilog-phase3a-gates.json',
+  },
+  {
+    id: 'verilog-phase3b-adder',
+    title: '3b. VERILOG — 4-bit ripple-carry adder',
+    desc: 'Phase-3b demo: a 4-bit ripple-carry adder built out of one HALF_ADDER (LSB) and three FULL_ADDERs chained through their carry pins. Click VERILOG in the bottom toolbar — every gate-level component lowers to continuous assignments: `a ^ b` for sums, `(a & b) | (b & cin) | (a & cin)` for the carry-out chain. Exercises the arithmetic translators end-to-end with multi-output components (carry chain pulls `sourceOutputIndex: 1` from each adder).',
+    tags: ['verilog', 'phase3', 'phase3b', 'arithmetic', 'adder'],
+    file: 'examples/circuits/verilog-phase3b-adder.json',
+  },
+  {
+    id: 'verilog-phase3c-mux',
+    title: '3c. VERILOG — multiplexers (2:1 and 4:1)',
+    desc: 'Phase-3c demo: two MUXes side by side. The 2:1 form lowers to a clean ternary `assign y = sel ? d1 : d0;`; the 4:1 form builds a 2-bit select via concat (`{s1, s0}`) and a nested-ternary chain. Both are synthesisable and parse cleanly with iverilog. Wider muxes follow the same pattern; a follow-up substep adds `case`-based emission via IRAlways for designs that prefer it.',
+    tags: ['verilog', 'phase3', 'phase3c', 'mux'],
+    file: 'examples/circuits/verilog-phase3c-mux.json',
   },
 ];
 

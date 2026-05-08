@@ -134,7 +134,9 @@ export function fromCircuit(circuitJSON) {
   };
 
   const instances = [];
-  const unmapped = [];     // [{ type, nodeId }] — caller renders as // TODO
+  const assigns = [];       // populated by translators that emit assign-form output
+                            // and by the post-loop OUTPUT-port wiring pass.
+  const unmapped = [];      // [{ type, nodeId }] — caller renders as // TODO
   const instUsedNames = new Set();
 
   // Carry pipeline metadata (the `stage` field set by the pipelining
@@ -173,13 +175,18 @@ export function fromCircuit(circuitJSON) {
         instances.push(inst);
       }
     }
+    // Translators that lower to continuous assignments (arithmetic,
+    // comparator, ...) return them here. Each is a fully-formed IR
+    // Assign node — we just collect them.
+    if (Array.isArray(out.assigns)) {
+      for (const a of out.assigns) assigns.push(a);
+    }
   }
 
   // Wire OUTPUT ports. For each top-level OUTPUT node, find the wire
   // driving it and emit an `assign <port> = <srcNet>;`. Without this,
   // the port appears in the module header but nothing drives it, and
   // iverilog (correctly) reports the port as unconnected.
-  const assigns = [];
   for (const node of (circuit.nodes || [])) {
     if (node.type !== 'OUTPUT') continue;
     const port = portByNodeId.get(node.id);

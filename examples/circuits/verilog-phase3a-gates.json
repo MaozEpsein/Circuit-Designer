@@ -1,0 +1,62 @@
+{
+  "_doc": "Phase-3a demo: every Verilog logic primitive in one scene. Shared inputs `a` and `b` feed each of the eight gate flavours (AND, OR, XOR, NAND, NOR, XNOR, NOT, BUF) plus a 1-bit COMPARATOR. Click VERILOG in the bottom toolbar — the downloaded `.v` shows each gate as a real Verilog primitive instance (`and g_and(...);`, `or g_or(...);`, etc.) with positional ports, plus three `assign` lines from the comparator (==, >, <). NOT and BUF are unary, so they emit two-arg primitives. iverilog parses the result without warnings.",
+  "nodes": [
+    { "type": "INPUT", "x": -380, "y": -340, "fixedValue": 1, "label": "a", "id": "a" },
+    { "type": "INPUT", "x": -380, "y": -260, "fixedValue": 0, "label": "b", "id": "b" },
+
+    { "type": "GATE_SLOT", "x": -100, "y": -340, "gate": "AND",  "label": "g_and",  "id": "g_and"  },
+    { "type": "GATE_SLOT", "x": -100, "y": -260, "gate": "OR",   "label": "g_or",   "id": "g_or"   },
+    { "type": "GATE_SLOT", "x": -100, "y": -180, "gate": "XOR",  "label": "g_xor",  "id": "g_xor"  },
+    { "type": "GATE_SLOT", "x": -100, "y": -100, "gate": "NAND", "label": "g_nand", "id": "g_nand" },
+    { "type": "GATE_SLOT", "x": -100,  "y": -20, "gate": "NOR",  "label": "g_nor",  "id": "g_nor"  },
+    { "type": "GATE_SLOT", "x": -100,   "y": 60, "gate": "XNOR", "label": "g_xnor", "id": "g_xnor" },
+    { "type": "GATE_SLOT", "x": -100,  "y": 140, "gate": "NOT",  "label": "g_not",  "id": "g_not"  },
+    { "type": "GATE_SLOT", "x": -100,  "y": 220, "gate": "BUF",  "label": "g_buf",  "id": "g_buf"  },
+
+    { "type": "COMPARATOR", "x": -100, "y": 320, "label": "cmp", "id": "cmp" },
+
+    { "type": "OUTPUT", "x": 200, "y": -340, "targetValue": 0, "sandbox": true, "label": "y_and",  "id": "y_and"  },
+    { "type": "OUTPUT", "x": 200, "y": -260, "targetValue": 0, "sandbox": true, "label": "y_or",   "id": "y_or"   },
+    { "type": "OUTPUT", "x": 200, "y": -180, "targetValue": 0, "sandbox": true, "label": "y_xor",  "id": "y_xor"  },
+    { "type": "OUTPUT", "x": 200, "y": -100, "targetValue": 0, "sandbox": true, "label": "y_nand", "id": "y_nand" },
+    { "type": "OUTPUT", "x": 200,  "y": -20, "targetValue": 0, "sandbox": true, "label": "y_nor",  "id": "y_nor"  },
+    { "type": "OUTPUT", "x": 200,   "y": 60, "targetValue": 0, "sandbox": true, "label": "y_xnor", "id": "y_xnor" },
+    { "type": "OUTPUT", "x": 200,  "y": 140, "targetValue": 0, "sandbox": true, "label": "y_not",  "id": "y_not"  },
+    { "type": "OUTPUT", "x": 200,  "y": 220, "targetValue": 0, "sandbox": true, "label": "y_buf",  "id": "y_buf"  },
+
+    { "type": "OUTPUT", "x": 200, "y": 290, "targetValue": 0, "sandbox": true, "label": "eq", "id": "eq" },
+    { "type": "OUTPUT", "x": 200, "y": 320, "targetValue": 0, "sandbox": true, "label": "gt", "id": "gt" },
+    { "type": "OUTPUT", "x": 200, "y": 350, "targetValue": 0, "sandbox": true, "label": "lt", "id": "lt" }
+  ],
+  "wires": [
+    { "sourceId": "a", "targetId": "g_and",  "targetInputIndex": 0, "id": "wa_and" },
+    { "sourceId": "b", "targetId": "g_and",  "targetInputIndex": 1, "id": "wb_and" },
+    { "sourceId": "a", "targetId": "g_or",   "targetInputIndex": 0, "id": "wa_or"  },
+    { "sourceId": "b", "targetId": "g_or",   "targetInputIndex": 1, "id": "wb_or"  },
+    { "sourceId": "a", "targetId": "g_xor",  "targetInputIndex": 0, "id": "wa_xor" },
+    { "sourceId": "b", "targetId": "g_xor",  "targetInputIndex": 1, "id": "wb_xor" },
+    { "sourceId": "a", "targetId": "g_nand", "targetInputIndex": 0, "id": "wa_nand" },
+    { "sourceId": "b", "targetId": "g_nand", "targetInputIndex": 1, "id": "wb_nand" },
+    { "sourceId": "a", "targetId": "g_nor",  "targetInputIndex": 0, "id": "wa_nor" },
+    { "sourceId": "b", "targetId": "g_nor",  "targetInputIndex": 1, "id": "wb_nor" },
+    { "sourceId": "a", "targetId": "g_xnor", "targetInputIndex": 0, "id": "wa_xnor" },
+    { "sourceId": "b", "targetId": "g_xnor", "targetInputIndex": 1, "id": "wb_xnor" },
+    { "sourceId": "a", "targetId": "g_not",  "targetInputIndex": 0, "id": "wa_not" },
+    { "sourceId": "a", "targetId": "g_buf",  "targetInputIndex": 0, "id": "wa_buf" },
+
+    { "sourceId": "g_and",  "targetId": "y_and",  "targetInputIndex": 0, "id": "w_yand"  },
+    { "sourceId": "g_or",   "targetId": "y_or",   "targetInputIndex": 0, "id": "w_yor"   },
+    { "sourceId": "g_xor",  "targetId": "y_xor",  "targetInputIndex": 0, "id": "w_yxor"  },
+    { "sourceId": "g_nand", "targetId": "y_nand", "targetInputIndex": 0, "id": "w_ynand" },
+    { "sourceId": "g_nor",  "targetId": "y_nor",  "targetInputIndex": 0, "id": "w_ynor"  },
+    { "sourceId": "g_xnor", "targetId": "y_xnor", "targetInputIndex": 0, "id": "w_yxnor" },
+    { "sourceId": "g_not",  "targetId": "y_not",  "targetInputIndex": 0, "id": "w_ynot"  },
+    { "sourceId": "g_buf",  "targetId": "y_buf",  "targetInputIndex": 0, "id": "w_ybuf"  },
+
+    { "sourceId": "a",   "targetId": "cmp", "targetInputIndex": 0, "id": "w_cmp_a" },
+    { "sourceId": "b",   "targetId": "cmp", "targetInputIndex": 1, "id": "w_cmp_b" },
+    { "sourceId": "cmp", "sourceOutputIndex": 0, "targetId": "eq", "targetInputIndex": 0, "id": "w_eq" },
+    { "sourceId": "cmp", "sourceOutputIndex": 1, "targetId": "gt", "targetInputIndex": 0, "id": "w_gt" },
+    { "sourceId": "cmp", "sourceOutputIndex": 2, "targetId": "lt", "targetInputIndex": 0, "id": "w_lt" }
+  ]
+}

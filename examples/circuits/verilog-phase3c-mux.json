@@ -1,0 +1,33 @@
+{
+  "_doc": "Phase-3c demo: 2:1 and 4:1 multiplexers side by side. Click VERILOG in the bottom toolbar to see how they lower:\n  • The 2:1 MUX uses a clean ternary: `assign y2 = sel ? d1 : d0;`\n  • The 4:1 MUX builds a 2-bit select via concat (`{s1, s0}`) and a nested-ternary chain that reads cleanly: `(({s1,s0}==2'h0) ? e0 : (...==2'h1) ? e1 : (...==2'h2) ? e2 : e3)`.\nBoth forms are synthesisable and parse cleanly with iverilog. Wider muxes follow the same pattern; the next substep will add `case`-based emission via IRAlways for designs that prefer it.",
+  "nodes": [
+    { "type": "INPUT",  "x": -360, "y": -220, "fixedValue": 0, "label": "d0",  "id": "d0" },
+    { "type": "INPUT",  "x": -360, "y": -160, "fixedValue": 1, "label": "d1",  "id": "d1" },
+    { "type": "INPUT",  "x": -360, "y": -100, "fixedValue": 0, "label": "sel", "id": "sel" },
+    { "type": "MUX",    "x":  -80, "y": -180, "inputCount": 2, "label": "mux21", "id": "mux21" },
+    { "type": "OUTPUT", "x":  180, "y": -180, "targetValue": 1, "sandbox": true, "label": "y2", "id": "y2" },
+
+    { "type": "INPUT",  "x": -360,    "y": 60, "fixedValue": 0, "label": "e0", "id": "e0" },
+    { "type": "INPUT",  "x": -360,   "y": 110, "fixedValue": 1, "label": "e1", "id": "e1" },
+    { "type": "INPUT",  "x": -360,   "y": 160, "fixedValue": 0, "label": "e2", "id": "e2" },
+    { "type": "INPUT",  "x": -360,   "y": 210, "fixedValue": 1, "label": "e3", "id": "e3" },
+    { "type": "INPUT",  "x": -360,   "y": 270, "fixedValue": 1, "label": "s0", "id": "s0" },
+    { "type": "INPUT",  "x": -360,   "y": 320, "fixedValue": 0, "label": "s1", "id": "s1" },
+    { "type": "MUX",    "x":  -80,   "y": 160, "inputCount": 4, "label": "mux41", "id": "mux41" },
+    { "type": "OUTPUT", "x":  180,   "y": 160, "targetValue": 1, "sandbox": true, "label": "y4", "id": "y4" }
+  ],
+  "wires": [
+    { "sourceId": "d0",  "targetId": "mux21", "targetInputIndex": 0, "id": "w_d0"  },
+    { "sourceId": "d1",  "targetId": "mux21", "targetInputIndex": 1, "id": "w_d1"  },
+    { "sourceId": "sel", "targetId": "mux21", "targetInputIndex": 2, "id": "w_sel" },
+    { "sourceId": "mux21","targetId": "y2",   "targetInputIndex": 0, "id": "w_y2"  },
+
+    { "sourceId": "e0", "targetId": "mux41", "targetInputIndex": 0, "id": "w_e0" },
+    { "sourceId": "e1", "targetId": "mux41", "targetInputIndex": 1, "id": "w_e1" },
+    { "sourceId": "e2", "targetId": "mux41", "targetInputIndex": 2, "id": "w_e2" },
+    { "sourceId": "e3", "targetId": "mux41", "targetInputIndex": 3, "id": "w_e3" },
+    { "sourceId": "s0", "targetId": "mux41", "targetInputIndex": 4, "id": "w_s0" },
+    { "sourceId": "s1", "targetId": "mux41", "targetInputIndex": 5, "id": "w_s1" },
+    { "sourceId": "mux41","targetId": "y4", "targetInputIndex": 0, "id": "w_y4" }
+  ]
+}
