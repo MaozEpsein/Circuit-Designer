@@ -2241,6 +2241,31 @@
 #verilog-preview-body .tok-cmt { color: #5a6a78; font-style: italic; }
 #verilog-preview-body .tok-op  { color: #d090c0; }
 #verilog-preview-body .tok-todo{ color: #ff6060; font-weight: 600; }
+#verilog-preview-body .tok-sys { color: #80e0c0; }
+#verilog-preview-tabs {
+  display: flex; gap: 1px; padding: 0 12px; background: #050709;
+  border-bottom: 1px solid #1a2230; min-height: 26px;
+}
+#verilog-preview-tabs .vp-tab {
+  padding: 5px 14px; cursor: pointer; user-select: none;
+  font: 10px/1.2 'JetBrains Mono', monospace; letter-spacing: 0.4px;
+  color: #6a7a8a; background: #0a0e14;
+  border: 1px solid transparent; border-bottom: none;
+  border-radius: 3px 3px 0 0; margin-top: 4px;
+}
+#verilog-preview-tabs .vp-tab:hover { color: #c8b89a; background: #0c1118; }
+#verilog-preview-tabs .vp-tab.active {
+  color: #ffb878; background: #07090d;
+  border-color: #aa6a2a; border-bottom: 1px solid #07090d;
+  margin-bottom: -1px;
+}
+#verilog-preview-tabs .vp-tab .vp-tab-icon {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 1px; margin-right: 6px; vertical-align: middle;
+}
+#verilog-preview-tabs .vp-tab[data-lang="verilog"]  .vp-tab-icon { background: #ffb878; }
+#verilog-preview-tabs .vp-tab[data-lang="tb"]       .vp-tab-icon { background: #c0a8ff; }
+#verilog-preview-tabs .vp-tab[data-lang="markdown"] .vp-tab-icon { background: #80c0ff; }
 #verilog-preview-headeropt,
 #verilog-preview-topopt {
   display: inline-flex; align-items: center; gap: 4px;
