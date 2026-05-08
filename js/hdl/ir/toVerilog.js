@@ -107,10 +107,16 @@ function emitStatement(stmt, indent = '    ') {
   return `${indent}/* <unknown stmt: ${stmt.kind}> */`;
 }
 
-// Emit an always block. Sensitivity is one of:
-//   { star: true }                                  — `@(*)`
+// Emit an always-style block. Sensitivity is one of:
+//   { star: true }                                  — `always @(*)`
+//   { initial: true }                               — `initial`
+//                                                     (no @, runs once at sim start)
 //   { triggers: [{ edge: 'posedge'|'negedge', signal: '<name>' }, ...] }
 function emitAlways(blk) {
+  if (blk.sensitivity?.initial) {
+    const body = (blk.body || []).map(s => emitStatement(s)).join('\n');
+    return `  initial begin\n${body}\n  end`;
+  }
   let sens;
   if (blk.sensitivity?.star) sens = '@(*)';
   else {

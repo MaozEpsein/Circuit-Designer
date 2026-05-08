@@ -12,9 +12,19 @@ import {
   PORT_DIR, NET_KIND,
 } from './types.js';
 
-function nodeBitWidth(node) {
-  // Component-specific overrides come first, then the generic
-  // bitWidth/dataBits fallback chain.
+function nodeBitWidth(node, outIdx = 0) {
+  // Per-output overrides for multi-output components whose pins have
+  // different widths. Listed before the generic bitWidth fallback.
+  if (node?.type === 'COUNTER' && outIdx === 1) return 1;        // TC is 1-bit
+  if (node?.type === 'LFSR')                     return 1;        // serial Q is 1-bit (MSB)
+  if (node?.type === 'BUS'     && outIdx === 1) return 1;        // ERR is 1-bit
+  if (node?.type === 'HANDSHAKE')                return 1;        // S, F both 1-bit
+  if (node?.type === 'COMPARATOR')               return 1;        // EQ / GT / LT all 1-bit
+  if (node?.type === 'HALF_ADDER')               return 1;        // S, C both 1-bit
+  if (node?.type === 'FULL_ADDER')               return 1;        // S, Cout both 1-bit
+  if (node?.type === 'DECODER')                  return 1;        // every output 1-bit (one-hot)
+  if (node?.type === 'ENCODER')                  return 1;        // every output 1-bit
+  // Component-specific overrides for the primary output width:
   if (node?.type === 'SIGN_EXT') return Math.max(1, (node.outBits ?? 8) | 0);
   const w = node?.bitWidth ?? node?.dataBits ?? node?.width ?? 1;
   return Math.max(1, w | 0);
@@ -95,7 +105,7 @@ function collectNets(circuit, portByNodeId, usedNames) {
     const net = makeNet({
       name,
       originalName: original,
-      width: srcNode ? nodeBitWidth(srcNode) : 1,
+      width: srcNode ? nodeBitWidth(srcNode, w.sourceOutputIndex ?? 0) : 1,
       kind: NET_KIND.WIRE,
       sourceRef: SourceRef.fromWire(w.id),
     });
@@ -212,6 +222,12 @@ export function fromCircuit(circuitJSON) {
     // targets) so collectNets can declare them as `reg` not `wire`.
     if (Array.isArray(out.regNets)) {
       for (const name of out.regNets) _regNetNames.add(name);
+    }
+    // Translators that need an internal net not derivable from a wire
+    // endpoint (e.g. LFSR's hidden state register) push fully-formed
+    // IRNet objects here. They're appended to the module's `nets` list.
+    if (Array.isArray(out.nets)) {
+      for (const n of out.nets) nets.push(n);
     }
   }
 

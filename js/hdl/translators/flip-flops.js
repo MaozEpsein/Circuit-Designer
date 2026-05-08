@@ -68,6 +68,112 @@ function _nextState(ffType, args, q, sr) {
   }
 }
 
+// ── LATCH_SLOT ──────────────────────────────────────────────
+// Level-sensitive cousin of the flip-flop. Sensitivity is `@(*)` —
+// the latch is transparent while EN is high, holds otherwise.
+//
+// Pin layout (mirroring SimulationEngine):
+//   D_LATCH : in[D=0, EN=1]                    out[Q=0, Qn=1]
+//   SR_LATCH: in[S=0, R=1, EN=2]               out[Q=0, Qn=1]
+//
+// Verilog (D_LATCH):
+//   always @(*) begin
+//     if (en) q <= d;
+//   end
+// Verilog (SR_LATCH):
+//   always @(*) begin
+//     if (en) begin
+//       if      (s & ~r) q <= 1'b1;
+//       else if (~s & r) q <= 1'b0;
+//     end
+//   end
+// (Reset wins the s&r=1 indeterminate case; matches LATCH_FN semantics.)
+registerTranslator(COMPONENT_TYPES.LATCH_SLOT, (node, ctx) => {
+  if (!node.latchType) return {};   // empty slot — silently skipped
+  const sr = SourceRef.fromNode(node.id);
+
+  let dataNets, enNet;
+  if (node.latchType === 'D_LATCH') {
+    dataNets = [ctx.inputNet(node.id, 0)];
+    enNet    = ctx.inputNet(node.id, 1);
+  } else if (node.latchType === 'SR_LATCH') {
+    dataNets = [ctx.inputNet(node.id, 0), ctx.inputNet(node.id, 1)];
+    enNet    = ctx.inputNet(node.id, 2);
+  } else {
+    return {};
+  }
+  if (!enNet || dataNets.some(n => !n)) return {};
+
+  const qNet  = _outNet(ctx, node.id, 0);
+  const qnNet = _outNet(ctx, node.id, 1);
+  if (!qNet) return {};
+
+  const qRef = makeRef(qNet.name, 1);
+  const en   = makeRef(enNet.name, 1);
+  const lit0 = makeLiteral(0, 1, sr);
+  const lit1 = makeLiteral(1, 1, sr);
+
+  // Build the body of the @(*) block.
+  let body;
+  if (node.latchType === 'D_LATCH') {
+    // if (en) q <= d;
+    const d = makeRef(dataNets[0].name, 1);
+    body = [{
+      kind: 'IfStmt', sourceRef: sr,
+      cond: en,
+      then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: d }],
+      else: null,
+    }];
+  } else {
+    // SR_LATCH:
+    //   if (en) begin
+    //     if      (s & ~r) q <= 1;
+    //     else if (~s & r) q <= 0;
+    //   end
+    const s = makeRef(dataNets[0].name, 1);
+    const r = makeRef(dataNets[1].name, 1);
+    const setCond = makeBinaryOp('&', s, makeUnaryOp('~', r, 1, sr), 1, sr);
+    const rstCond = makeBinaryOp('&', makeUnaryOp('~', s, 1, sr), r, 1, sr);
+    const innerIf = {
+      kind: 'IfStmt', sourceRef: sr,
+      cond: setCond,
+      then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: lit1 }],
+      else: [{
+        kind: 'IfStmt', sourceRef: sr,
+        cond: rstCond,
+        then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: lit0 }],
+        else: null,
+      }],
+    };
+    body = [{
+      kind: 'IfStmt', sourceRef: sr,
+      cond: en,
+      then: [innerIf],
+      else: null,
+    }];
+  }
+
+  const result = {
+    regNets: [qNet.name],
+    alwaysBlocks: [{
+      kind: 'Always', sourceRef: sr, attributes: [],
+      sensitivity: { star: true },
+      body,
+    }],
+    assigns: [],
+  };
+
+  if (qnNet) {
+    result.assigns.push({
+      kind: 'Assign', sourceRef: sr, attributes: [],
+      lhs: makeRef(qnNet.name, 1),
+      rhs: makeUnaryOp('~', qRef, 1, sr),
+    });
+  }
+
+  return result;
+});
+
 registerTranslator(COMPONENT_TYPES.FF_SLOT, (node, ctx) => {
   if (!node.ffType) return {};   // empty slot → silently skipped (matches GATE_SLOT)
   const sr = SourceRef.fromNode(node.id);

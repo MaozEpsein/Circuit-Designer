@@ -1,0 +1,25 @@
+{
+  "_doc": "Phase-4e demo: DFT components SCAN_FF and LFSR exported to Verilog. Click VERILOG to see how they lower:\n  • SCAN_FF — same as a D-FF (Phase 4a) with a 2:1 mux on the data input gated by TE: `q <= te ? ti : d`. The DFT primitive that turns any sequential design into a scan-testable one.\n  • LFSR — adds three Verilog idioms that Phase 4 hasn't shown until now: an internal `reg [N-1:0]` net not tied to any canvas wire, a Verilog `initial begin … end` block to seed the register at sim start, and a slice-XOR shift expression `{state[N-2:0], state[t1] ^ state[t0]}` for the new state. The serial output Q is the MSB.",
+  "nodes": [
+    { "type": "CLOCK", "x": -380, "y": -180, "value": 0, "id": "clk" },
+
+    { "type": "INPUT",   "x": -380, "y": -100, "fixedValue": 1, "label": "d_in",  "id": "d_in" },
+    { "type": "INPUT",   "x": -380,  "y": -60, "fixedValue": 0, "label": "ti_in", "id": "ti_in" },
+    { "type": "INPUT",   "x": -380,  "y": -20, "fixedValue": 1, "label": "te_in", "id": "te_in" },
+    { "type": "SCAN_FF", "x":  -80,  "y": -60, "label": "SCAN-FF", "id": "sff" },
+    { "type": "OUTPUT",  "x":  220,  "y": -60, "targetValue": 0, "sandbox": true, "label": "q_scan", "id": "q_scan" },
+
+    { "type": "LFSR",   "x":   -80, "y": 130, "bitWidth": 4, "taps": [3, 0], "seed": 1, "label": "LFSR x⁴+x+1", "id": "lfsr" },
+    { "type": "OUTPUT", "x":   220, "y": 130, "targetValue": 0, "sandbox": true, "label": "q_lfsr", "id": "q_lfsr" }
+  ],
+  "wires": [
+    { "sourceId": "d_in",  "targetId": "sff", "targetInputIndex": 0, "id": "w_d" },
+    { "sourceId": "ti_in", "targetId": "sff", "targetInputIndex": 1, "id": "w_ti" },
+    { "sourceId": "te_in", "targetId": "sff", "targetInputIndex": 2, "id": "w_te" },
+    { "sourceId": "clk",   "targetId": "sff", "targetInputIndex": 3, "isClockWire": true, "id": "w_sf_clk" },
+    { "sourceId": "sff",   "targetId": "q_scan", "targetInputIndex": 0, "id": "w_q_scan" },
+
+    { "sourceId": "clk",  "targetId": "lfsr",   "targetInputIndex": 0, "isClockWire": true, "id": "w_lf_clk" },
+    { "sourceId": "lfsr", "targetId": "q_lfsr", "targetInputIndex": 0, "id": "w_q_lfsr" }
+  ]
+}

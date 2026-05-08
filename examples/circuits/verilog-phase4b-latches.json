@@ -1,0 +1,25 @@
+{
+  "_doc": "Phase-4b demo: D-latch and SR-latch — level-sensitive cousins of the flip-flops from 4a. Click VERILOG to see how latches differ from FFs:\n  • Sensitivity is `@(*)` instead of `@(posedge clk)` — latches are level-triggered, transparent while the enable is high.\n  • The body is wrapped in `if (en) begin ... end` — when EN is low, no assignment fires and the reg holds its value.\n  • SR-latch nests a second `if/else` inside the EN gate to pick between set / reset / hold based on (s & ~r) and (~s & r).\nNo CLOCK component is needed for latches — EN takes its place. iverilog parses both without warnings.",
+  "nodes": [
+    { "type": "INPUT",      "x": -380, "y": -120, "fixedValue": 1, "label": "d_in",  "id": "d_in" },
+    { "type": "INPUT",      "x": -380,  "y": -60, "fixedValue": 1, "label": "d_en",  "id": "d_en" },
+    { "type": "LATCH_SLOT", "x":  -80,  "y": -90, "latchType": "D_LATCH", "label": "D-LATCH", "id": "dl" },
+    { "type": "OUTPUT",     "x":  220,  "y": -90, "targetValue": 1, "sandbox": true, "label": "q_d", "id": "q_d" },
+
+    { "type": "INPUT",      "x": -380,   "y": 60, "fixedValue": 1, "label": "s_in",  "id": "s_in" },
+    { "type": "INPUT",      "x": -380,  "y": 110, "fixedValue": 0, "label": "r_in",  "id": "r_in" },
+    { "type": "INPUT",      "x": -380,  "y": 160, "fixedValue": 1, "label": "sr_en", "id": "sr_en" },
+    { "type": "LATCH_SLOT", "x":  -80,  "y": 110, "latchType": "SR_LATCH", "label": "SR-LATCH", "id": "srl" },
+    { "type": "OUTPUT",     "x":  220,  "y": 110, "targetValue": 1, "sandbox": true, "label": "q_sr", "id": "q_sr" }
+  ],
+  "wires": [
+    { "sourceId": "d_in", "targetId": "dl", "targetInputIndex": 0, "id": "w_d" },
+    { "sourceId": "d_en", "targetId": "dl", "targetInputIndex": 1, "id": "w_d_en" },
+    { "sourceId": "dl",   "targetId": "q_d","targetInputIndex": 0, "id": "w_q_d" },
+
+    { "sourceId": "s_in",  "targetId": "srl","targetInputIndex": 0, "id": "w_s" },
+    { "sourceId": "r_in",  "targetId": "srl","targetInputIndex": 1, "id": "w_r" },
+    { "sourceId": "sr_en", "targetId": "srl","targetInputIndex": 2, "id": "w_sr_en" },
+    { "sourceId": "srl",   "targetId": "q_sr","targetInputIndex": 0, "id": "w_q_sr" }
+  ]
+}

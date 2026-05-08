@@ -8,3 +8,5 @@ import './arithmetic.js';
 import './muxing.js';
 import './width-changers.js';
 import './flip-flops.js';
+import './registers.js';
+import './dft.js';

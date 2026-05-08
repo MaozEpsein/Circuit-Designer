@@ -3998,6 +3998,27 @@ const EXAMPLES = [
     tags: ['verilog', 'phase4', 'phase4a', 'flip-flop', 'sequential'],
     file: 'examples/circuits/verilog-phase4a-flip-flops.json',
   },
+  {
+    id: 'verilog-phase4b-latches',
+    title: '4b. VERILOG — latches (D, SR)',
+    desc: 'Phase-4b demo: D-latch and SR-latch, the level-sensitive cousins of the flip-flops in 4a. Click VERILOG to see the differences: sensitivity is `@(*)` instead of `@(posedge clk)` (transparent while EN is high, holds otherwise), and the body wraps in `if (en) begin ... end` so no assignment fires when EN is low. SR-latch nests a second if/else inside the EN gate to choose between set / reset / hold based on (s & ~r) / (~s & r). No CLOCK component needed — EN takes its place.',
+    tags: ['verilog', 'phase4', 'phase4b', 'latch', 'sequential'],
+    file: 'examples/circuits/verilog-phase4b-latches.json',
+  },
+  {
+    id: 'verilog-phase4c-registers',
+    title: '4c. VERILOG — registers, counter, shift register',
+    desc: 'Phase-4c demo: REGISTER (8-bit) + COUNTER (4-bit) + SHIFT_REG (4-bit, bidirectional) side by side. Each lowers to a single `always @(posedge clk)` block whose body is a priority chain: CLR > LOAD > EN. The COUNTER uses `(count + 4\'h1)` for increment and emits `assign tc = (&count);` (Verilog reduction-AND of all bits) for terminal-count. The SHIFT_REG\'s direction is picked by `if (dir) ... else ...` inside the EN gate using slice + concat: `{q[N-2:0], din}` for left-shift, `{din, q[N-1:1]}` for right-shift.',
+    tags: ['verilog', 'phase4', 'phase4c', 'register', 'counter', 'shift', 'sequential'],
+    file: 'examples/circuits/verilog-phase4c-registers.json',
+  },
+  {
+    id: 'verilog-phase4e-dft',
+    title: '4e. VERILOG — SCAN-FF + LFSR (DFT)',
+    desc: 'Phase-4e demo: the two DFT primitives we built on the simulator side now have Verilog translators. SCAN-FF lowers to a D-FF with a 2:1 mux on its input gated by TE (`q <= te ? ti : d`). LFSR adds three idioms Phase 4 hasn\'t shown yet: an internal `reg [N-1:0]` net not tied to any canvas wire, a Verilog `initial begin ... end` block to seed the register at sim start, and a slice-XOR shift expression `{state[N-2:0], state[t1] ^ state[t0]}` for the next state. Click VERILOG to see both forms, both parsing cleanly with iverilog.',
+    tags: ['verilog', 'phase4', 'phase4e', 'dft', 'scan-ff', 'lfsr'],
+    file: 'examples/circuits/verilog-phase4e-dft.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

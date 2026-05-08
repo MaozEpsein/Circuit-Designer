@@ -1,0 +1,49 @@
+{
+  "_doc": "Phase-4c demo: REGISTER, COUNTER, SHIFT_REG side by side. Click VERILOG to see how each component lowers:\n  • REGISTER (8-bit) — `always @(posedge clk)` with CLR > EN priority chain.\n  • COUNTER (4-bit) — CLR > LOAD > EN priority chain, increment expression `(count + 4'h1)`, plus a continuous `assign tc = (&count);` (terminal count = all bits set, via Verilog's reduction AND).\n  • SHIFT_REG (4-bit, bidirectional) — DIR=1 picks `{q[N-2:0], din}` (left), DIR=0 picks `{din, q[N-1:1]}` (right). All gated by EN, all reset by CLR.\nA bug fix tucked inside this phase: COUNTER's TC output now correctly emits as a 1-bit wire instead of inheriting the parent's 4-bit width.",
+  "nodes": [
+    { "type": "CLOCK", "x": -380, "y": -300, "value": 0, "id": "clk" },
+
+    { "type": "INPUT",    "x": -380, "y": -200, "fixedValue": 42, "bitWidth": 8, "label": "r_data", "id": "r_data" },
+    { "type": "INPUT",    "x": -380, "y": -160, "fixedValue": 1,  "label": "r_en",  "id": "r_en" },
+    { "type": "INPUT",    "x": -380, "y": -120, "fixedValue": 0,  "label": "r_clr", "id": "r_clr" },
+    { "type": "REGISTER", "x":  -80, "y": -160, "bitWidth": 8, "label": "REG 8b", "id": "reg" },
+    { "type": "OUTPUT",   "x":  220, "y": -160, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "r_q", "id": "r_q" },
+
+    { "type": "INPUT",   "x": -380,  "y": -40, "fixedValue": 1,                "label": "c_en",   "id": "c_en" },
+    { "type": "INPUT",   "x": -380,    "y": 0, "fixedValue": 0,                "label": "c_load", "id": "c_load" },
+    { "type": "INPUT",   "x": -380,   "y": 40, "fixedValue": 0, "bitWidth": 4, "label": "c_data", "id": "c_data" },
+    { "type": "INPUT",   "x": -380,   "y": 80, "fixedValue": 0,                "label": "c_clr",  "id": "c_clr" },
+    { "type": "COUNTER", "x":  -80,   "y": 20, "bitWidth": 4, "label": "CNT 4b", "id": "cnt" },
+    { "type": "OUTPUT",  "x":  220,    "y": 0, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "c_q",  "id": "c_q" },
+    { "type": "OUTPUT",  "x":  220,   "y": 40, "targetValue": 0, "sandbox": true, "label": "c_tc", "id": "c_tc" },
+
+    { "type": "INPUT",     "x": -380, "y": 180, "fixedValue": 1, "label": "s_din", "id": "s_din" },
+    { "type": "INPUT",     "x": -380, "y": 220, "fixedValue": 1, "label": "s_dir", "id": "s_dir" },
+    { "type": "INPUT",     "x": -380, "y": 260, "fixedValue": 1, "label": "s_en",  "id": "s_en" },
+    { "type": "INPUT",     "x": -380, "y": 300, "fixedValue": 0, "label": "s_clr", "id": "s_clr" },
+    { "type": "SHIFT_REG", "x":  -80, "y": 240, "bitWidth": 4, "label": "SH 4b",   "id": "sh" },
+    { "type": "OUTPUT",    "x":  220, "y": 240, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "s_q", "id": "s_q" }
+  ],
+  "wires": [
+    { "sourceId": "r_data", "targetId": "reg", "targetInputIndex": 0, "id": "wr1" },
+    { "sourceId": "r_en",   "targetId": "reg", "targetInputIndex": 1, "id": "wr2" },
+    { "sourceId": "r_clr",  "targetId": "reg", "targetInputIndex": 2, "id": "wr3" },
+    { "sourceId": "clk",    "targetId": "reg", "targetInputIndex": 3, "isClockWire": true, "id": "wr4" },
+    { "sourceId": "reg",    "targetId": "r_q", "targetInputIndex": 0, "id": "wr_q" },
+
+    { "sourceId": "c_en",   "targetId": "cnt", "targetInputIndex": 0, "id": "wc1" },
+    { "sourceId": "c_load", "targetId": "cnt", "targetInputIndex": 1, "id": "wc2" },
+    { "sourceId": "c_data", "targetId": "cnt", "targetInputIndex": 2, "id": "wc3" },
+    { "sourceId": "c_clr",  "targetId": "cnt", "targetInputIndex": 3, "id": "wc4" },
+    { "sourceId": "clk",    "targetId": "cnt", "targetInputIndex": 4, "isClockWire": true, "id": "wc5" },
+    { "sourceId": "cnt",    "sourceOutputIndex": 0, "targetId": "c_q",  "targetInputIndex": 0, "id": "wc_q"  },
+    { "sourceId": "cnt",    "sourceOutputIndex": 1, "targetId": "c_tc", "targetInputIndex": 0, "id": "wc_tc" },
+
+    { "sourceId": "s_din", "targetId": "sh",  "targetInputIndex": 0, "id": "ws1" },
+    { "sourceId": "s_dir", "targetId": "sh",  "targetInputIndex": 1, "id": "ws2" },
+    { "sourceId": "s_en",  "targetId": "sh",  "targetInputIndex": 2, "id": "ws3" },
+    { "sourceId": "s_clr", "targetId": "sh",  "targetInputIndex": 3, "id": "ws4" },
+    { "sourceId": "clk",   "targetId": "sh",  "targetInputIndex": 4, "isClockWire": true, "id": "ws5" },
+    { "sourceId": "sh",    "targetId": "s_q", "targetInputIndex": 0, "id": "ws_q" }
+  ]
+}
