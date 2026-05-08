@@ -13,6 +13,7 @@ import { parseCheck, isIverilogAvailable } from '../../js/hdl/verify/iverilog.js
 import { validateCircuit, hasBlockingErrors } from '../../js/hdl/core/CircuitValidator.js';
 import { HDLError, SEVERITY } from '../../js/hdl/core/HDLError.js';
 import { SourceRef, formatSourceRef } from '../../js/hdl/core/SourceRef.js';
+import { registerTranslator } from '../../js/hdl/translators/index.js';
 
 let failed = 0;
 function check(label, cond, detail = '') {
@@ -133,6 +134,42 @@ console.log('IR — identifier stability');
   check('user netName preserved', names.includes('preferred_name'));
   const net = ir.nets.find(n => n.name === 'preferred_name');
   check('originalName recorded', net && net.originalName === 'preferred_name');
+}
+
+// ── Pipeline `stage` carried into IR instance attributes ─────
+// The pipelining analyzer paints a `stage` field on nodes; fromCircuit
+// must preserve it as an opaque attribute so Phase 4's PIPE translator
+// and Phase 7's pretty-printer (stage-comment dividers) can read it.
+console.log('IR — pipeline stage attribute');
+{
+  // Register a stub translator so a fake component type makes it through
+  // to the instance list. Returns a minimal IRInstance.
+  registerTranslator('STAGE_STUB', (node) => ({
+    instance: makeInstance({
+      type: 'stage_stub',
+      portMap: {},
+      sourceRef: SourceRef.fromNode(node.id),
+    }),
+  }));
+
+  const ir = fromCircuit({
+    nodes: [
+      { id: 's1', type: 'STAGE_STUB', stage: 2 },
+      { id: 's2', type: 'STAGE_STUB' },             // no stage field
+    ],
+    wires: [],
+  });
+
+  const inst1 = ir.instances.find(i => i.type === 'stage_stub'
+    && i.attributes.some(a => a.key === 'stage'));
+  check('node.stage propagated to IR attribute',
+    !!inst1, 'expected a stage_stub instance with stage attribute');
+  check('stage attribute value matches',
+    !!inst1 && inst1.attributes.find(a => a.key === 'stage')?.value === 2);
+  const inst2 = ir.instances.find(i => i.type === 'stage_stub'
+    && !i.attributes.some(a => a.key === 'stage'));
+  check('instance without node.stage has no stage attribute',
+    !!inst2, 'second instance should carry no stage attribute');
 }
 
 // ── CircuitValidator ─────────────────────────────────────────

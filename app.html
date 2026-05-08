@@ -204,6 +204,14 @@
           <option value="64">64</option>
         </select>
       </div>
+      <div class="design-prop-row" id="prop-lfsr-seed-row" style="display:none" title="Initial register state. Same polynomial cycles through the same set of states; seed picks where in the loop you start.">
+        <span>Seed</span>
+        <input id="prop-lfsr-seed-input" type="text" maxlength="10" placeholder="1 or 0x0F or 0b0001" style="width:84px" />
+      </div>
+      <div class="design-prop-row" id="prop-lfsr-taps-row" style="display:none" title="Bit positions (0-indexed from LSB) XORed to form the new bit. Comma-separated. Primitive polynomials give max-length sequences; non-primitive give shorter cycles.">
+        <span>Taps</span>
+        <input id="prop-lfsr-taps-input" type="text" maxlength="32" placeholder="3, 0" style="width:84px" />
+      </div>
       <div class="design-prop-row" id="prop-memaddr-row" style="display:none">
         <span>Addr Bits</span>
         <select id="prop-memaddr-select">
@@ -637,6 +645,24 @@
   </div>
 
   <!-- Examples Modal -->
+  <!-- Verilog preview modal — opens when user clicks VERILOG export.
+       Shows the generated Verilog text + COPY/DOWNLOAD buttons.
+       Phase-7 will replace this with a richer modal (syntax highlight,
+       options, testbench bundle); this is the minimum viable preview. -->
+  <div id="verilog-preview-overlay" class="hidden">
+    <div id="verilog-preview-modal">
+      <div id="verilog-preview-header">
+        <span>VERILOG PREVIEW — circuit.v</span>
+        <div>
+          <button id="btn-verilog-copy"     class="btn-secondary" style="font-size:9px;background:#1a2030;border-color:#3a8a4a;color:#80f0a0">COPY</button>
+          <button id="btn-verilog-download" class="btn-secondary" style="font-size:9px;background:#2a1a08;border-color:#aa6a2a;color:#ffb878">DOWNLOAD .v</button>
+          <button id="btn-verilog-close"    class="btn-secondary" style="font-size:9px">CLOSE</button>
+        </div>
+      </div>
+      <pre id="verilog-preview-body"></pre>
+    </div>
+  </div>
+
   <div id="examples-overlay" class="hidden">
     <div id="examples-modal">
       <div id="examples-header">

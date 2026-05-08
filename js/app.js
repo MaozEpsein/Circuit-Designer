@@ -885,6 +885,20 @@ function _updatePropsPanel() {
     propMembitRow.style.display = 'none';
     propMemaddrRow.style.display = 'none';
   }
+  // LFSR-specific rows: seed + taps. Visible only when an LFSR is selected.
+  const lfsrSeedRow  = document.getElementById('prop-lfsr-seed-row');
+  const lfsrSeedInp  = document.getElementById('prop-lfsr-seed-input');
+  const lfsrTapsRow  = document.getElementById('prop-lfsr-taps-row');
+  const lfsrTapsInp  = document.getElementById('prop-lfsr-taps-input');
+  if (node.type === 'LFSR') {
+    if (lfsrSeedRow) lfsrSeedRow.style.display = '';
+    if (lfsrTapsRow) lfsrTapsRow.style.display = '';
+    if (lfsrSeedInp) lfsrSeedInp.value = String(node.seed ?? 1);
+    if (lfsrTapsInp) lfsrTapsInp.value = (node.taps || []).join(', ');
+  } else {
+    if (lfsrSeedRow) lfsrSeedRow.style.display = 'none';
+    if (lfsrTapsRow) lfsrTapsRow.style.display = 'none';
+  }
   if (node.type !== 'CACHE') {
     const linesRow = document.getElementById('prop-cache-lines-row');
     const mapRow   = document.getElementById('prop-cache-mapping-row');
@@ -1062,6 +1076,36 @@ document.getElementById('prop-memaddr-select')?.addEventListener('change', () =>
   const node = _getSelectedNode();
   if (!node || (node.type !== 'RAM' && node.type !== 'ROM' && node.type !== 'CACHE')) return;
   commands.execute(new SetNodePropsCommand(scene, node.id, { addrBits: parseInt(document.getElementById('prop-memaddr-select').value) }));
+  state.ffStates.delete(node.id);
+});
+
+// LFSR seed input — accepts decimal (`1`), hex (`0x0F`), or binary (`0b0001`).
+// Resets the running register so the new seed takes effect immediately.
+document.getElementById('prop-lfsr-seed-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'LFSR') return;
+  const raw = String(e.target.value || '').trim();
+  let val = NaN;
+  if (raw.startsWith('0x') || raw.startsWith('0X')) val = parseInt(raw.slice(2), 16);
+  else if (raw.startsWith('0b') || raw.startsWith('0B')) val = parseInt(raw.slice(2), 2);
+  else val = parseInt(raw, 10);
+  if (!Number.isFinite(val) || val < 0) return;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { seed: val }));
+  state.ffStates.delete(node.id);
+});
+
+// LFSR taps input — comma- or space-separated bit indices, e.g. "3, 0".
+// Filters to non-negative integers within the register width.
+document.getElementById('prop-lfsr-taps-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'LFSR') return;
+  const sz = node.bitWidth || 4;
+  const taps = String(e.target.value || '')
+    .split(/[\s,]+/)
+    .map(s => parseInt(s, 10))
+    .filter(n => Number.isFinite(n) && n >= 0 && n < sz);
+  if (taps.length === 0) return;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { taps }));
   state.ffStates.delete(node.id);
 });
 
@@ -2764,16 +2808,58 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-document.getElementById('btn-export-verilog')?.addEventListener('click', () => {
-  const verilog = exportVerilog(scene.serialize(), { topName: 'top' });
-  const blob = new Blob([verilog], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'circuit.v';
-  a.click();
-  URL.revokeObjectURL(url);
-});
+// Verilog export — opens a preview modal with COPY + DOWNLOAD instead
+// of going straight to download. Lets the user inspect the generated
+// HDL before saving. Phase-7 of the HDL plan replaces this with a
+// richer modal (syntax highlight, options, testbench bundle).
+(function initVerilogPreview() {
+  const btnOpen     = document.getElementById('btn-export-verilog');
+  const overlay     = document.getElementById('verilog-preview-overlay');
+  const body        = document.getElementById('verilog-preview-body');
+  const btnCopy     = document.getElementById('btn-verilog-copy');
+  const btnDownload = document.getElementById('btn-verilog-download');
+  const btnClose    = document.getElementById('btn-verilog-close');
+  if (!btnOpen || !overlay || !body) return;
+
+  let _lastVerilog = '';
+
+  const openPreview = () => {
+    _lastVerilog = exportVerilog(scene.serialize(), { topName: 'top' });
+    body.textContent = _lastVerilog;
+    overlay.classList.remove('hidden');
+  };
+  const closePreview = () => overlay.classList.add('hidden');
+
+  btnOpen.addEventListener('click', openPreview);
+  btnClose?.addEventListener('click', closePreview);
+
+  // Close on backdrop click (but not when click started inside the modal).
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) closePreview();
+  });
+  // Close on Escape.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closePreview();
+  });
+
+  btnCopy?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(_lastVerilog).then(() => {
+      const orig = btnCopy.textContent;
+      btnCopy.textContent = 'COPIED ✓';
+      setTimeout(() => { btnCopy.textContent = orig; }, 1200);
+    });
+  });
+
+  btnDownload?.addEventListener('click', () => {
+    const blob = new Blob([_lastVerilog], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'circuit.v';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+})();
 
 document.getElementById('btn-export-svg')?.addEventListener('click', () => {
   // Simple SVG export — creates an SVG from the current canvas
@@ -3862,6 +3948,21 @@ const EXAMPLES = [
     tags: ['dft', 'lfsr', 'prng', 'bist', 'polynomial'],
     file: 'examples/circuits/dft-lfsr-prng.json',
   },
+  // ── VERILOG tab — one demo per HDL phase (Phase 3+ each ship one). ──
+  {
+    id: 'verilog-phase2-empty-module',
+    title: '2. VERILOG — empty module skeleton',
+    desc: 'Phase-2 retroactive seed for the VERILOG tab. Loads an empty scene; click VERILOG in the bottom toolbar to download circuit.v. The export pipeline (validate → fromCircuit → toVerilog) produces a clean empty `module top();` — the foundation that Phases 3+ extend with combinational, sequential, memory, and CPU translators.',
+    tags: ['verilog', 'phase2', 'skeleton'],
+    file: 'examples/circuits/verilog-phase2-empty-module.json',
+  },
+  {
+    id: 'verilog-phase3-gates',
+    title: '3. VERILOG — combinational gates round-trip',
+    desc: 'Phase-3 demo: three primary inputs (a, b, c) feed AND, OR, XOR gates wired so y = (a & b) | (a ^ c). Click VERILOG in the bottom toolbar — each gate lowers to a Verilog primitive (`and`, `or`, `xor` with positional ports), and the downloaded `.v` parses cleanly with iverilog. Open the downloaded file to see the full module: `input` ports, `wire` declarations for internal nets, primitive instantiations, and an `assign y = ...;` driving the output port.',
+    tags: ['verilog', 'phase3', 'gates'],
+    file: 'examples/circuits/verilog-phase3-gates.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');
@@ -3874,6 +3975,7 @@ const EXAMPLES_CATEGORIES = [
   { id: 'predictor',    label: 'Branch Predictor' },
   { id: 'cache',        label: 'Cache & Memory'   },
   { id: 'dft',          label: 'Test & DFT'       },
+  { id: 'verilog',      label: 'VERILOG'          },
 ];
 let _examplesActiveTab = 'beginner';
 

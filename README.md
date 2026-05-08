@@ -511,9 +511,11 @@ Start with one gate end-to-end through **all four verification tiers including Y
 - [ ] Comparator (EQ / GT / LT flags) — signed/unsigned aware.
 - [ ] MUX / DEMUX / Decoder / Encoder — `case` with width-parametric ports.
 - [ ] Bus MUX (multi-bit), Sign Extender (`{ {N{msb}}, data }`), Zero Extender.
+- [ ] **DISPLAY_7SEG** — output sink with 7 segment pins; emits `output [6:0] seg;` plus the per-segment assigns. Treated like a primary OUTPUT in the export model.
 - [ ] **L1/L2/L3/L4 gate**: every component is tested with a scripted stimulus; iverilog VCD diffs against native VCD with zero mismatches (after stability-skip); Yosys round-trip produces equal IR; `synth_ice40` completes clean.
 - [ ] `examples/tests/test-hdl-combinational.mjs` — exhaustive truth tables for small inputs, random vectors for wider buses.
 - [ ] `ir/lowerTriState.js` — implement the BUS → one-hot MUX pass declared in [SEMANTICS.md](js/hdl/SEMANTICS.md). Standalone test on synthetic IR (no BUS translator yet); full usage exercised in Phase 5.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase3-gates.json` tagged `['verilog', 'phase3', ...]`. Numbered title `3. VERILOG — combinational gates round-trip`.
 
 #### Phase 4 — Sequential Translators
 - [ ] Flip-Flops: D, T, SR, JK — `always @(posedge clk or negedge clr_n)` blocks; reset polarity honours exporter option.
@@ -521,6 +523,8 @@ Start with one gate end-to-end through **all four verification tiers including Y
 - [ ] Registers (N-bit, EN / CLR / CLK).
 - [ ] Shift Register (bidirectional, parametric width).
 - [ ] Counter (EN / LOAD / DATA / CLR) with TC output.
+- [ ] **SCAN_FF** — DFT scan flip-flop. Pin order in our engine: D=0, TI=1, TE=2, CLK=3 → Q. Emits `always @(posedge clk) q <= te ? ti : d;`. Yosys lowers it to `$mux + $dff`, so round-trip should be clean. Test goes in `test-hdl-sequential.mjs`.
+- [ ] **LFSR** — Fibonacci shift-left register with XOR taps. Engine props: `bitWidth`, `taps[]` (LSB-indexed), `seed`. Emits `reg [N-1:0] r = SEED; always @(posedge clk) r <= {r[N-2:0], ^(r & TAP_MASK)};`. Param-driven so the same translator handles arbitrary widths/polynomials.
 - [ ] **Pipeline Register** (`PIPE_REG`) — full pipeline-aware translation (merged in from the old *Pipelining Phase 11*):
   - Stage-wise `always @(posedge clk)` with `if (!stall) q <= d;` / `if (flush) q <= 0;` semantics, mirroring the engine's runtime behaviour.
   - `stage` attribute (placed on the IR node by `fromCircuit`) preserved through to Verilog as a leading comment (`// Stage N: <label>`) so the generated HDL is navigable without losing the pipeline structure.
@@ -528,6 +532,7 @@ Start with one gate end-to-end through **all four verification tiers including Y
 - [ ] Clock tree correctness — a circuit with multiple clock domains must emit each `always` block sensitive to the correct clock.
 - [ ] **L1/L2/L3 gate**: clocked stimulus simulated in both engines for ≥1024 cycles, VCD identical; round-trip through IR stable.
 - [ ] `examples/tests/test-hdl-sequential.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase4-sequential.json` tagged `['verilog', 'phase4', ...]`. Numbered title `4. VERILOG — sequential round-trip (FFs, registers, SCAN-FF, LFSR)`.
 
 #### Phase 5 — Memory & CPU Translators
 - [ ] RAM → `reg [W-1:0] mem [0:DEPTH-1]`, sync write, async read. `$readmemh`-initialized when contents are non-zero.
@@ -540,6 +545,7 @@ Start with one gate end-to-end through **all four verification tiers including Y
 - [ ] L4 gate specifically exercised on BUS: a CPU circuit with ≥3 bus drivers must synthesise under `synth_ice40` with zero tri-state warnings.
 - [ ] **L1/L2/L3 gate**: full Simple-CPU countdown program exported, simulated in iverilog, VCD identical to native.
 - [ ] `examples/tests/test-hdl-cpu.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase5-cpu.json` tagged `['verilog', 'phase5', ...]`. Numbered title `5. VERILOG — Simple-CPU countdown program`.
 
 #### Phase 6 — Hierarchy & Sub-circuits
 - [ ] Each sub-circuit exports as its own `module` above `module top`.
@@ -549,6 +555,7 @@ Start with one gate end-to-end through **all four verification tiers including Y
 - [ ] Nested hierarchies (≥3 levels deep) — recursive with memoization.
 - [ ] **L3 gate**: round-trip of a 3-level design yields byte-identical output on second export.
 - [ ] `examples/tests/test-hdl-hierarchy.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase6-hierarchy.json` tagged `['verilog', 'phase6', ...]`. Numbered title `6. VERILOG — sub-circuits & hierarchy`.
 
 #### Phase 7 — Export UX
 One-click flow, no configuration needed for the common case.
@@ -561,6 +568,7 @@ One-click flow, no configuration needed for the common case.
 - [ ] **Pipeline-violation gate** (merged in from the old *Pipelining Phase 11*) — when the pipelining analyzer reports cross-stage violations on the circuit, `exportCircuit` refuses to produce Verilog and the modal surfaces the violation list with a *"force anyway"* checkbox. Override sets `options.forcePipelineViolations = true`, which emits the Verilog unchanged but tags every offending wire with a `// WARNING: pipeline violation` comment.
 - [ ] Stage comments pass — when IR nodes carry a `stage` attribute (set by `fromCircuit` from the pipeline analysis), the pretty-printer groups instances by stage and emits `// ─── Stage N ───` dividers between groups. Applies to `toVerilog` generally, not just to PIPE registers.
 - [ ] `examples/tests/test-hdl-export-ux.mjs` (DOM-only, no browser).
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase7-export-ux.json` tagged `['verilog', 'phase7', ...]`. Numbered title `7. VERILOG — export UX showcase` (small mixed circuit that exercises the modal preview, syntax highlight, and the testbench generator).
 
 #### Phase 8 — Hand-Written Verilog Lexer & Parser (Fidelity Layer)
 The primary Verilog reader is Yosys (Phase 3). This phase builds a **hand-written parser in parallel** — used by Fidelity Mode (Phase 12), by error messages that need exact source spans, and as a fallback for Verilog inside our subset but rejected by the specific Yosys version in use.
@@ -572,6 +580,7 @@ The primary Verilog reader is Yosys (Phase 3). This phase builds a **hand-writte
 - [ ] **L1 gate**: the parser round-trips every `.v` file produced by Phases 3-6 without error, and the AST → Verilog pretty-print preserves semantics (iverilog simulation identical before/after).
 - [ ] **Cross-check gate**: for every `.v` file in the external corpus, Yosys JSON-derived IR and hand-written-parser-derived IR are structurally equal (modulo the width canonicalisation pass). Divergences point at bugs in either side.
 - [ ] `examples/tests/test-hdl-parser.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase8-parser.json` tagged `['verilog', 'phase8', ...]` together with a sidecar `.v` file under `examples/hdl-corpus/` that the parser reads. Numbered title `8. VERILOG — hand-written parser exercise`.
 
 #### Phase 9 — Elaboration & AST → IR (Fidelity Path)
 Yosys handles elaboration for the primary import path; this phase produces the parallel hand-written elaborator that consumes the Phase 8 AST. Both paths converge on the same IR.
@@ -587,6 +596,7 @@ Yosys handles elaboration for the primary import path; this phase produces the p
 - [ ] `originalText` populated on every IR node from the AST's source range, enabling Phase 12 Fidelity Mode.
 - [ ] **L3 gate**: parse → AST → IR for every file produced by Phases 3-6 yields an IR equal (modulo renames and width canonicalisation) to the one originally exported **AND** equal to the Yosys-derived IR of the same file.
 - [ ] `examples/tests/test-hdl-elaborate.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase9-elaborate.json` (or a sidecar `.v`) tagged `['verilog', 'phase9', ...]`. Numbered title `9. VERILOG — elaboration & widths`.
 
 #### Phase 10 — IR → circuitJSON & Component Inference
 This is the step that turns imported RTL back into a schematic. IR stays the source of truth.
@@ -599,6 +609,7 @@ This is the step that turns imported RTL back into a schematic. IR stays the sou
 - [ ] Sub-module instantiation → nested sub-circuit on the canvas with proper port mapping.
 - [ ] Anything the inferer cannot canonicalize is preserved as a "Verilog Block" component that holds the original AST fragment and re-emits verbatim on export — guarantees round-trip safety even for non-canonical RTL.
 - [ ] **L3 gate (whole-system)**: for every `.v` in the Phase-3-to-6 output set, `import → export` produces byte-identical Verilog.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase10-import.json` (the result of importing a curated `.v`) tagged `['verilog', 'phase10', ...]`. Numbered title `10. VERILOG — import to canvas`.
 
 #### Phase 11 — Auto-Layout for Imported Designs
 - [ ] DAG topological layering — inputs on the left, outputs on the right, combinational depth determines column.
@@ -608,6 +619,7 @@ This is the step that turns imported RTL back into a schematic. IR stays the sou
 - [ ] Sub-circuits placed as single blocks; user drills in via the Block Viewer.
 - [ ] Large design handling — if the imported circuit exceeds N components, layout runs in a Worker with a progress bar.
 - [ ] `examples/tests/test-hdl-layout.mjs`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase11-layout.json` (a freshly auto-laid-out import) tagged `['verilog', 'phase11', ...]`. Numbered title `11. VERILOG — auto-layout for imports`.
 
 #### Phase 12 — Import UX & Fidelity Mode
 One modal, drag-and-drop primary, picker secondary. Fidelity Mode lands here because the supporting IR field (`originalText`) has existed since Phase 2.
@@ -621,6 +633,7 @@ One modal, drag-and-drop primary, picker secondary. Fidelity Mode lands here bec
 - [ ] Verilog Block canonicalisation — two users importing the same fragment must produce the same IR. The Verilog Block hashes the parsed AST (after parameter resolution) rather than the source text, so whitespace/comments do not cause spurious diffs while semantics do.
 - [ ] `examples/tests/test-hdl-import-ux.mjs` (DOM-only).
 - [ ] `examples/tests/test-hdl-fidelity.mjs` — imports a curated `.v` with comments / unusual formatting, round-trips in Fidelity Mode, asserts byte-identical output.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase12-fidelity.json` tagged `['verilog', 'phase12', ...]` with the matching `.v` source under `examples/hdl-corpus/`. Numbered title `12. VERILOG — fidelity-mode round-trip`.
 
 #### Phase 13 — End-to-End Round-Trip, Property Testing & Release
 - [ ] Round-trip suite over the entire `examples/circuits/` library: `export → import → export`, expect byte-identical output under both CANONICAL and FIDELITY modes.
@@ -635,6 +648,7 @@ One modal, drag-and-drop primary, picker secondary. Fidelity Mode lands here bec
 - [ ] `INSTALL.md` — one-paragraph install instructions per OS for iverilog + yosys + nextpnr-ice40.
 - [ ] README updates: `### HDL Quickstart` section (export in one click, import by drag-and-drop), troubleshooting.
 - [ ] Tag release as `v2.0 — HDL toolchain`.
+- [ ] **VERILOG-tab demo:** ship `examples/circuits/verilog-phase13-corpus-tour.json` tagged `['verilog', 'phase13', 'release', ...]`. Numbered title `13. VERILOG — release showcase` (a small but representative slice of the final corpus, chosen so the user can browse a single demo and see every category of construct land in real components).
 
 ### Coverage Floor (per phase)
 
@@ -853,12 +867,15 @@ Every time a new component type is introduced, walk through this list **in order
 - [ ] If the component has multiple named outputs, add it to `PINS_BY_TYPE` with `[['NAME', idx], …]`.
 - [ ] If the component has multiple named inputs worth picking, add it to `INPUT_PINS_BY_TYPE`.
 
-### 10. HDL export (when the HDL Toolchain phase touches it)
-- [ ] Add a translator in `js/hdl/translators/` emitting Verilog for the new type.
+### 10. HDL export
+*Mandatory once HDL Phase 3 lands.* Until then: leave a `// TODO(hdl-phase-3): translator` comment on the type's factory entry.
+- [ ] Add a translator in `js/hdl/translators/<family>.js` for the new type, registered via `registerTranslator(COMPONENT_TYPES.XYZ, ...)`. Pick the matching family file (`logic-gates.js`, `arithmetic.js`, `muxing.js`, `flip-flops.js`, `registers.js`, `memory.js`, `cpu.js`); create one if the component is a new family (e.g. DFT cells get `dft.js`).
+- [ ] Add the translator's test to the matching phase's test file (`test-hdl-combinational.mjs` / `test-hdl-sequential.mjs` / `test-hdl-cpu.mjs`).
 - [ ] Update the HDL round-trip fuzz corpus so the component is exercised.
 
 ### 11. Example circuit
 - [ ] If relevant, add a small example demonstrating the component under `examples/circuits/` and register it in the `EXAMPLES` array in [js/app.js](js/app.js).
+- [ ] **If the component is HDL-relevant, also tag the demo with `'verilog'` (and optionally a phase tag like `'phase4'`) so it appears in the VERILOG examples tab. The same demo can sit in two tabs by carrying multiple matching tags — `_categoryOf()` matches the first one in tag order.**
 
 ### 12. Smoke test
 - [ ] Drop the new chip onto an empty canvas → confirm it renders, accepts wires, simulates, appears in the Pipeline panel, Memory Inspector, and exports/imports cleanly via JSON.

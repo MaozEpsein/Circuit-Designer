@@ -1,0 +1,5 @@
+{
+  "_doc": "Phase-2 retroactive demo for the VERILOG track. Loads as an empty scene (zero components, zero wires). Click VERILOG in the bottom toolbar to download circuit.v — the export pipeline (validate → fromCircuit → toVerilog, all of Phase 1+2) emits a clean empty `module top();` skeleton. This is what every later phase builds on; subsequent demos in this tab will exercise the Phase 3+ translators as they land.",
+  "nodes": [],
+  "wires": []
+}

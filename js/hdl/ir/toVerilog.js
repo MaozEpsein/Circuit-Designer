@@ -54,6 +54,15 @@ function emitPortConnection([portName, expr]) {
 }
 
 function emitInstance(inst) {
+  // Verilog primitive gates use POSITIONAL connection syntax — output
+  // first, then inputs. Module instances use NAMED ports. Translators
+  // mark primitives with `isPrimitive: true` and an explicit `portOrder`.
+  if (inst.isPrimitive && Array.isArray(inst.portOrder)) {
+    const args = inst.portOrder
+      .map(p => emitExpr(inst.portMap[p]))
+      .join(', ');
+    return `  ${inst.type} ${inst.instanceName}(${args});`;
+  }
   const entries = Object.entries(inst.portMap).sort(
     (a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
   );

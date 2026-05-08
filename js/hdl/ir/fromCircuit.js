@@ -8,7 +8,7 @@ import { hasTranslator, getTranslator } from '../translators/index.js';
 import { sanitizeIdentifier, uniqueIdentifier } from '../core/identifiers.js';
 import { SourceRef } from '../core/SourceRef.js';
 import {
-  makeModule, makePort, makeNet, makeInstance,
+  makeModule, makePort, makeNet, makeInstance, makeRef,
   PORT_DIR, NET_KIND,
 } from './types.js';
 
@@ -114,6 +114,16 @@ export function fromCircuit(circuitJSON) {
       const key = `${nodeId}:${outIdx}`;
       return netByEndpoint.get(key) || null;
     },
+    // Resolve the net feeding a target pin: walk wires to find the one
+    // landing on (nodeId, inputIndex), then look up the source net.
+    inputNet(nodeId, inputIndex = 0) {
+      const wire = (circuit.wires || []).find(
+        w => w.targetId === nodeId && (w.targetInputIndex || 0) === inputIndex,
+      );
+      if (!wire) return null;
+      const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
+      return netByEndpoint.get(key) || null;
+    },
     widthOf(nodeId) {
       const n = nodeById.get(nodeId);
       return n ? nodeBitWidth(n) : 1;
@@ -126,6 +136,17 @@ export function fromCircuit(circuitJSON) {
   const instances = [];
   const unmapped = [];     // [{ type, nodeId }] — caller renders as // TODO
   const instUsedNames = new Set();
+
+  // Carry pipeline metadata (the `stage` field set by the pipelining
+  // analyzer on canvas nodes) onto the IR instance as an opaque
+  // attribute. Phase 4's PIPE_REG translator + Phase 7's pretty-printer
+  // (stage-comment dividers) consume this. Translators that don't care
+  // ignore it.
+  const _attachStageAttribute = (inst, node) => {
+    if (node.stage === undefined || node.stage === null) return;
+    if (!Array.isArray(inst.attributes)) inst.attributes = [];
+    inst.attributes.push({ key: 'stage', value: node.stage });
+  };
 
   for (const node of (circuit.nodes || [])) {
     if (!node.type) continue;
@@ -141,15 +162,42 @@ export function fromCircuit(circuitJSON) {
       // Enforce unique instance names.
       if (!inst.instanceName) inst.instanceName = ctx.instanceName(node);
       inst.instanceName = uniqueIdentifier(inst.instanceName, instUsedNames, 'u');
+      _attachStageAttribute(inst, node);
       instances.push(inst);
     }
     if (Array.isArray(out.instances)) {
       for (const inst of out.instances) {
         if (!inst.instanceName) inst.instanceName = ctx.instanceName(node);
         inst.instanceName = uniqueIdentifier(inst.instanceName, instUsedNames, 'u');
+        _attachStageAttribute(inst, node);
         instances.push(inst);
       }
     }
+  }
+
+  // Wire OUTPUT ports. For each top-level OUTPUT node, find the wire
+  // driving it and emit an `assign <port> = <srcNet>;`. Without this,
+  // the port appears in the module header but nothing drives it, and
+  // iverilog (correctly) reports the port as unconnected.
+  const assigns = [];
+  for (const node of (circuit.nodes || [])) {
+    if (node.type !== 'OUTPUT') continue;
+    const port = portByNodeId.get(node.id);
+    if (!port) continue;
+    const wire = (circuit.wires || []).find(
+      w => w.targetId === node.id && (w.targetInputIndex || 0) === 0,
+    );
+    if (!wire) continue;
+    const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
+    const srcNet = netByEndpoint.get(key);
+    if (!srcNet) continue;
+    assigns.push({
+      kind: 'Assign',
+      sourceRef: SourceRef.fromWire(wire.id),
+      attributes: [],
+      lhs: makeRef(port.name, port.width),
+      rhs: makeRef(srcNet.name, srcNet.width || port.width),
+    });
   }
 
   const ir = makeModule({
@@ -157,7 +205,7 @@ export function fromCircuit(circuitJSON) {
     ports,
     nets,
     instances,
-    assigns: [],
+    assigns,
     alwaysBlocks: [],
     memories: [],
     submodules: [],

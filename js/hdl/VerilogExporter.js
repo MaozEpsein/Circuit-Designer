@@ -12,6 +12,7 @@ import { validateCircuit, hasBlockingErrors } from './core/CircuitValidator.js';
 import { fromCircuit } from './ir/fromCircuit.js';
 import { toVerilog } from './ir/toVerilog.js';
 import { hasTranslator } from './translators/index.js';
+import './translators/all.js';     // side-effect: registers every translator
 
 export { sanitizeIdentifier } from './core/identifiers.js';
 export { HDLError, SEVERITY } from './core/HDLError.js';
