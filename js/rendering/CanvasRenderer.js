@@ -567,6 +567,33 @@ function _drawWires(nodes, wires, wireValues) {
 
     if (isCLK) ctx.setLineDash([]);
 
+    // DFT (Layer 1): stuck-at fault overlay — orange dashed restroke + S0/S1 badge.
+    if (wire.stuckAt === 0 || wire.stuckAt === 1) {
+      ctx.strokeStyle  = '#ff9933';
+      ctx.lineWidth    = Math.max(2, width);
+      ctx.setLineDash([6, 3]);
+      ctx.lineDashOffset = (Date.now() / 90) % 9;
+      ctx.shadowColor  = '#ff9933';
+      ctx.shadowBlur   = 6;
+      _drawManhattanPath(path);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.shadowBlur   = 0;
+      const mid = path[Math.floor(path.length / 2)];
+      ctx.fillStyle    = 'rgba(0,0,0,0.78)';
+      ctx.beginPath();
+      ctx.arc(mid.x, mid.y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle  = '#ff9933';
+      ctx.lineWidth    = 1;
+      ctx.stroke();
+      ctx.fillStyle    = '#ffb878';
+      ctx.font         = 'bold 9px monospace';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S' + wire.stuckAt, mid.x, mid.y);
+    }
+
     // Signal dot at source
     _drawSignalDot(path[0].x, path[0].y, val, width, isCLK);
 

@@ -46,7 +46,7 @@ const commands = new CommandManager(100);
 const simCtrl  = new SimulationController();
 const pipelineAnalyzer = new PipelineAnalyzer(scene);
 const pipelinePanel    = new PipelinePanel(pipelineAnalyzer);
-const dftPanel         = new DFTPanel();
+const dftPanel         = new DFTPanel(scene);
 const stageOverlay     = new StageOverlay(pipelineAnalyzer);
 
 // Pipeline panel asks to mutate a CU's props (e.g. branchPredictor dropdown);
@@ -103,6 +103,7 @@ const wireProps         = document.getElementById('wire-props');
 const wireNetName       = document.getElementById('wire-netname');
 const wireColorGroup    = document.getElementById('wire-color-group');
 const wireClockToggle   = document.getElementById('wire-clock-toggle');
+const wireStuckAt       = document.getElementById('wire-stuckat');
 const wireClearWaypoints = document.getElementById('wire-clear-waypoints');
 let _selectedWireId = null;
 
@@ -1137,6 +1138,7 @@ function _updateWirePropsPanel() {
   wireNetName.value = wire.netName || '';
   wireColorGroup.value = wire.colorGroup || '';
   wireClockToggle.textContent = wire.isClockWire ? 'ON' : 'OFF';
+  if (wireStuckAt) wireStuckAt.value = (wire.stuckAt === 0 || wire.stuckAt === 1) ? String(wire.stuckAt) : '';
 }
 
 // Wire selection: when clicking a wire in select mode, show wire props
@@ -1168,6 +1170,14 @@ wireClockToggle?.addEventListener('click', () => {
   if (!wire) return;
   wire.isClockWire = !wire.isClockWire;
   wireClockToggle.textContent = wire.isClockWire ? 'ON' : 'OFF';
+});
+
+wireStuckAt?.addEventListener('change', () => {
+  const wire = _getSelectedWire();
+  if (!wire) return;
+  const v = wireStuckAt.value;
+  wire.stuckAt = (v === '0' || v === '1') ? Number(v) : null;
+  bus.emit('node:props-changed');
 });
 
 wireClearWaypoints?.addEventListener('click', () => {
@@ -1647,7 +1657,10 @@ setInterval(() => {
 
 // ── Sequential Controls ─────────────────────────────────────
 function _updateSequentialUI() {
-  const isSeq = scene.hasSequentialElements();
+  // Show the top control bar whenever the canvas has ANY component, not
+  // just a CLOCK / FF. Combinational-only demos (e.g. DFT stuck-at tour)
+  // still benefit from the toolbar (sim speed slider, run/reset, etc.).
+  const isSeq = scene.hasSequentialElements() || scene.nodes.length > 0;
   _setClockControlsVisible(isSeq);
   // Show/hide FF palette
   const ffPalette = document.getElementById('ff-palette');
@@ -3751,11 +3764,11 @@ const EXAMPLES = [
   },
   // ── Test & DFT tab — one demo per layer of the DFT track.
   {
-    id: 'dft-welcome',
-    title: '0. DFT — welcome (panel scaffold)',
-    desc: 'Trivial scene (one INPUT → one OUTPUT) whose only job is to seed the new "Test & DFT" tab. Press T to open the DFT panel — it shows the empty scaffold. Subsequent layers add real DFT structure: stuck-at faults, fault coverage, scan chains, BIST, JTAG.',
-    tags: ['dft', 'scaffold'],
-    file: 'examples/circuits/dft-welcome.json',
+    id: 'dft-faults-tour',
+    title: '1. DFT — stuck-at faults tour',
+    desc: 'Tiny combinational scene: 4 INPUTs → 2 ANDs → 1 OR → 1 OUTPUT. The wire from AND1 to OR is pre-injected with a stuck-at-1 fault — rendered as an orange dashed line with an "S1" badge. OUT is forced to 1 regardless of inputs A/B. Open the DFT panel (T) to see the fault list enumerate all 7 wires × 2 stuck-at types = 14 possible fault sites, with the injected one highlighted. Select the orange wire and change its "Stuck-at" prop in the wire panel to "none" — propagation resumes normally.',
+    tags: ['dft', 'stuck-at', 'fault'],
+    file: 'examples/circuits/dft-faults-tour.json',
   },
 ];
 

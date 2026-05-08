@@ -209,5 +209,9 @@ export function createWire(sourceId, targetId, targetInputIndex = 0, sourceOutpu
     netName: opts.netName || '',          // Label for the net/wire
     colorGroup: opts.colorGroup || null,  // Color group identifier
     isClockWire: opts.isClockWire || false,
+    // DFT (Layer 1): stuck-at fault site. null = no fault, 0 = stuck-at-0,
+    // 1 = stuck-at-1. SimulationEngine intercepts wireValues.set and forces
+    // the stuck value into the wire whenever this is non-null.
+    stuckAt: opts.stuckAt ?? null,
   };
 }

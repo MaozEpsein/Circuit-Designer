@@ -279,6 +279,14 @@
         <span>Clock Wire</span>
         <button id="wire-clock-toggle" class="design-prop-toggle">OFF</button>
       </div>
+      <div class="design-prop-row" id="wire-stuckat-row" title="DFT — inject a stuck-at fault on this wire (orange dashed render)">
+        <span>Stuck-at</span>
+        <select id="wire-stuckat" style="background:#1a1208;color:#ffb878;border:1px solid #6a4020;font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px">
+          <option value="">none</option>
+          <option value="0">s-a-0</option>
+          <option value="1">s-a-1</option>
+        </select>
+      </div>
       <button id="wire-clear-waypoints" class="design-action" style="margin-top:6px;font-size:10px">RESET ROUTE</button>
     </div>
     <div id="design-actions">

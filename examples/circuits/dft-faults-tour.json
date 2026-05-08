@@ -1,0 +1,21 @@
+{
+  "nodes": [
+    { "type": "INPUT",     "x": -260, "y": -120, "fixedValue": 0, "label": "A", "id": "in_a" },
+    { "type": "INPUT",     "x": -260,  "y": -50, "fixedValue": 0, "label": "B", "id": "in_b" },
+    { "type": "INPUT",     "x": -260,   "y": 50, "fixedValue": 1, "label": "C", "id": "in_c" },
+    { "type": "INPUT",     "x": -260,  "y": 120, "fixedValue": 1, "label": "D", "id": "in_d" },
+    { "type": "GATE_SLOT", "x":  -90,  "y": -85, "gate": "AND", "label": "AND1", "id": "and1" },
+    { "type": "GATE_SLOT", "x":  -90,   "y": 85, "gate": "AND", "label": "AND2", "id": "and2" },
+    { "type": "GATE_SLOT", "x":   80,    "y": 0, "gate": "OR",  "label": "OR",   "id": "or1"  },
+    { "type": "OUTPUT",    "x":  240,    "y": 0, "targetValue": 1, "label": "OUT", "sandbox": true, "id": "out_1" }
+  ],
+  "wires": [
+    { "sourceId": "in_a", "targetId": "and1",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_a" },
+    { "sourceId": "in_b", "targetId": "and1",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_b" },
+    { "sourceId": "in_c", "targetId": "and2",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_c" },
+    { "sourceId": "in_d", "targetId": "and2",  "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_d" },
+    { "sourceId": "and1", "targetId": "or1",   "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_q1", "stuckAt": 1 },
+    { "sourceId": "and2", "targetId": "or1",   "targetInputIndex": 1, "sourceOutputIndex": 0, "id": "w_q2" },
+    { "sourceId": "or1",  "targetId": "out_1", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_o" }
+  ]
+}

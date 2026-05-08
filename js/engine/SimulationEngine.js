@@ -222,6 +222,31 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
   const nodeValues = new Map();
   const wireValues = new Map();
 
+  // ── DFT stuck-at fault injection ───────────────────────────
+  // Intercept every wireValues.set so a wire with `stuckAt = 0|1` always
+  // stores its stuck value, regardless of the upstream propagated value.
+  // Centralizing the override here means the 25+ wireValues.set sites
+  // throughout evaluate() don't each need to be patched.
+  const _wireById = new Map(wires.map(w => [w.id, w]));
+  const _origSet  = wireValues.set.bind(wireValues);
+  wireValues.set  = (id, val) => {
+    const w = _wireById.get(id);
+    if (w && (w.stuckAt === 0 || w.stuckAt === 1)) val = w.stuckAt;
+    return _origSet(id, val);
+  };
+  // Slot-aware reader. When a downstream consumer pulls a value via an
+  // input slot, this helper applies the wire's stuck-at fault before
+  // returning. Use this anywhere a slot read can replace a hand-rolled
+  // `outIdx + key + nodeValues.get(key)` triple.
+  const _readSlot = (slot, fallback = undefined) => {
+    const w = slot.wire;
+    if (w && (w.stuckAt === 0 || w.stuckAt === 1)) return w.stuckAt;
+    const outIdx = w.sourceOutputIndex || 0;
+    const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+    const v = nodeValues.get(key);
+    return (v === undefined && fallback !== undefined) ? fallback : v;
+  };
+
   // ── Build adjacency ───────────────────────────────────────
   const successors = new Map(nodes.map(n => [n.id, []]));
   const inputs     = new Map(nodes.map(n => [n.id, []]));
@@ -352,11 +377,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         value = null;
       } else {
         const inputSlots = inputs.get(id);
-        const args = inputSlots.map(slot => {
-          const outIdx = slot.wire.sourceOutputIndex || 0;
-          const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
-          return nodeValues.get(key);
-        });
+        const args = inputSlots.map(slot => _readSlot(slot));
         if (args.some(a => a === null || a === undefined)) {
           value = null;
         } else {
@@ -1452,11 +1473,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
 
       if (node.type === 'GATE_SLOT') {
         if (node.gate != null) {
-          const args = inputSlots.map(slot => {
-            const outIdx = slot.wire.sourceOutputIndex || 0;
-            const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
-            return nodeValues.get(key);
-          });
+          const args = inputSlots.map(slot => _readSlot(slot));
           if (!args.some(a => a === null || a === undefined)) {
             value = GATE_FN[node.gate](...args);
           }

@@ -19,7 +19,10 @@
 import { bus } from '../../core/EventBus.js';
 
 export class DFTPanel {
-  constructor() {
+  constructor(sceneRef = null) {
+    // Optional scene reference. When provided, sections like FAULT LIST
+    // and TESTABILITY OVERVIEW enumerate the live scene's wires.
+    this._scene   = sceneRef;
     this._el      = document.getElementById('dft-panel');
     this._header  = document.getElementById('dft-panel-header');
     this._summary = document.getElementById('dft-panel-summary');
@@ -115,19 +118,96 @@ export class DFTPanel {
   // toggleable.
   _render() {
     if (!this._body || !this._summary) return;
+    const wires    = this._scene?.wires || [];
+    const wireCnt  = wires.length;
+    const injected = wires.filter(w => w.stuckAt === 0 || w.stuckAt === 1).length;
+    const faultCnt = wireCnt * 2;
+
     this._summary.innerHTML = `
-      <span class="k">Status</span><span class="v">scaffold ready</span>
+      <span class="k">Wires</span><span class="v">${wireCnt}</span>
+      <span class="k">Faults possible (s-a-0 + s-a-1)</span><span class="v">${faultCnt}</span>
+      <span class="k">Currently injected</span><span class="v">${injected}</span>
     `;
-    this._body.innerHTML = `
-      <div class="dft-empty">
-        DFT panel is online. Drop test components (SCAN_FF, LFSR,
-        MISR, BIST, JTAG_TAP) or inject stuck-at faults on wires to
-        populate this view.<br><br>
-        Layers ship one at a time — Layer 1 adds the Fault List,
-        Layer 2 the Fault Coverage, Layer 3 Scan Chains, etc.
+
+    this._body.innerHTML =
+      this._renderTestabilityOverview(wires, injected) +
+      this._renderFaultList(wires);
+
+    this._applyCollapsibleSections();
+  }
+
+  // ── TESTABILITY OVERVIEW ────────────────────────────────────
+  _renderTestabilityOverview(wires, injected) {
+    const wireCnt   = wires.length;
+    const faultCnt  = wireCnt * 2;
+    const nodeCnt   = this._scene?.nodes?.length || 0;
+    const ffCnt     = (this._scene?.nodes || []).filter(
+      n => /FF|FLIPFLOP|REGISTER|LATCH/.test(n.type || '')
+    ).length;
+    return `
+      <div class="dft-overview-header dft-section-header">TESTABILITY OVERVIEW</div>
+      <div class="dft-perf-row">
+        <span class="k">Nodes / Wires</span><span class="v">${nodeCnt} / ${wireCnt}</span>
+        <span class="k">FFs (state-holding)</span><span class="v">${ffCnt}</span>
+        <span class="k">Total faults possible</span><span class="v">${faultCnt}</span>
+        <span class="k">Currently injected</span><span class="v">${injected}</span>
       </div>
     `;
-    this._applyCollapsibleSections();
+  }
+
+  // ── FAULT LIST ──────────────────────────────────────────────
+  _renderFaultList(wires) {
+    if (!wires.length) {
+      return `
+        <div class="dft-faultlist-header dft-section-header">FAULT LIST</div>
+        <div class="dft-empty">no wires in scene — drop components and connect them to enumerate fault sites.</div>
+      `;
+    }
+    // Visual conventions:
+    //   inactive cell  → muted dim dot
+    //   injected cell  → solid orange pill with the stuck value inside
+    //   injected row   → subtle orange row tint + bold wire-id
+    const cellInactive = '<span style="color:#444">·</span>';
+    const cellInject   = (val) =>
+      `<span style="display:inline-block;min-width:22px;padding:1px 6px;background:#ff9933;color:#1a0d00;border-radius:10px;font-weight:bold;font-size:0.85em;letter-spacing:0.5px;box-shadow:0 0 6px rgba(255,153,51,0.6)">S${val}</span>`;
+
+    const rows = wires.map(w => {
+      const id        = (w.id || `${w.sourceId}→${w.targetId}`).slice(0, 22);
+      const isInject  = (w.stuckAt === 0 || w.stuckAt === 1);
+      const sa0       = w.stuckAt === 0 ? cellInject(0) : cellInactive;
+      const sa1       = w.stuckAt === 1 ? cellInject(1) : cellInactive;
+      const status    = isInject
+        ? `<span style="color:#ffb878;font-weight:bold">s-a-${w.stuckAt} ◀</span>`
+        : '<span style="color:#555">—</span>';
+      const rowStyle  = isInject ? 'background:rgba(255,153,51,0.08)' : '';
+      const idStyle   = isInject ? 'color:#ffb878;font-weight:bold' : 'color:#f0e2cf';
+      return `<tr style="${rowStyle}">
+        <td style="padding:2px 8px;${idStyle}">${id}</td>
+        <td style="padding:2px 8px">${(w.sourceId || '').slice(0, 12)}</td>
+        <td style="padding:2px 8px">${(w.targetId || '').slice(0, 12)}[${w.targetInputIndex ?? 0}]</td>
+        <td style="padding:2px 8px;text-align:center">${sa0}</td>
+        <td style="padding:2px 8px;text-align:center">${sa1}</td>
+        <td style="padding:2px 8px">${status}</td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="dft-faultlist-header dft-section-header">FAULT LIST</div>
+      <div style="padding:0 1.2em;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:0.92em">
+          <thead>
+            <tr style="color:#876;border-bottom:1px solid #401a00">
+              <th style="padding:3px 8px;text-align:left">wire-id</th>
+              <th style="padding:3px 8px;text-align:left">source</th>
+              <th style="padding:3px 8px;text-align:left">target[in]</th>
+              <th style="padding:3px 8px">s-a-0</th>
+              <th style="padding:3px 8px">s-a-1</th>
+              <th style="padding:3px 8px;text-align:left">injected</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
   }
 
   // Wraps each "*-header" element in a .dft-section container with
