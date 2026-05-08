@@ -1,0 +1,43 @@
+{
+  "_doc": "Phase-4a demo: all four flip-flop flavours sharing one clock. D, T, SR, JK side by side. Click VERILOG to see the first sequential output the toolchain produces — every FF lowers to an `always @(posedge clk)` block driving its Q output (declared as `reg`). The next-state expression is the FF type's truth table compiled to a ternary chain: D = `d`; T = `t ? ~q : q`; SR = `(s & ~r) ? 1 : (~s & r) ? 0 : q`; JK = `(j & ~k) ? 1 : (~j & k) ? 0 : (j & k) ? ~q : q`. iverilog parses the result without warnings; L2 (VCD diff vs native simulator) is the next gate, scheduled with the rest of the sequential phase.",
+  "nodes": [
+    { "type": "CLOCK", "x": -380, "y": -250, "value": 0, "id": "clk" },
+
+    { "type": "INPUT",  "x": -380, "y": -160, "fixedValue": 1, "label": "d",   "id": "d_in" },
+    { "type": "FF_SLOT","x":  -80, "y": -160, "ffType": "D", "label": "DFF",   "id": "ff_d" },
+    { "type": "OUTPUT", "x":  220, "y": -160, "targetValue": 0, "sandbox": true, "label": "q_d", "id": "q_d" },
+
+    { "type": "INPUT",  "x": -380,  "y": -60, "fixedValue": 1, "label": "t",   "id": "t_in" },
+    { "type": "FF_SLOT","x":  -80,  "y": -60, "ffType": "T", "label": "TFF",   "id": "ff_t" },
+    { "type": "OUTPUT", "x":  220,  "y": -60, "targetValue": 0, "sandbox": true, "label": "q_t", "id": "q_t" },
+
+    { "type": "INPUT",  "x": -380,   "y": 50, "fixedValue": 0, "label": "s",   "id": "s_in" },
+    { "type": "INPUT",  "x": -380,   "y": 90, "fixedValue": 1, "label": "r",   "id": "r_in" },
+    { "type": "FF_SLOT","x":  -80,   "y": 60, "ffType": "SR","label": "SR",    "id": "ff_sr" },
+    { "type": "OUTPUT", "x":  220,   "y": 60, "targetValue": 0, "sandbox": true, "label": "q_sr", "id": "q_sr" },
+
+    { "type": "INPUT",  "x": -380,  "y": 170, "fixedValue": 1, "label": "j",   "id": "j_in" },
+    { "type": "INPUT",  "x": -380,  "y": 210, "fixedValue": 1, "label": "k",   "id": "k_in" },
+    { "type": "FF_SLOT","x":  -80,  "y": 180, "ffType": "JK","label": "JK",    "id": "ff_jk" },
+    { "type": "OUTPUT", "x":  220,  "y": 180, "targetValue": 0, "sandbox": true, "label": "q_jk", "id": "q_jk" }
+  ],
+  "wires": [
+    { "sourceId": "d_in", "targetId": "ff_d", "targetInputIndex": 0, "id": "w_d" },
+    { "sourceId": "clk",  "targetId": "ff_d", "targetInputIndex": 1, "isClockWire": true, "id": "w_clk_d" },
+    { "sourceId": "ff_d", "targetId": "q_d",  "targetInputIndex": 0, "id": "w_q_d" },
+
+    { "sourceId": "t_in", "targetId": "ff_t", "targetInputIndex": 0, "id": "w_t" },
+    { "sourceId": "clk",  "targetId": "ff_t", "targetInputIndex": 1, "isClockWire": true, "id": "w_clk_t" },
+    { "sourceId": "ff_t", "targetId": "q_t",  "targetInputIndex": 0, "id": "w_q_t" },
+
+    { "sourceId": "s_in", "targetId": "ff_sr","targetInputIndex": 0, "id": "w_s" },
+    { "sourceId": "r_in", "targetId": "ff_sr","targetInputIndex": 1, "id": "w_r" },
+    { "sourceId": "clk",  "targetId": "ff_sr","targetInputIndex": 2, "isClockWire": true, "id": "w_clk_sr" },
+    { "sourceId": "ff_sr","targetId": "q_sr", "targetInputIndex": 0, "id": "w_q_sr" },
+
+    { "sourceId": "j_in", "targetId": "ff_jk","targetInputIndex": 0, "id": "w_j" },
+    { "sourceId": "k_in", "targetId": "ff_jk","targetInputIndex": 1, "id": "w_k" },
+    { "sourceId": "clk",  "targetId": "ff_jk","targetInputIndex": 2, "isClockWire": true, "id": "w_clk_jk" },
+    { "sourceId": "ff_jk","targetId": "q_jk", "targetInputIndex": 0, "id": "w_q_jk" }
+  ]
+}

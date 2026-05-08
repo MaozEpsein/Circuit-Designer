@@ -3991,6 +3991,13 @@ const EXAMPLES = [
     tags: ['verilog', 'phase3', 'phase3e', 'sign-ext', 'bus-mux', 'display'],
     file: 'examples/circuits/verilog-phase3e-bus-display.json',
   },
+  {
+    id: 'verilog-phase4a-flip-flops',
+    title: '4a. VERILOG — flip-flops (D, T, SR, JK)',
+    desc: 'Phase-4a demo: the first sequential output the toolchain produces. Four FFs sharing one clock — D, T, SR, JK — each lowering to its own `always @(posedge clk)` block driving a `reg` net. The next-state expression is the FF type\'s truth table compiled to a ternary chain: D = `d`; T = `t ? ~q : q`; SR = `(s & ~r) ? 1 : (~s & r) ? 0 : q`; JK = `(j & ~k) ? 1 : (~j & k) ? 0 : (j & k) ? ~q : q`. iverilog parses without warnings.',
+    tags: ['verilog', 'phase4', 'phase4a', 'flip-flop', 'sequential'],
+    file: 'examples/circuits/verilog-phase4a-flip-flops.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

@@ -82,6 +82,47 @@ function emitAssign(a) {
   return `  assign ${emitExpr(a.lhs)} = ${emitExpr(a.rhs)};`;
 }
 
+// Emit a single statement inside an always block. Statement kinds are:
+//   { kind: 'NonBlockingAssign', lhs, rhs }  — `lhs <= rhs;`
+//   { kind: 'BlockingAssign',    lhs, rhs }  — `lhs = rhs;`
+//   { kind: 'IfStmt', cond, then: stmts[], else: stmts[] | null }
+function emitStatement(stmt, indent = '    ') {
+  if (stmt.kind === 'NonBlockingAssign') {
+    return `${indent}${emitExpr(stmt.lhs)} <= ${emitExpr(stmt.rhs)};`;
+  }
+  if (stmt.kind === 'BlockingAssign') {
+    return `${indent}${emitExpr(stmt.lhs)} = ${emitExpr(stmt.rhs)};`;
+  }
+  if (stmt.kind === 'IfStmt') {
+    const lines = [`${indent}if (${emitExpr(stmt.cond)}) begin`];
+    for (const s of (stmt.then || [])) lines.push(emitStatement(s, indent + '  '));
+    lines.push(`${indent}end`);
+    if (stmt.else && stmt.else.length) {
+      lines[lines.length - 1] += ' else begin';
+      for (const s of stmt.else) lines.push(emitStatement(s, indent + '  '));
+      lines.push(`${indent}end`);
+    }
+    return lines.join('\n');
+  }
+  return `${indent}/* <unknown stmt: ${stmt.kind}> */`;
+}
+
+// Emit an always block. Sensitivity is one of:
+//   { star: true }                                  — `@(*)`
+//   { triggers: [{ edge: 'posedge'|'negedge', signal: '<name>' }, ...] }
+function emitAlways(blk) {
+  let sens;
+  if (blk.sensitivity?.star) sens = '@(*)';
+  else {
+    const trigs = (blk.sensitivity?.triggers || []).map(
+      t => `${t.edge} ${t.signal}`,
+    ).join(' or ');
+    sens = `@(${trigs || '*'})`;
+  }
+  const body = (blk.body || []).map(s => emitStatement(s)).join('\n');
+  return `  always ${sens} begin\n${body}\n  end`;
+}
+
 export function toVerilog(ir, opts = {}) {
   const { header = false, headerText = null } = opts;
   const lines = [];
@@ -119,6 +160,7 @@ export function toVerilog(ir, opts = {}) {
   const bodyLines = [];
   for (const a of ir.assigns) bodyLines.push(emitAssign(a));
   for (const inst of ir.instances) bodyLines.push(emitInstance(inst));
+  for (const blk of (ir.alwaysBlocks || [])) bodyLines.push(emitAlways(blk));
   if (Array.isArray(ir._unmapped)) {
     for (const u of ir._unmapped) {
       bodyLines.push(`  // TODO: translator for ${u.type} (${u.nodeId}) not yet implemented`);

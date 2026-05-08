@@ -7,3 +7,4 @@ import './logic-gates.js';
 import './arithmetic.js';
 import './muxing.js';
 import './width-changers.js';
+import './flip-flops.js';

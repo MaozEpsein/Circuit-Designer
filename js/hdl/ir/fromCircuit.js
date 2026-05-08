@@ -150,8 +150,12 @@ export function fromCircuit(circuitJSON) {
   const instances = [];
   const assigns = [];       // populated by translators that emit assign-form output
                             // and by the post-loop OUTPUT-port wiring pass.
+  const alwaysBlocks = [];  // populated by sequential translators (FFs, registers, …)
   const unmapped = [];      // [{ type, nodeId }] — caller renders as // TODO
   const instUsedNames = new Set();
+  // Net-name → kind override map. Translators that drive a net from an
+  // always block need it declared as `reg` instead of `wire`.
+  const _regNetNames = new Set();
 
   // Carry pipeline metadata (the `stage` field set by the pipelining
   // analyzer on canvas nodes) onto the IR instance as an opaque
@@ -199,6 +203,22 @@ export function fromCircuit(circuitJSON) {
     if (Array.isArray(out.assigns)) {
       for (const a of out.assigns) assigns.push(a);
     }
+    // Sequential translators emit Always blocks for clock-edge state
+    // updates. Each block carries its own sensitivity + body.
+    if (Array.isArray(out.alwaysBlocks)) {
+      for (const blk of out.alwaysBlocks) alwaysBlocks.push(blk);
+    }
+    // Translators name nets they drive procedurally (always-block LHS
+    // targets) so collectNets can declare them as `reg` not `wire`.
+    if (Array.isArray(out.regNets)) {
+      for (const name of out.regNets) _regNetNames.add(name);
+    }
+  }
+
+  // Apply the reg-net upgrade. Done after the loop so it picks up
+  // names regardless of translator iteration order.
+  for (const net of nets) {
+    if (_regNetNames.has(net.name)) net.netKind = NET_KIND.REG;
   }
 
   // Wire OUTPUT ports. For each top-level OUTPUT node, find the wire
@@ -262,7 +282,7 @@ export function fromCircuit(circuitJSON) {
     nets,
     instances,
     assigns,
-    alwaysBlocks: [],
+    alwaysBlocks,
     memories: [],
     submodules: [],
   });
