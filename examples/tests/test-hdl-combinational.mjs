@@ -363,6 +363,85 @@ console.log('Demux / Decoder / Encoder');
   }
 }
 
+// ── 4.8 Width-changers: SIGN_EXT, BUS_MUX, DISPLAY_7SEG ─────
+console.log('Width-changers / display sink');
+
+// SIGN_EXT 4 → 8: replicate-concat form
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'in', type: 'INPUT', label: 'in', bitWidth: 4 },
+      { id: 'se', type: 'SIGN_EXT', inBits: 4, outBits: 8, label: 'se' },
+      { id: 'out', type: 'OUTPUT', label: 'out', bitWidth: 8 },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'in', targetId: 'se', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'se', targetId: 'out', targetInputIndex: 0 },
+    ],
+  }, { topName: 'se_test', header: false });
+  check('SIGN_EXT: replicates sign bit then concats',
+    /\{\{4\{in\[3\]\}\},\s*in\}/.test(v));
+  check('SIGN_EXT: net widened to 8-bit', /wire\s+\[7:0\]\s+net_se_0/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('SIGN_EXT: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// BUS_MUX 2:1 8-bit: clean ternary
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a', type: 'INPUT', label: 'a', bitWidth: 8 },
+      { id: 'b', type: 'INPUT', label: 'b', bitWidth: 8 },
+      { id: 's', type: 'INPUT', label: 's' },
+      { id: 'mx', type: 'BUS_MUX', inputCount: 2, bitWidth: 8, label: 'mx' },
+      { id: 'y', type: 'OUTPUT', label: 'y', bitWidth: 8 },
+    ],
+    wires: [
+      { id: 'w1', sourceId: 'a', targetId: 'mx', targetInputIndex: 0 },
+      { id: 'w2', sourceId: 'b', targetId: 'mx', targetInputIndex: 1 },
+      { id: 'w3', sourceId: 's', targetId: 'mx', targetInputIndex: 2 },
+      { id: 'w4', sourceId: 'mx', targetId: 'y', targetInputIndex: 0 },
+    ],
+  }, { topName: 'bm_test', header: false });
+  check('BUS_MUX 2:1: ternary form', /assign\s+net_mx_0\s*=\s*\(s\s*\?\s*b\s*:\s*a\)/.test(v));
+  check('BUS_MUX 2:1: net is 8-bit', /wire\s+\[7:0\]\s+net_mx_0/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('BUS_MUX: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// DISPLAY_7SEG: becomes a 7-bit output port packing 7 input pins
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'a', type: 'INPUT', label: 'a' }, { id: 'b', type: 'INPUT', label: 'b' },
+      { id: 'c', type: 'INPUT', label: 'c' }, { id: 'd', type: 'INPUT', label: 'd' },
+      { id: 'e', type: 'INPUT', label: 'e' }, { id: 'f', type: 'INPUT', label: 'f' },
+      { id: 'g', type: 'INPUT', label: 'g' },
+      { id: 'd7', type: 'DISPLAY_7SEG', label: 'seg7' },
+    ],
+    wires: [
+      { id: 'w0', sourceId: 'a', targetId: 'd7', targetInputIndex: 0 },
+      { id: 'w1', sourceId: 'b', targetId: 'd7', targetInputIndex: 1 },
+      { id: 'w2', sourceId: 'c', targetId: 'd7', targetInputIndex: 2 },
+      { id: 'w3', sourceId: 'd', targetId: 'd7', targetInputIndex: 3 },
+      { id: 'w4', sourceId: 'e', targetId: 'd7', targetInputIndex: 4 },
+      { id: 'w5', sourceId: 'f', targetId: 'd7', targetInputIndex: 5 },
+      { id: 'w6', sourceId: 'g', targetId: 'd7', targetInputIndex: 6 },
+    ],
+  }, { topName: 'd7_test', header: false });
+  check('DISPLAY_7SEG: emits 7-bit output port', /output\s+\[6:0\]\s+seg7/.test(v));
+  check('DISPLAY_7SEG: packs MSB-first {g, f, e, d, c, b, a}',
+    /\{g,\s*f,\s*e,\s*d,\s*c,\s*b,\s*a\}/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('DISPLAY_7SEG: iverilog parses', r.ok, r.stderr);
+  }
+}
+
 // ── 5. Empty GATE_SLOT (gate field unset) — silently skipped ─
 // Mirrors the canvas behaviour: an empty FF / gate slot is a "drop
 // target", not a circuit element. The translator returns nothing and

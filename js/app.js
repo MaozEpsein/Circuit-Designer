@@ -3984,6 +3984,13 @@ const EXAMPLES = [
     tags: ['verilog', 'phase3', 'phase3d', 'demux', 'decoder', 'encoder'],
     file: 'examples/circuits/verilog-phase3d-demux-dec-enc.json',
   },
+  {
+    id: 'verilog-phase3e-bus-display',
+    title: '3e. VERILOG — width-changers + 7-segment display',
+    desc: 'Phase-3e demo: SIGN_EXT (4→8 sign-extension via `{{4{in[3]}}, in}`), BUS_MUX 2:1 over 8-bit buses (clean ternary), and DISPLAY_7SEG (seven 1-bit input pins packed MSB-first into a 7-bit output port `seg7[6:0] = {g, f, e, d, c, b, a}`). All three lower without `always` blocks. Closes the combinational set for Phase 3 — only TRIBUF (Phase 5, BUS path) and Yosys L3/L4 still pending.',
+    tags: ['verilog', 'phase3', 'phase3e', 'sign-ext', 'bus-mux', 'display'],
+    file: 'examples/circuits/verilog-phase3e-bus-display.json',
+  },
 ];
 
 const examplesOverlay = document.getElementById('examples-overlay');

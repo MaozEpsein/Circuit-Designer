@@ -1,0 +1,40 @@
+{
+  "_doc": "Phase-3e demo: width-changers and the display sink. Three independent paths in one scene:\n  • SIGN_EXT 4→8: sign-extends a 4-bit input to 8 bits via the canonical Verilog `{{4{in[3]}}, in}` replicate-concat.\n  • BUS_MUX 2:1 (8-bit): selects between two 8-bit buses with a clean ternary `(s ? b : a)`.\n  • DISPLAY_7SEG: seven 1-bit inputs (a..g) become a 7-bit output port `seg7[6:0]`, packed via Verilog concat `{g, f, e, d, c, b, a}`.\nClick VERILOG to see all three lower in the same module.",
+  "nodes": [
+    { "type": "INPUT",    "x": -380, "y": -240, "fixedValue": 5, "bitWidth": 4, "label": "se_in", "id": "se_in" },
+    { "type": "SIGN_EXT", "x":  -80, "y": -240, "inBits": 4, "outBits": 8, "label": "SE 4→8", "id": "se" },
+    { "type": "OUTPUT",   "x":  220, "y": -240, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "se_out", "id": "se_out" },
+
+    { "type": "INPUT",   "x": -380,  "y": -80, "fixedValue":  10, "bitWidth": 8, "label": "bm_a", "id": "bm_a" },
+    { "type": "INPUT",   "x": -380,  "y": -30, "fixedValue": 200, "bitWidth": 8, "label": "bm_b", "id": "bm_b" },
+    { "type": "INPUT",   "x": -380,   "y": 20, "fixedValue": 1,                 "label": "bm_s", "id": "bm_s" },
+    { "type": "BUS_MUX", "x":  -80,  "y": -30, "inputCount": 2, "bitWidth": 8, "label": "BMUX 2:1", "id": "bmx" },
+    { "type": "OUTPUT",  "x":  220,  "y": -30, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "bm_y", "id": "bm_y" },
+
+    { "type": "INPUT", "x": -380, "y": 130, "fixedValue": 1, "label": "a", "id": "sa" },
+    { "type": "INPUT", "x": -380, "y": 160, "fixedValue": 1, "label": "b", "id": "sb" },
+    { "type": "INPUT", "x": -380, "y": 190, "fixedValue": 1, "label": "c", "id": "sc" },
+    { "type": "INPUT", "x": -380, "y": 220, "fixedValue": 0, "label": "d", "id": "sd" },
+    { "type": "INPUT", "x": -380, "y": 250, "fixedValue": 0, "label": "e", "id": "se_seg" },
+    { "type": "INPUT", "x": -380, "y": 280, "fixedValue": 1, "label": "f", "id": "sf" },
+    { "type": "INPUT", "x": -380, "y": 310, "fixedValue": 1, "label": "g", "id": "sg" },
+    { "type": "DISPLAY_7SEG", "x":  -80, "y": 220, "label": "DISP", "id": "disp" }
+  ],
+  "wires": [
+    { "sourceId": "se_in", "targetId": "se",  "targetInputIndex": 0, "id": "w_se_in" },
+    { "sourceId": "se",    "targetId": "se_out", "targetInputIndex": 0, "id": "w_se_out" },
+
+    { "sourceId": "bm_a", "targetId": "bmx", "targetInputIndex": 0, "id": "w_bm_a" },
+    { "sourceId": "bm_b", "targetId": "bmx", "targetInputIndex": 1, "id": "w_bm_b" },
+    { "sourceId": "bm_s", "targetId": "bmx", "targetInputIndex": 2, "id": "w_bm_s" },
+    { "sourceId": "bmx",  "targetId": "bm_y", "targetInputIndex": 0, "id": "w_bm_y" },
+
+    { "sourceId": "sa", "targetId": "disp", "targetInputIndex": 0, "id": "w_sa" },
+    { "sourceId": "sb", "targetId": "disp", "targetInputIndex": 1, "id": "w_sb" },
+    { "sourceId": "sc", "targetId": "disp", "targetInputIndex": 2, "id": "w_sc" },
+    { "sourceId": "sd", "targetId": "disp", "targetInputIndex": 3, "id": "w_sd" },
+    { "sourceId": "se_seg", "targetId": "disp", "targetInputIndex": 4, "id": "w_se_seg" },
+    { "sourceId": "sf", "targetId": "disp", "targetInputIndex": 5, "id": "w_sf" },
+    { "sourceId": "sg", "targetId": "disp", "targetInputIndex": 6, "id": "w_sg" }
+  ]
+}

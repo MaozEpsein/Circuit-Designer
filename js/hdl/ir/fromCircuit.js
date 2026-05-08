@@ -13,6 +13,9 @@ import {
 } from './types.js';
 
 function nodeBitWidth(node) {
+  // Component-specific overrides come first, then the generic
+  // bitWidth/dataBits fallback chain.
+  if (node?.type === 'SIGN_EXT') return Math.max(1, (node.outBits ?? 8) | 0);
   const w = node?.bitWidth ?? node?.dataBits ?? node?.width ?? 1;
   return Math.max(1, w | 0);
 }
@@ -34,6 +37,17 @@ function collectPorts(circuit, usedNames) {
       const name = uniqueIdentifier(n.label || n.id, usedNames, 'out');
       const p = makePort({
         name, dir: PORT_DIR.OUTPUT, width: nodeBitWidth(n),
+        sourceRef: SourceRef.fromNode(n.id),
+      });
+      ports.push(p);
+      portByNodeId.set(n.id, p);
+    } else if (n.type === 'DISPLAY_7SEG') {
+      // Display sinks become 7-bit output ports off-chip. Each input
+      // pin (a..g, indices 0..6) maps to one bit of the bus. The
+      // translator below packs them via a Concat.
+      const name = uniqueIdentifier(n.label || (n.id + '_seg'), usedNames, 'seg');
+      const p = makePort({
+        name, dir: PORT_DIR.OUTPUT, width: 7,
         sourceRef: SourceRef.fromNode(n.id),
       });
       ports.push(p);
@@ -152,7 +166,11 @@ export function fromCircuit(circuitJSON) {
 
   for (const node of (circuit.nodes || [])) {
     if (!node.type) continue;
-    if (node.type === 'INPUT' || node.type === 'OUTPUT' || node.type === 'CLOCK') continue;
+    // Port nodes (INPUT / OUTPUT / CLOCK / DISPLAY_7SEG) have already
+    // been turned into module ports by collectPorts. The OUTPUT-port
+    // wiring pass below routes their drivers; no translator needed.
+    if (node.type === 'INPUT' || node.type === 'OUTPUT' ||
+        node.type === 'CLOCK' || node.type === 'DISPLAY_7SEG') continue;
     if (!hasTranslator(node.type)) {
       unmapped.push({ type: node.type, nodeId: node.id });
       continue;
@@ -188,23 +206,54 @@ export function fromCircuit(circuitJSON) {
   // the port appears in the module header but nothing drives it, and
   // iverilog (correctly) reports the port as unconnected.
   for (const node of (circuit.nodes || [])) {
-    if (node.type !== 'OUTPUT') continue;
-    const port = portByNodeId.get(node.id);
-    if (!port) continue;
-    const wire = (circuit.wires || []).find(
-      w => w.targetId === node.id && (w.targetInputIndex || 0) === 0,
-    );
-    if (!wire) continue;
-    const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
-    const srcNet = netByEndpoint.get(key);
-    if (!srcNet) continue;
-    assigns.push({
-      kind: 'Assign',
-      sourceRef: SourceRef.fromWire(wire.id),
-      attributes: [],
-      lhs: makeRef(port.name, port.width),
-      rhs: makeRef(srcNet.name, srcNet.width || port.width),
-    });
+    if (node.type === 'OUTPUT') {
+      const port = portByNodeId.get(node.id);
+      if (!port) continue;
+      const wire = (circuit.wires || []).find(
+        w => w.targetId === node.id && (w.targetInputIndex || 0) === 0,
+      );
+      if (!wire) continue;
+      const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
+      const srcNet = netByEndpoint.get(key);
+      if (!srcNet) continue;
+      assigns.push({
+        kind: 'Assign',
+        sourceRef: SourceRef.fromWire(wire.id),
+        attributes: [],
+        lhs: makeRef(port.name, port.width),
+        rhs: makeRef(srcNet.name, srcNet.width || port.width),
+      });
+    } else if (node.type === 'DISPLAY_7SEG') {
+      // Pack the seven segment-input wires into a single 7-bit Concat
+      // and assign to the DISPLAY_7SEG's output port. Verilog concat
+      // is MSB-first, so segment 6 sits at bit 6 (leftmost) and
+      // segment 0 at bit 0 (rightmost). Missing wires fall through
+      // as 1'b0 placeholders so the port stays correctly widthed.
+      const port = portByNodeId.get(node.id);
+      if (!port) continue;
+      const parts = [];
+      for (let i = 6; i >= 0; i--) {
+        const wire = (circuit.wires || []).find(
+          w => w.targetId === node.id && (w.targetInputIndex || 0) === i,
+        );
+        if (wire) {
+          const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
+          const src = netByEndpoint.get(key);
+          parts.push(src
+            ? makeRef(src.name, 1)
+            : { kind: 'Literal', sourceRef: SourceRef.unknown(), attributes: [], value: 0, width: 1 });
+        } else {
+          parts.push({ kind: 'Literal', sourceRef: SourceRef.unknown(), attributes: [], value: 0, width: 1 });
+        }
+      }
+      assigns.push({
+        kind: 'Assign',
+        sourceRef: SourceRef.fromNode(node.id),
+        attributes: [],
+        lhs: makeRef(port.name, 7),
+        rhs: { kind: 'Concat', sourceRef: SourceRef.fromNode(node.id), attributes: [], parts, width: 7 },
+      });
+    }
   }
 
   const ir = makeModule({
