@@ -54,6 +54,28 @@ function nodeBitWidth(node, outIdx = 0) {
     if (outIdx === 0) return Math.max(1, (node.dataBits ?? node.bitWidth ?? 8) | 0);
     return 1;
   }
+  // SUB_CIRCUIT — output width is dictated by the inner OUTPUT node it
+  // maps to. We try the inner node's own bitWidth first, and only
+  // fall back to its driver wire's source width when bitWidth is
+  // unset. Without this, every SUB_CIRCUIT output net at the outer
+  // scope defaults to 1 bit and iverilog warns about pruning high
+  // bits at every instantiation site (the cpu-detailed regression).
+  if (node?.type === 'SUB_CIRCUIT' && node.subCircuit && Array.isArray(node.subOutputs)) {
+    const outDef = node.subOutputs[outIdx];
+    const sc = node.subCircuit;
+    if (outDef && Array.isArray(sc.nodes)) {
+      const inner = sc.nodes.find(n => n.id === outDef.id);
+      if (inner) {
+        if (inner.bitWidth) return Math.max(1, inner.bitWidth | 0);
+        const w = (sc.wires || []).find(w => w.targetId === inner.id);
+        if (w) {
+          const src = sc.nodes.find(n => n.id === w.sourceId);
+          if (src) return nodeBitWidth(src, w.sourceOutputIndex ?? 0);
+        }
+      }
+    }
+    return 1;
+  }
   const w = node?.bitWidth ?? node?.dataBits ?? node?.width ?? 1;
   return Math.max(1, w | 0);
 }

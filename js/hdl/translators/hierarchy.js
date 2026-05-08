@@ -28,7 +28,35 @@ import { SourceRef } from '../core/SourceRef.js';
 registerTranslator(COMPONENT_TYPES.SUB_CIRCUIT, (node, ctx) => {
   const sr = SourceRef.fromNode(node.id);
   if (!ctx.registerSubmodule) return {};
-  const moduleName = ctx.registerSubmodule(node);
+
+  // Cross-scope width inference: the inner INPUT nodes default to 1-bit
+  // when the user didn't pin a bitWidth, but they're being driven by
+  // potentially much wider outer wires. Before recursing into the inner
+  // scene, we clone the sub-circuit and stamp each inner INPUT's
+  // bitWidth from whatever the outer caller actually drives. Different
+  // external widths therefore produce different content hashes — and
+  // therefore different submodules — which is the right de-dup key
+  // until parameterised modules land.
+  const subInputsList = node.subInputs || [];
+  let patchedNode = node;
+  if (node.subCircuit && Array.isArray(node.subCircuit.nodes) && subInputsList.length) {
+    const cloned = JSON.parse(JSON.stringify(node.subCircuit));
+    for (let i = 0; i < subInputsList.length; i++) {
+      const innerId = subInputsList[i]?.id;
+      if (!innerId) continue;
+      const innerNode = cloned.nodes.find(n => n.id === innerId);
+      if (!innerNode) continue;
+      const extNet = ctx.inputNet(node.id, i);
+      // Use the outer wire's actual width — collectNets has already
+      // resolved that via nodeBitWidth on the outer source.
+      if (extNet && extNet.width > (innerNode.bitWidth || 1)) {
+        innerNode.bitWidth = extNet.width;
+      }
+    }
+    patchedNode = { ...node, subCircuit: cloned };
+  }
+
+  const moduleName = ctx.registerSubmodule(patchedNode);
   if (!moduleName) return {};
 
   // Look up the just-registered module so we can read its port list
