@@ -28,6 +28,7 @@ import { AnnotationLayer } from './ui/AnnotationLayer.js';
 import { ProjectStorage } from './ui/ProjectStorage.js';
 import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
+import { evaluate as evaluatePipeline } from './pipeline/StageEvaluator.js';
 import { PipelinePanel } from './pipeline/ui/PipelinePanel.js';
 import { DFTPanel } from './dft/ui/DFTPanel.js';
 import * as PipelineTelemetry from './pipeline/Telemetry.js';
@@ -2865,6 +2866,12 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   const btnTB       = document.getElementById('btn-verilog-tb');
   const btnZip      = document.getElementById('btn-verilog-zip');
   const warnEl      = document.getElementById('verilog-preview-warnings');
+  const violEl      = document.getElementById('verilog-preview-violations');
+  // "force anyway" gate state — when true, export proceeds despite
+  // pipeline violations and the Verilog gets a WARNING comment header
+  // listing every offending wire. Reset on each modal open so the user
+  // explicitly opts in for each session.
+  let _forceViolations = false;
   const chkHeader   = document.getElementById('chk-verilog-header');
   const txtTopName  = document.getElementById('txt-verilog-topname');
   const fnameEl     = document.getElementById('vp-filename');
@@ -3065,16 +3072,81 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
   let _lastVerilog = '';
   let _lastTop = 'top';
 
+  // Render the violations gate. Returns true when export is BLOCKED
+  // (violations present AND user has not checked "force anyway").
+  const renderViolations = () => {
+    if (!violEl) return false;
+    let result;
+    try { result = evaluatePipeline(scene); }
+    catch (_e) { violEl.classList.add('hidden'); return false; }
+    const v = result?.violations || [];
+    if (v.length === 0) {
+      violEl.classList.add('hidden');
+      violEl.innerHTML = '';
+      return false;
+    }
+    const items = v.slice(0, 30).map(x =>
+      `<li>wire <code>${x.wireId}</code>: <code>${x.srcId}</code> (stage ${x.srcStage}) → <code>${x.dstId}</code> (stage ${x.dstStage}) — needs ${x.missing} pipeline reg(s)</li>`
+    ).join('');
+    const more = v.length > 30 ? `<li>… ${v.length - 30} more</li>` : '';
+    violEl.classList.remove('hidden');
+    violEl.innerHTML =
+      `<span class="vp-viol-title">⛔ ${v.length} pipeline violation(s) detected — export blocked.</span>` +
+      `<ul>${items}${more}</ul>` +
+      `<label><input type="checkbox" id="chk-force-violations"${_forceViolations ? ' checked' : ''}> ` +
+      `force export anyway (Verilog will be tagged with <code>// WARNING</code> comments)</label>`;
+    const chkForce = violEl.querySelector('#chk-force-violations');
+    chkForce?.addEventListener('change', () => {
+      _forceViolations = !!chkForce.checked;
+      refresh();
+    });
+    // Stash for the export path to attach WARNING comments when forced.
+    violEl._violations = v;
+    return !_forceViolations;
+  };
+
   const refresh = () => {
     const includeHeader = !!chkHeader?.checked;
     const top = sanitizeTop(txtTopName?.value);
     _lastTop = top;
     if (txtTopName && txtTopName.value !== top) txtTopName.value = top;
     if (fnameEl) fnameEl.textContent = `${top}.v`;
+
+    const blocked = renderViolations();
+    if (blocked) {
+      // Don't run the exporter at all — show a placeholder body. Stats
+      // and warnings panels are also cleared so they don't show stale
+      // numbers from a previous (passing) circuit.
+      _lastVerilog = `// Export blocked — fix pipeline violations or check\n// "force export anyway" to override.\n`;
+      body.innerHTML = withLineNumbers(highlightVerilog(_lastVerilog));
+      if (warnEl) { warnEl.classList.add('hidden'); warnEl.innerHTML = ''; }
+      ['lines','ports','nets','assigns','always','mem'].forEach(k =>
+        document.getElementById('vp-stat-'+k).textContent = '—');
+      document.getElementById('vp-stat-todo').classList.add('hidden');
+      return;
+    }
+
     _lastVerilog = exportVerilog(scene.serialize(), {
       topName: top,
       header: includeHeader,
     });
+    // When forced past violations, prepend a WARNING comment block so
+    // the exported file itself records what was overridden. Listing
+    // wireIds keeps the tag stable across re-exports of the same scene.
+    const v = violEl?._violations || [];
+    if (_forceViolations && v.length) {
+      const banner = [
+        '// ============================================================',
+        `// WARNING: pipeline violation export forced (${v.length} wire(s)).`,
+        '//   The following wires cross stage boundaries without a',
+        '//   PIPE_REG. Synthesised behaviour will not match the canvas',
+        '//   pipelining analyzer\'s assumptions.',
+        ...v.map(x => `//   - ${x.wireId}: ${x.srcId} (s${x.srcStage}) → ${x.dstId} (s${x.dstStage})`),
+        '// ============================================================',
+        '',
+      ].join('\n');
+      _lastVerilog = banner + _lastVerilog;
+    }
     body.innerHTML = withLineNumbers(highlightVerilog(_lastVerilog));
     const s = statsOf(_lastVerilog);
     document.getElementById('vp-stat-lines').textContent   = s.lines;
@@ -3115,7 +3187,11 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
     }
   };
 
-  const openPreview = () => { refresh(); overlay.classList.remove('hidden'); };
+  const openPreview = () => {
+    _forceViolations = false;   // re-arm the gate every time the modal opens
+    refresh();
+    overlay.classList.remove('hidden');
+  };
   const closePreview = () => overlay.classList.add('hidden');
 
   btnOpen.addEventListener('click', openPreview);

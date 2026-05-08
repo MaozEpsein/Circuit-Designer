@@ -2263,6 +2263,25 @@
 #verilog-preview-stats b { color: #d8e4f0; font-weight: 600; margin-right: 3px; }
 #verilog-preview-stats .hidden { display: none; }
 #vp-stat-todo b { color: #ff8080; }
+#verilog-preview-violations {
+  padding: 8px 18px; background: #281418; border-bottom: 1px solid #5a2030;
+  font: 10px/1.5 'JetBrains Mono', monospace; color: #ff9a98;
+  max-height: 140px; overflow-y: auto;
+}
+#verilog-preview-violations.hidden { display: none; }
+#verilog-preview-violations .vp-viol-title {
+  font-weight: 600; color: #ff5050; letter-spacing: 0.5px; margin-right: 8px;
+}
+#verilog-preview-violations ul { margin: 4px 0 4px 16px; padding: 0; }
+#verilog-preview-violations li { color: #e8c0c0; }
+#verilog-preview-violations li code {
+  color: #ffd0d0; background: #2a0a14; padding: 0 4px; border-radius: 2px;
+}
+#verilog-preview-violations label {
+  display: inline-block; margin-top: 4px; cursor: pointer;
+  color: #ffb878; user-select: none;
+}
+#verilog-preview-violations label input { margin-right: 4px; vertical-align: middle; }
 #verilog-preview-warnings {
   padding: 8px 18px; background: #2a1a08; border-bottom: 1px solid #5a3a18;
   font: 10px/1.5 'JetBrains Mono', monospace; color: #ffb878;
