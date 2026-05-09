@@ -33,6 +33,66 @@ import { simulateFaults } from '../FaultSimulator.js';
  * @returns {Array<Array<object>>} list of chains, each an ordered
  *          list of SCAN_FF nodes from head to tail.
  */
+/**
+ * Resolve endpoint metadata for one detected chain — what drives the
+ * head's TI (scan-in source), where the tail's Q goes (scan-out
+ * sink), and which signal feeds the chain's TE pins (test enable).
+ * Returns:
+ *   { scanIn: { type, label, nodeId } | null,
+ *     scanOut: { type, label, nodeId } | null,
+ *     teSource: { type, label, nodeId } | null,
+ *     teShared: bool }                       // every cell shares one TE driver
+ *
+ * `null` means "not driven from anything in the scene". A SCAN_FF
+ * with an unwired TI is a chain head whose scan-in isn't connected;
+ * a tail whose Q isn't observed externally is a chain whose pattern
+ * response can't be read out — both are real DFT defects worth
+ * surfacing in the panel.
+ */
+export function describeChainEndpoints(chain, allNodes, wires) {
+  const nodeById = new Map(allNodes.map(n => [n.id, n]));
+  const head = chain[0];
+  const tail = chain[chain.length - 1];
+
+  // Head's TI driver. If the head sits at the start of a chain, its
+  // TI is by definition NOT another SCAN_FF — it's a primary input
+  // (scan_in pad), some other gate's output, or unwired.
+  const tiW = wires.find(w => w.targetId === head.id && w.targetInputIndex === 1);
+  const scanIn = tiW
+    ? (() => {
+        const src = nodeById.get(tiW.sourceId);
+        return src ? { type: src.type, label: src.label || src.id, nodeId: src.id } : null;
+      })()
+    : null;
+
+  // Tail's Q consumer. The tail's Q drives whatever wire leaves it;
+  // if that wire targets a non-SCAN_FF (since by chain detection no
+  // downstream SCAN_FF receives this Q), we report the consumer.
+  const qOut = wires.find(w => w.sourceId === tail.id && (w.sourceOutputIndex || 0) === 0);
+  const scanOut = qOut
+    ? (() => {
+        const dst = nodeById.get(qOut.targetId);
+        return dst ? { type: dst.type, label: dst.label || dst.id, nodeId: dst.id } : null;
+      })()
+    : null;
+
+  // TE driver: is the same source feeding every TE pin in the chain?
+  const teDrivers = chain.map(ff => {
+    const w = wires.find(w2 => w2.targetId === ff.id && w2.targetInputIndex === 2);
+    return w ? w.sourceId : null;
+  });
+  const distinct = new Set(teDrivers.filter(x => x !== null));
+  const teShared = teDrivers.every(d => d !== null) && distinct.size === 1;
+  const teSource = teShared
+    ? (() => {
+        const src = nodeById.get([...distinct][0]);
+        return src ? { type: src.type, label: src.label || src.id, nodeId: src.id } : null;
+      })()
+    : null;
+
+  return { scanIn, scanOut, teSource, teShared };
+}
+
 export function detectScanChains(scanFFs, wires) {
   if (scanFFs.length === 0) return [];
   const ffById = new Map(scanFFs.map(n => [n.id, n]));
@@ -408,8 +468,10 @@ export class DFTPanel {
   // forward (each Q can feed at most one downstream TI) until it
   // ends. Multiple disjoint chains in the same scene are supported.
   _renderScanChains() {
-    const scanFFs = (this._scene?.nodes || []).filter(n => n.type === 'SCAN_FF');
-    const totalFFs = (this._scene?.nodes || []).filter(
+    const allNodes = this._scene?.nodes || [];
+    const wires    = this._scene?.wires || [];
+    const scanFFs  = allNodes.filter(n => n.type === 'SCAN_FF');
+    const totalFFs = allNodes.filter(
       n => /FF|FLIPFLOP|REGISTER|LATCH/.test(n.type || '')
     ).length;
     if (scanFFs.length === 0) {
@@ -418,24 +480,78 @@ export class DFTPanel {
         <div class="dft-empty">No SCAN-FF in scene — drop a SCAN-FF chip (LOGIC tab) to enable scan-based testing.</div>
       `;
     }
-    const chains = detectScanChains(scanFFs, this._scene.wires || []);
+    const chains = detectScanChains(scanFFs, wires);
     const scanInserted = scanFFs.length;
     const scanability = totalFFs > 0 ? Math.round((scanInserted / totalFFs) * 100) : 100;
-    const rows = chains.map((chain, idx) => {
-      const arrow = chain.map(ff => ff.label || ff.id).join(' → ');
-      return `<div style="padding:2px 1.2em;color:#f0e2cf">
-        <span style="color:#876">chain_${idx}:</span>
-        ${arrow}
-        <span style="color:#876"> · length ${chain.length}</span>
-      </div>`;
+
+    // Categorise chains: a chain of length 1 whose SCAN_FF has neither
+    // a TI driver from a SCAN_FF (it's a head by definition) NOR a
+    // downstream SCAN_FF consuming its Q is an "orphan" — present in
+    // the scene but not wired into any actual chain. Worth flagging.
+    const isOrphan = (chain) => {
+      if (chain.length !== 1) return false;
+      const ff = chain[0];
+      const tiW = wires.find(w => w.targetId === ff.id && w.targetInputIndex === 1);
+      return !tiW;     // head with no TI driver at all
+    };
+
+    const fmtEnd = (e, fallbackText) => e
+      ? `<code class="dft-chain-end">${e.label} <span class="dft-chain-end-type">[${e.type}]</span></code>`
+      : `<span class="dft-chain-end-empty">${fallbackText}</span>`;
+
+    const rowsHtml = chains.map((chain, idx) => {
+      const ends = describeChainEndpoints(chain, allNodes, wires);
+      const cells = chain.map(ff => `<code>${ff.label || ff.id}</code>`).join(' → ');
+      const orphan = isOrphan(chain);
+      const teLine = ends.teShared
+        ? `TE shared ← ${fmtEnd(ends.teSource, '(unwired)')}`
+        : `TE per-cell (${chain.length} TE pins, not unified)`;
+      const orphanTag = orphan
+        ? `<span class="dft-chain-orphan">orphan</span>` : '';
+      return `
+        <div class="dft-chain-block">
+          <div class="dft-chain-title">
+            chain_${idx} <span class="dft-chain-len">· length ${chain.length}</span> ${orphanTag}
+          </div>
+          <div class="dft-chain-row">
+            <span class="dft-chain-pin">scan-in</span>
+            ${fmtEnd(ends.scanIn, '(unwired — chain has no test-vector source)')}
+          </div>
+          <div class="dft-chain-row">
+            <span class="dft-chain-pin">cells</span>
+            ${cells}
+          </div>
+          <div class="dft-chain-row">
+            <span class="dft-chain-pin">scan-out</span>
+            ${fmtEnd(ends.scanOut, '(unwired — chain response is unobservable)')}
+          </div>
+          <div class="dft-chain-row">
+            <span class="dft-chain-pin">test-en</span>
+            ${teLine}
+          </div>
+        </div>`;
     }).join('');
+
+    // High-level chain-coverage summary: cells inside any non-orphan
+    // chain over total scanability. Orphans count toward "scan FFs"
+    // but not toward "chain coverage" — they need wiring before they
+    // contribute to a real test.
+    const cellsInChains = chains
+      .filter(c => !isOrphan(c))
+      .reduce((sum, c) => sum + c.length, 0);
+    const chainedPct = scanInserted > 0
+      ? Math.round((cellsInChains / scanInserted) * 100)
+      : 0;
+    const orphanCount = chains.filter(isOrphan).length;
+
     return `
       <div class="dft-scan-header dft-section-header">SCAN CHAINS</div>
       <div class="dft-perf-row">
         <span class="k">Scan FFs</span><span class="v">${scanInserted} of ${totalFFs} (${scanability}% scanability)</span>
-        <span class="k">Chains detected</span><span class="v">${chains.length}</span>
+        <span class="k">Chains</span><span class="v">${chains.length} (${cellsInChains} cells, ${chainedPct}% in chain)</span>
+        ${orphanCount ? `<span class="k">Orphans</span><span class="v">${orphanCount}</span>` : ''}
       </div>
-      ${rows || '<div style="padding:0 1.2em;color:#876">No completed chains — wire SCAN-FF outputs into the next SCAN-FF\'s TI input to form a chain.</div>'}
+      ${rowsHtml || '<div style="padding:0 1.2em;color:#876">No completed chains — wire SCAN-FF outputs into the next SCAN-FF\'s TI input to form a chain.</div>'}
     `;
   }
 

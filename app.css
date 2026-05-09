@@ -3248,6 +3248,45 @@
 .dft-perf-row .k { color: #876;     white-space: nowrap; }
 .dft-perf-row .v { color: #f0e2cf;  font-weight: bold; }
 
+/* Per-chain block: small framed group showing scan-in / cells /
+   scan-out / TE pin in a 4-row mini-table. Compact so multiple
+   chains stay readable in a single panel scroll. */
+.dft-chain-block {
+  margin: 6px 1.2em 8px;
+  padding: 6px 10px;
+  background: rgba(255,160,40,0.04);
+  border-left: 2px solid #aa6a2a;
+  border-radius: 0 3px 3px 0;
+  font: 11px/1.4 'JetBrains Mono', monospace;
+}
+.dft-chain-title {
+  color: #ffb878; font-weight: 600; letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.dft-chain-len { color: #876; font-weight: normal; }
+.dft-chain-orphan {
+  display: inline-block; margin-left: 8px;
+  padding: 0 6px; border-radius: 2px;
+  background: #2a1a08; color: #ff8060;
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dft-chain-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  column-gap: 8px;
+  padding: 1px 0;
+  color: #f0e2cf;
+}
+.dft-chain-pin {
+  color: #876; text-align: right;
+  text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;
+  align-self: center;
+}
+.dft-chain-end { color: #ffd0a0; }
+.dft-chain-end-type { color: #876; font-size: 9px; }
+.dft-chain-end-empty { color: #ff8060; font-style: italic; }
+
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {
   padding: 1.5em 1.2em;
