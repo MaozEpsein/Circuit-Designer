@@ -1,0 +1,165 @@
+{
+  "_doc": "Complex DFT showcase — five scan chains across two clock domains plus a dense surrounding datapath. Open the DFT panel to see the chain diagrams light up:\n  • chain_0 — HEALTHY, CLK_FAST domain (3 cells, full scan-in/out, shared TE_GLOBAL).\n  • chain_1 — HEALTHY, CLK_SLOW domain (3 cells, second clock, second TE source TE_BIST).\n  • chain_2 — WARN, split TE (2 cells, scan-in + scan-out fine, but each cell uses a different TE source — visible as a dashed amber bar).\n  • chain_3 — BROKEN, scan-out floating (2 cells wired to each other but the tail's Q goes nowhere — chain response unobservable).\n  • chain_4 — ORPHAN (a lone SCAN_FF with nothing wired into TI or Q — can never participate in any test).\nSurrounding logic exercises ≥15 different component types so the canvas reads like a real subsystem rather than a pure scan-island: ALU, COUNTER, LFSR, ROM, RAM, REGISTER, COMPARATOR, MUX_2, FULL_ADDER, DECODER, ENCODER, FF_SLOT, GATE_SLOT (AND/OR/XOR/NOT), CLOCK ×2, INPUT/OUTPUT.",
+  "nodes": [
+    { "type": "CLOCK", "x": -460, "y": -340, "label": "CLK_FAST", "id": "clk_fast" },
+    { "type": "CLOCK", "x": -460, "y": -300, "label": "CLK_SLOW", "id": "clk_slow" },
+
+    { "type": "INPUT", "x": -460, "y": -260, "fixedValue": 0, "label": "TE_GLOBAL", "id": "te_global" },
+    { "type": "INPUT", "x": -460, "y": -220, "fixedValue": 0, "label": "TE_BIST",   "id": "te_bist" },
+    { "type": "INPUT", "x": -460, "y": -180, "fixedValue": 0, "label": "SCAN_IN_FAST", "id": "scan_in_fast" },
+    { "type": "INPUT", "x": -460, "y": -140, "fixedValue": 0, "label": "SCAN_IN_SLOW", "id": "scan_in_slow" },
+
+    { "type": "INPUT", "x": -460, "y":  -80, "fixedValue": 7, "bitWidth": 4, "label": "data_a", "id": "data_a" },
+    { "type": "INPUT", "x": -460, "y":  -40, "fixedValue": 3, "bitWidth": 4, "label": "data_b", "id": "data_b" },
+    { "type": "INPUT", "x": -460, "y":    0, "fixedValue": 0, "bitWidth": 3, "label": "op",     "id": "op" },
+    { "type": "INPUT", "x": -460, "y":   40, "fixedValue": 0, "label": "mode",  "id": "mode" },
+    { "type": "INPUT", "x": -460, "y":   80, "fixedValue": 0, "label": "reset", "id": "reset" },
+
+    { "type": "SCAN_FF", "x": -240, "y": -340, "label": "SFF_A1", "id": "sff_a1" },
+    { "type": "SCAN_FF", "x": -120, "y": -340, "label": "SFF_A2", "id": "sff_a2" },
+    { "type": "SCAN_FF", "x":    0, "y": -340, "label": "SFF_A3", "id": "sff_a3" },
+    { "type": "OUTPUT",  "x":  140, "y": -340, "targetValue": 0, "sandbox": true, "label": "SCAN_OUT_A", "id": "scan_out_a" },
+
+    { "type": "SCAN_FF", "x": -240, "y": -260, "label": "SFF_B1", "id": "sff_b1" },
+    { "type": "SCAN_FF", "x": -120, "y": -260, "label": "SFF_B2", "id": "sff_b2" },
+    { "type": "SCAN_FF", "x":    0, "y": -260, "label": "SFF_B3", "id": "sff_b3" },
+    { "type": "OUTPUT",  "x":  140, "y": -260, "targetValue": 0, "sandbox": true, "label": "SCAN_OUT_B", "id": "scan_out_b" },
+
+    { "type": "SCAN_FF", "x": -240, "y": -180, "label": "SFF_C1", "id": "sff_c1" },
+    { "type": "SCAN_FF", "x": -120, "y": -180, "label": "SFF_C2", "id": "sff_c2" },
+    { "type": "OUTPUT",  "x":    0, "y": -180, "targetValue": 0, "sandbox": true, "label": "SCAN_OUT_C", "id": "scan_out_c" },
+
+    { "type": "SCAN_FF", "x": -240, "y": -100, "label": "SFF_D1", "id": "sff_d1" },
+    { "type": "SCAN_FF", "x": -120, "y": -100, "label": "SFF_D2", "id": "sff_d2" },
+
+    { "type": "SCAN_FF", "x":  240, "y": -100, "label": "SFF_E_ORPHAN", "id": "sff_e" },
+
+    { "type": "ALU", "x": -100, "y":   0, "bitWidth": 4, "label": "ALU", "id": "alu" },
+    { "type": "OUTPUT", "x":  60, "y":  -40, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "alu_r", "id": "alu_r" },
+    { "type": "OUTPUT", "x":  60, "y":    0, "targetValue": 0, "sandbox": true, "label": "alu_z", "id": "alu_z" },
+    { "type": "OUTPUT", "x":  60, "y":   40, "targetValue": 0, "sandbox": true, "label": "alu_c", "id": "alu_c" },
+
+    { "type": "COMPARATOR", "x": -100, "y":  90, "label": "CMP", "id": "cmp" },
+    { "type": "OUTPUT", "x":  60, "y":  60, "targetValue": 0, "sandbox": true, "label": "eq", "id": "eq_out" },
+    { "type": "OUTPUT", "x":  60, "y":  90, "targetValue": 0, "sandbox": true, "label": "gt", "id": "gt_out" },
+
+    { "type": "FULL_ADDER", "x": -100, "y": 160, "label": "FA", "id": "fa" },
+    { "type": "OUTPUT", "x":  60, "y": 130, "targetValue": 0, "sandbox": true, "label": "sum",   "id": "sum" },
+    { "type": "OUTPUT", "x":  60, "y": 160, "targetValue": 0, "sandbox": true, "label": "carry", "id": "carry" },
+
+    { "type": "COUNTER", "x":  240, "y":   0, "bitWidth": 4, "label": "CNT", "id": "cnt" },
+    { "type": "LFSR",    "x":  240, "y":  60, "bitWidth": 4, "taps": [3, 0], "seed": 1, "label": "LFSR", "id": "lfsr" },
+    { "type": "REGISTER","x":  240, "y": 120, "bitWidth": 4, "label": "REG", "id": "reg" },
+    { "type": "ROM", "x":  400, "y":   0, "addrBits": 4, "dataBits": 8, "label": "ROM",
+      "memory": { "0": 16, "1": 32, "2": 64, "3": 128 }, "id": "rom" },
+    { "type": "RAM", "x":  400, "y": 100, "addrBits": 4, "dataBits": 8, "label": "RAM", "id": "ram" },
+
+    { "type": "MUX_2", "x": -260, "y":   0, "bitWidth": 4, "label": "MUX", "id": "mux" },
+
+    { "type": "DECODER", "x": -260, "y": 100, "selectBits": 3, "label": "DEC", "id": "dec" },
+    { "type": "ENCODER", "x": -260, "y": 200, "selectBits": 3, "label": "ENC", "id": "enc" },
+
+    { "type": "GATE_SLOT", "x":  -100, "y": 240, "gate": "AND", "label": "and1", "id": "g_and" },
+    { "type": "GATE_SLOT", "x":  -100, "y": 280, "gate": "OR",  "label": "or1",  "id": "g_or" },
+    { "type": "GATE_SLOT", "x":  -100, "y": 320, "gate": "XOR", "label": "xor1", "id": "g_xor" },
+    { "type": "GATE_SLOT", "x":  -100, "y": 360, "gate": "NOT", "label": "not1", "id": "g_not" },
+
+    { "type": "FF_SLOT", "x":  240, "y": 240, "ffType": "D", "label": "DFF", "id": "dff" },
+    { "type": "OUTPUT",  "x":  400, "y": 240, "targetValue": 0, "sandbox": true, "label": "dff_q", "id": "dff_q" }
+  ],
+  "wires": [
+    { "id": "wA_in",  "sourceId": "scan_in_fast", "targetId": "sff_a1", "targetInputIndex": 1 },
+    { "id": "wA_12",  "sourceId": "sff_a1", "sourceOutputIndex": 0, "targetId": "sff_a2", "targetInputIndex": 1 },
+    { "id": "wA_23",  "sourceId": "sff_a2", "sourceOutputIndex": 0, "targetId": "sff_a3", "targetInputIndex": 1 },
+    { "id": "wA_out", "sourceId": "sff_a3", "sourceOutputIndex": 0, "targetId": "scan_out_a", "targetInputIndex": 0 },
+    { "id": "wA_te1", "sourceId": "te_global", "targetId": "sff_a1", "targetInputIndex": 2 },
+    { "id": "wA_te2", "sourceId": "te_global", "targetId": "sff_a2", "targetInputIndex": 2 },
+    { "id": "wA_te3", "sourceId": "te_global", "targetId": "sff_a3", "targetInputIndex": 2 },
+    { "id": "wA_ck1", "sourceId": "clk_fast", "targetId": "sff_a1", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wA_ck2", "sourceId": "clk_fast", "targetId": "sff_a2", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wA_ck3", "sourceId": "clk_fast", "targetId": "sff_a3", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wB_in",  "sourceId": "scan_in_slow", "targetId": "sff_b1", "targetInputIndex": 1 },
+    { "id": "wB_12",  "sourceId": "sff_b1", "sourceOutputIndex": 0, "targetId": "sff_b2", "targetInputIndex": 1 },
+    { "id": "wB_23",  "sourceId": "sff_b2", "sourceOutputIndex": 0, "targetId": "sff_b3", "targetInputIndex": 1 },
+    { "id": "wB_out", "sourceId": "sff_b3", "sourceOutputIndex": 0, "targetId": "scan_out_b", "targetInputIndex": 0 },
+    { "id": "wB_te1", "sourceId": "te_bist", "targetId": "sff_b1", "targetInputIndex": 2 },
+    { "id": "wB_te2", "sourceId": "te_bist", "targetId": "sff_b2", "targetInputIndex": 2 },
+    { "id": "wB_te3", "sourceId": "te_bist", "targetId": "sff_b3", "targetInputIndex": 2 },
+    { "id": "wB_ck1", "sourceId": "clk_slow", "targetId": "sff_b1", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wB_ck2", "sourceId": "clk_slow", "targetId": "sff_b2", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wB_ck3", "sourceId": "clk_slow", "targetId": "sff_b3", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wC_in",  "sourceId": "scan_in_fast", "targetId": "sff_c1", "targetInputIndex": 1 },
+    { "id": "wC_12",  "sourceId": "sff_c1", "sourceOutputIndex": 0, "targetId": "sff_c2", "targetInputIndex": 1 },
+    { "id": "wC_out", "sourceId": "sff_c2", "sourceOutputIndex": 0, "targetId": "scan_out_c", "targetInputIndex": 0 },
+    { "id": "wC_te1", "sourceId": "te_global", "targetId": "sff_c1", "targetInputIndex": 2 },
+    { "id": "wC_te2", "sourceId": "te_bist",   "targetId": "sff_c2", "targetInputIndex": 2 },
+    { "id": "wC_ck1", "sourceId": "clk_fast", "targetId": "sff_c1", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wC_ck2", "sourceId": "clk_fast", "targetId": "sff_c2", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wD_in",  "sourceId": "scan_in_fast", "targetId": "sff_d1", "targetInputIndex": 1 },
+    { "id": "wD_12",  "sourceId": "sff_d1", "sourceOutputIndex": 0, "targetId": "sff_d2", "targetInputIndex": 1 },
+    { "id": "wD_te1", "sourceId": "te_global", "targetId": "sff_d1", "targetInputIndex": 2 },
+    { "id": "wD_te2", "sourceId": "te_global", "targetId": "sff_d2", "targetInputIndex": 2 },
+    { "id": "wD_ck1", "sourceId": "clk_fast", "targetId": "sff_d1", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wD_ck2", "sourceId": "clk_fast", "targetId": "sff_d2", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wE_ck",  "sourceId": "clk_fast", "targetId": "sff_e", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wAlu_a", "sourceId": "data_a", "targetId": "alu", "targetInputIndex": 0 },
+    { "id": "wAlu_b", "sourceId": "data_b", "targetId": "alu", "targetInputIndex": 1 },
+    { "id": "wAlu_op","sourceId": "op",     "targetId": "alu", "targetInputIndex": 2 },
+    { "id": "wAlu_r", "sourceId": "alu", "sourceOutputIndex": 0, "targetId": "alu_r", "targetInputIndex": 0 },
+    { "id": "wAlu_z", "sourceId": "alu", "sourceOutputIndex": 1, "targetId": "alu_z", "targetInputIndex": 0 },
+    { "id": "wAlu_c", "sourceId": "alu", "sourceOutputIndex": 2, "targetId": "alu_c", "targetInputIndex": 0 },
+
+    { "id": "wCmp_a", "sourceId": "data_a", "targetId": "cmp", "targetInputIndex": 0 },
+    { "id": "wCmp_b", "sourceId": "data_b", "targetId": "cmp", "targetInputIndex": 1 },
+    { "id": "wCmp_eq","sourceId": "cmp", "sourceOutputIndex": 0, "targetId": "eq_out", "targetInputIndex": 0 },
+    { "id": "wCmp_gt","sourceId": "cmp", "sourceOutputIndex": 1, "targetId": "gt_out", "targetInputIndex": 0 },
+
+    { "id": "wFa_a", "sourceId": "data_a", "targetId": "fa", "targetInputIndex": 0 },
+    { "id": "wFa_b", "sourceId": "data_b", "targetId": "fa", "targetInputIndex": 1 },
+    { "id": "wFa_c", "sourceId": "mode",   "targetId": "fa", "targetInputIndex": 2 },
+    { "id": "wFa_s", "sourceId": "fa", "sourceOutputIndex": 0, "targetId": "sum",   "targetInputIndex": 0 },
+    { "id": "wFa_co","sourceId": "fa", "sourceOutputIndex": 1, "targetId": "carry", "targetInputIndex": 0 },
+
+    { "id": "wCnt_clr","sourceId": "reset",   "targetId": "cnt", "targetInputIndex": 3 },
+    { "id": "wCnt_clk","sourceId": "clk_fast","targetId": "cnt", "targetInputIndex": 4, "isClockWire": true },
+
+    { "id": "wLfsr_clk","sourceId": "clk_fast","targetId": "lfsr", "targetInputIndex": 0, "isClockWire": true },
+
+    { "id": "wReg_d","sourceId": "alu", "sourceOutputIndex": 0, "targetId": "reg", "targetInputIndex": 0 },
+    { "id": "wReg_en","sourceId": "mode",   "targetId": "reg", "targetInputIndex": 1 },
+    { "id": "wReg_clr","sourceId": "reset", "targetId": "reg", "targetInputIndex": 2 },
+    { "id": "wReg_clk","sourceId": "clk_slow","targetId": "reg", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "wRom_addr","sourceId": "cnt", "sourceOutputIndex": 0, "targetId": "rom", "targetInputIndex": 0 },
+    { "id": "wRom_re",  "sourceId": "mode","targetId": "rom", "targetInputIndex": 1 },
+    { "id": "wRom_clk", "sourceId": "clk_fast", "targetId": "rom", "targetInputIndex": 2, "isClockWire": true },
+
+    { "id": "wRam_addr","sourceId": "cnt", "sourceOutputIndex": 0, "targetId": "ram", "targetInputIndex": 0 },
+    { "id": "wRam_we",  "sourceId": "mode","targetId": "ram", "targetInputIndex": 2 },
+    { "id": "wRam_re",  "sourceId": "mode","targetId": "ram", "targetInputIndex": 3 },
+    { "id": "wRam_clk", "sourceId": "clk_fast","targetId": "ram", "targetInputIndex": 4, "isClockWire": true },
+
+    { "id": "wMux_d0","sourceId": "data_a", "targetId": "mux", "targetInputIndex": 0 },
+    { "id": "wMux_d1","sourceId": "data_b", "targetId": "mux", "targetInputIndex": 1 },
+    { "id": "wMux_s", "sourceId": "mode",   "targetId": "mux", "targetInputIndex": 2 },
+
+    { "id": "wDec_s", "sourceId": "op",     "targetId": "dec", "targetInputIndex": 0 },
+
+    { "id": "wG_a", "sourceId": "mode",   "targetId": "g_and", "targetInputIndex": 0 },
+    { "id": "wG_b", "sourceId": "reset",  "targetId": "g_and", "targetInputIndex": 1 },
+    { "id": "wG_c", "sourceId": "mode",   "targetId": "g_or",  "targetInputIndex": 0 },
+    { "id": "wG_d", "sourceId": "reset",  "targetId": "g_or",  "targetInputIndex": 1 },
+    { "id": "wG_e", "sourceId": "mode",   "targetId": "g_xor", "targetInputIndex": 0 },
+    { "id": "wG_f", "sourceId": "reset",  "targetId": "g_xor", "targetInputIndex": 1 },
+    { "id": "wG_g", "sourceId": "reset",  "targetId": "g_not", "targetInputIndex": 0 },
+
+    { "id": "wDff_d", "sourceId": "g_xor", "sourceOutputIndex": 0, "targetId": "dff", "targetInputIndex": 0 },
+    { "id": "wDff_clk","sourceId": "clk_slow", "targetId": "dff", "targetInputIndex": 1, "isClockWire": true },
+    { "id": "wDff_q", "sourceId": "dff", "sourceOutputIndex": 0, "targetId": "dff_q", "targetInputIndex": 0 }
+  ]
+}

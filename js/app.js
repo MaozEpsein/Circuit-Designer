@@ -4613,6 +4613,13 @@ const EXAMPLES = [
     file: 'examples/circuits/dft-scan-chain-3.json',
   },
   {
+    id: 'dft-complex-showcase',
+    title: '5. DFT — complex showcase (5 chains, 2 clocks, 17 component types)',
+    desc: 'Stress test for the SCAN CHAINS section. Five chains in one canvas, each in a different state of health: chain_0 healthy on CLK_FAST, chain_1 healthy on CLK_SLOW with a second TE source (TE_BIST), chain_2 with split TE (each cell has its own driver — visible as a dashed amber bar), chain_3 with floating scan-out (response unobservable — red dashed pad), chain_4 a single SCAN_FF orphan with nothing wired. Around the scan logic sits a dense datapath — ALU, COUNTER, LFSR, ROM, RAM, REGISTER, COMPARATOR, MUX_2, FULL_ADDER, DECODER, ENCODER, FF_SLOT, four GATE_SLOT flavours (AND/OR/XOR/NOT) plus the two CLOCKs and the I/O pads — to make the canvas read like a real subsystem rather than a scan island.',
+    tags: ['dft', 'scan', 'scan-ff', 'showcase', 'complex'],
+    file: 'examples/circuits/dft-complex-showcase.json',
+  },
+  {
     id: 'dft-lfsr-prng',
     title: '4. DFT — LFSR (two polynomials, same seed)',
     desc: 'Two 4-bit Fibonacci LFSRs in parallel, sharing CLOCK + seed (0001) but with different feedback polynomials. LFSR_A uses x⁴+x+1 (taps [3,0]) — a primitive polynomial that cycles through all 15 non-zero values before repeating. LFSR_B uses x⁴+x³+1 (taps [3,2]) — non-primitive in Fibonacci/shift-left form, so it falls into a short orbit. Step the clock and watch both registers diverge from the same starting point. Lesson: the polynomial choice is the difference between meaningful BIST coverage (max-length) and a useless short-cycling test.',
