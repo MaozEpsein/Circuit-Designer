@@ -206,11 +206,11 @@ export class DFTPanel {
     // Layer 2 — last fault-sim result. null until the user clicks RUN.
     // Cleared when the scene mutates (vectors / topology may have changed).
     this._lastSim = null;
-    // Per-chain collapsed state. The set holds the IDs of chains the
-    // user folded so the collapsed view survives a re-render. Chains
-    // are identified by their position in detectScanChains() output
-    // (`chain_0`, `chain_1`, …) — stable across the same scene.
-    this._collapsedChains = new Set();
+    // Per-block collapsed state. Each entry is a block-id like
+    // `chain_0` (positional, stable per scene) or `lfsr_<nodeId>` (by
+    // node id, also stable). The set survives a re-render so the
+    // user's fold choices aren't undone by a fault-sim refresh.
+    this._collapsedBlocks = new Set();
     // Layer 2.5 — toggled when the user clicks the [source] tag in the
     // FAULT COVERAGE row. Expands an inline table of every test vector
     // and per-vector output, so the user can see exactly what stimulus
@@ -631,9 +631,9 @@ export class DFTPanel {
       }
 
       const chainKey = `chain_${idx}`;
-      const collapsed = this._collapsedChains.has(chainKey);
+      const collapsed = this._collapsedBlocks.has(chainKey);
       return `
-        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-chain-id="${chainKey}">
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${chainKey}">
           <div class="dft-chain-header" title="Click to collapse / expand">
             <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
             <span class="dft-chain-title">chain_${idx}</span>
@@ -715,9 +715,12 @@ export class DFTPanel {
             `<span class="${s.isScanIn ? 'dft-lfsr-sink-scan' : 'dft-lfsr-sink'}">${s.label} <small>[${s.type}${s.isScanIn ? '·TI' : ''}]</small></span>`
           ).join(', ');
 
+      const blockId = `lfsr_${lfsr.id}`;
+      const collapsed = this._collapsedBlocks.has(blockId);
       return `
-        <div class="dft-chain-block">
-          <div class="dft-chain-header" style="cursor:default">
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${blockId}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
             <span class="dft-chain-title">${lfsr.label || lfsr.id}</span>
             <span class="dft-chain-len">${width}-bit</span>
             <span class="dft-chain-status ${cls}">${label}</span>
@@ -900,24 +903,23 @@ export class DFTPanel {
       });
     });
 
-    // Per-chain collapse handlers — clicking a chain header folds the
-    // flow + TE bar so only the title row remains. State is persisted
-    // in this._collapsedChains so it survives the next _render().
-    const chainHeaders = this._body.querySelectorAll('.dft-chain-block .dft-chain-header');
-    chainHeaders.forEach(h => {
+    // Per-block collapse — works for any .dft-chain-block carrying a
+    // data-block-id. Today: scan chains and LFSR pattern-generator
+    // blocks. Tomorrow: any new per-item block (MISR, BIST controller,
+    // JTAG TAP) that wants the same fold affordance.
+    const blockHeaders = this._body.querySelectorAll('.dft-chain-block[data-block-id] .dft-chain-header');
+    blockHeaders.forEach(h => {
       h.addEventListener('click', (e) => {
-        // Allow clicks on the status pill / inner controls to bubble
-        // out without folding (none today, but keeps the door open).
         if (e.target.closest('.dft-chain-status[data-action]')) return;
         const block = h.closest('.dft-chain-block');
         if (!block) return;
-        const id = block.dataset.chainId;
+        const id = block.dataset.blockId;
         if (!id) return;
-        if (this._collapsedChains.has(id)) {
-          this._collapsedChains.delete(id);
+        if (this._collapsedBlocks.has(id)) {
+          this._collapsedBlocks.delete(id);
           block.classList.remove('collapsed');
         } else {
-          this._collapsedChains.add(id);
+          this._collapsedBlocks.add(id);
           block.classList.add('collapsed');
         }
         const tog = h.querySelector('.dft-chain-toggle');

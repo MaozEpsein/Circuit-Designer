@@ -3284,8 +3284,11 @@
 .dft-chain-block.collapsed .dft-chain-header {
   margin-bottom: 0; padding-bottom: 0; border-bottom: none;
 }
-.dft-chain-block.collapsed .dft-chain-flow,
-.dft-chain-block.collapsed .dft-chain-te { display: none; }
+/* Collapsed blocks hide every direct child except the clickable
+   header. Generic so the same rule serves chain blocks AND the
+   LFSR pattern-generator blocks (and any future per-item block
+   that wants to fold). */
+.dft-chain-block.collapsed > *:not(.dft-chain-header) { display: none; }
 .dft-chain-title {
   color: #ffb878; font-weight: 600; letter-spacing: 0.5px;
 }
