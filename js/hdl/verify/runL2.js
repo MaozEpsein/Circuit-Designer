@@ -277,6 +277,22 @@ export function runL2Sequential(circuit, opts = {}) {
     ? String((v | 0) & 1)
     : 'b' + ((v | 0) >>> 0).toString(2).padStart(width, '0').slice(-width) + ' ';
 
+  // Pre-resolve each OUTPUT node to its driver (sourceId, sourceOutputIndex)
+  // so we can read the post-phase-3 value directly from the source's
+  // nodeValues entry (`<src>__outN`). The OUTPUT node's own entry is
+  // set during phase 1 and never refreshed when phase-3 multi-output
+  // updates fire (STACK/FIFO full/empty flags, COUNTER tc, etc.) —
+  // reading the OUTPUT's entry returns the pre-update value.
+  const outputDriver = new Map();
+  for (const n of outputs) {
+    const w = circuit.wires.find(w => w.targetId === n.id);
+    if (w) {
+      const idx = w.sourceOutputIndex || 0;
+      const key = idx === 0 ? w.sourceId : `${w.sourceId}__out${idx}`;
+      outputDriver.set(n.id, key);
+    }
+  }
+
   const ffStates = new Map();
   const halfPeriod = period >> 1;
   for (let i = 0; i < cycles; i++) {
@@ -287,13 +303,22 @@ export function runL2Sequential(circuit, opts = {}) {
     // Low phase
     clkNode.value = 0;
     evaluate(circuit.nodes, circuit.wires, ffStates, i * 2);
-    // Rising edge
+    // Rising edge — FFs latch, memory components write.
     clkNode.value = 1;
-    const r = evaluate(circuit.nodes, circuit.wires, ffStates, i * 2 + 1);
+    evaluate(circuit.nodes, circuit.wires, ffStates, i * 2 + 1);
+    // Settle eval: drop the clock back to 0 and re-read. This refreshes
+    // every nodeValues entry from the new ffStates without firing
+    // another rising edge. The engine's phase-3 re-propagation only
+    // fires when ms.q changes, but FIFO/STACK can update ms.full or
+    // ms.empty without changing ms.q (e.g. a pop that pops the same
+    // value that was peek'd before). The settle eval picks those up.
+    clkNode.value = 0;
+    const r = evaluate(circuit.nodes, circuit.wires, ffStates, i * 2 + 2);
     vcdLines.push(`#${i * period + halfPeriod}`);
     for (const n of outputs) {
       const meta = idOf.get(n.id);
-      const v = r.nodeValues.get(n.id) ?? 0;
+      const key = outputDriver.get(n.id) || n.id;
+      const v = r.nodeValues.get(key) ?? 0;
       vcdLines.push(meta.width === 1
         ? fmt(v, 1) + meta.id
         : fmt(v, meta.width) + meta.id);
