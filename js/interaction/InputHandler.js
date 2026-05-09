@@ -80,6 +80,9 @@ const TOOL_TYPE_MAP = {
   'place-scanff':        COMPONENT_TYPES.SCAN_FF,
   'place-lfsr':          COMPONENT_TYPES.LFSR,
   'place-misr':          COMPONENT_TYPES.MISR,
+  'place-bist':          COMPONENT_TYPES.BIST_CONTROLLER,
+  'place-jtag':          COMPONENT_TYPES.JTAG_TAP,
+  'place-bsc':           COMPONENT_TYPES.BOUNDARY_SCAN_CELL,
 };
 
 // Direct gate placements (type + gate preset)
@@ -129,6 +132,9 @@ function _clkPinIndex(node) {
     case 'SCAN_FF':     return 3;        // pins: D=0, TI=1, TE=2, CLK=3
     case 'LFSR':        return 0;        // single input: CLK
     case 'MISR':        return node.bitWidth || 4;     // CLK is at index N (D[0..N-1] precede)
+    case 'BIST_CONTROLLER': return 3;                  // pins: START(0), RESET(1), SIG_IN(2), CLK(3)
+    case 'JTAG_TAP':        return 0;                  // TCK at pin 0
+    case 'BOUNDARY_SCAN_CELL': return 4;               // PI(0), SI(1), MODE(2), SHIFT(3), CLK(4)
     case 'FF_SLOT': {
       const t = node.ffType;
       if (t === 'D' || t === 'T') return 1;

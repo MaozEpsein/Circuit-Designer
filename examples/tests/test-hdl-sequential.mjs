@@ -373,6 +373,130 @@ console.log('DFT (SCAN_FF + LFSR)');
   }
 }
 
+// BIST_CONTROLLER — 6-state FSM with case-based transitions
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'start', type: 'INPUT', label: 'start' },
+      { id: 'rst',   type: 'INPUT', label: 'rst' },
+      { id: 'sig',   type: 'INPUT', label: 'sig', bitWidth: 4 },
+      { id: 'clk',   type: 'CLOCK', label: 'clk' },
+      { id: 'bc',    type: 'BIST_CONTROLLER', sigBits: 4, runLength: 8, goldenSig: 5, label: 'bc' },
+      { id: 'done',  type: 'OUTPUT', label: 'done' },
+      { id: 'pass',  type: 'OUTPUT', label: 'pass' },
+      { id: 'tm',    type: 'OUTPUT', label: 'tm' },
+      { id: 'st',    type: 'OUTPUT', label: 'st', bitWidth: 3 },
+    ],
+    wires: [
+      { id: 'w0', sourceId: 'start', targetId: 'bc', targetInputIndex: 0 },
+      { id: 'w1', sourceId: 'rst',   targetId: 'bc', targetInputIndex: 1 },
+      { id: 'w2', sourceId: 'sig',   targetId: 'bc', targetInputIndex: 2 },
+      { id: 'w3', sourceId: 'clk',   targetId: 'bc', targetInputIndex: 3, isClockWire: true },
+      { id: 'wd', sourceId: 'bc', sourceOutputIndex: 0, targetId: 'done', targetInputIndex: 0 },
+      { id: 'wp', sourceId: 'bc', sourceOutputIndex: 1, targetId: 'pass', targetInputIndex: 0 },
+      { id: 'wt', sourceId: 'bc', sourceOutputIndex: 2, targetId: 'tm', targetInputIndex: 0 },
+      { id: 'ws', sourceId: 'bc', sourceOutputIndex: 3, targetId: 'st', targetInputIndex: 0 },
+    ],
+  }, { topName: 'bist_test', header: false });
+  check('BIST: state reg is 3-bit',
+    /reg\s+\[2:0\]\s+bist_bc_state/.test(v));
+  check('BIST: cycle counter sized for runLength=8',
+    /reg\s+\[3:0\]\s+bist_bc_cnt/.test(v));
+  check('BIST: initial seeds state to IDLE',
+    /initial\s+begin[\s\S]*bist_bc_state\s*=\s*3'h0/.test(v));
+  check('BIST: synchronous reset returns to IDLE',
+    /if\s+\(rst\)\s+begin[\s\S]*bist_bc_state\s*<=\s*3'h0/.test(v));
+  check('BIST: IDLE arm waits for start',
+    /3'h0:\s*begin[\s\S]*?if\s+\(start\)\s+begin[\s\S]*?bist_bc_state\s*<=\s*3'h1/.test(v));
+  check('BIST: COMPARE arm checks SIG against goldenSig',
+    /3'h3:\s*begin[\s\S]*?\(\(sig\s*==\s*4'h5\)\s*\?\s*3'h4\s*:\s*3'h5\)/.test(v));
+  check('BIST: DONE = (state == 4 || state == 5)',
+    /assign\s+net_bc_0\s*=\s*\(\(bist_bc_state\s*==\s*3'h4\)\s*\|\|\s*\(bist_bc_state\s*==\s*3'h5\)\)/.test(v));
+  check('BIST: PASS = (state == 4)',
+    /assign\s+net_bc_1\s*=\s*\(bist_bc_state\s*==\s*3'h4\)/.test(v));
+  check('BIST: TEST_MODE = (state == 1 || == 2)',
+    /assign\s+net_bc_2\s*=\s*\(\(bist_bc_state\s*==\s*3'h1\)\s*\|\|\s*\(bist_bc_state\s*==\s*3'h2\)\)/.test(v));
+  check('BIST: STATE = state reg directly',
+    /assign\s+net_bc_3\s*=\s*bist_bc_state/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('BIST: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// JTAG_TAP — 16-state TAP controller
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'tck',  type: 'CLOCK', label: 'tck' },
+      { id: 'tms',  type: 'INPUT', label: 'tms' },
+      { id: 'tdi',  type: 'INPUT', label: 'tdi' },
+      { id: 'trst', type: 'INPUT', label: 'trst' },
+      { id: 'tap',  type: 'JTAG_TAP', irBits: 4, label: 'tap' },
+      { id: 'tdo',  type: 'OUTPUT', label: 'tdo' },
+      { id: 'st',   type: 'OUTPUT', label: 'st', bitWidth: 4 },
+      { id: 'ir',   type: 'OUTPUT', label: 'ir', bitWidth: 4 },
+    ],
+    wires: [
+      { id: 'w0', sourceId: 'tck',  targetId: 'tap', targetInputIndex: 0, isClockWire: true },
+      { id: 'w1', sourceId: 'tms',  targetId: 'tap', targetInputIndex: 1 },
+      { id: 'w2', sourceId: 'tdi',  targetId: 'tap', targetInputIndex: 2 },
+      { id: 'w3', sourceId: 'trst', targetId: 'tap', targetInputIndex: 3 },
+      { id: 'wo0', sourceId: 'tap', sourceOutputIndex: 0, targetId: 'tdo', targetInputIndex: 0 },
+      { id: 'wo1', sourceId: 'tap', sourceOutputIndex: 1, targetId: 'st',  targetInputIndex: 0 },
+      { id: 'wo2', sourceId: 'tap', sourceOutputIndex: 2, targetId: 'ir',  targetInputIndex: 0 },
+    ],
+  }, { topName: 'jtag_test', header: false });
+  check('JTAG: state reg is 4-bit',  /reg\s+\[3:0\]\s+tap_tap_state/.test(v));
+  check('JTAG: ir reg is irBits=4',   /reg\s+\[3:0\]\s+tap_tap_ir/.test(v));
+  check('JTAG: dr reg is 32-bit',     /reg\s+\[31:0\]\s+tap_tap_dr/.test(v));
+  check('JTAG: TRST resets state',    /if\s+\(trst\)\s+begin[\s\S]*tap_tap_state\s*<=\s*4'h0/.test(v));
+  check('JTAG: Shift-DR shifts on TDI', /4'h4:\s*begin[\s\S]*tap_tap_dr\s*<=/.test(v));
+  check('JTAG: Shift-IR shifts IR',     /4'hb:\s*begin[\s\S]*tap_tap_ir\s*<=/.test(v));
+  check('JTAG: TDO assign',            /assign\s+net_tap_0\s*=\s*tap_tap_tdo/.test(v));
+  check('JTAG: STATE assign',          /assign\s+net_tap_1\s*=\s*tap_tap_state/.test(v));
+  check('JTAG: IR assign',             /assign\s+net_tap_2\s*=\s*tap_tap_ir/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('JTAG: iverilog parses', r.ok, r.stderr);
+  }
+}
+
+// BOUNDARY_SCAN_CELL — small shift cell with mode-mux
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'pi',    type: 'INPUT', label: 'pi' },
+      { id: 'si',    type: 'INPUT', label: 'si' },
+      { id: 'mode',  type: 'INPUT', label: 'mode' },
+      { id: 'shift', type: 'INPUT', label: 'shift' },
+      { id: 'clk',   type: 'CLOCK', label: 'clk' },
+      { id: 'bsc',   type: 'BOUNDARY_SCAN_CELL', label: 'bsc' },
+      { id: 'po',    type: 'OUTPUT', label: 'po' },
+      { id: 'so',    type: 'OUTPUT', label: 'so' },
+    ],
+    wires: [
+      { id: 'w0', sourceId: 'pi',    targetId: 'bsc', targetInputIndex: 0 },
+      { id: 'w1', sourceId: 'si',    targetId: 'bsc', targetInputIndex: 1 },
+      { id: 'w2', sourceId: 'mode',  targetId: 'bsc', targetInputIndex: 2 },
+      { id: 'w3', sourceId: 'shift', targetId: 'bsc', targetInputIndex: 3 },
+      { id: 'wc', sourceId: 'clk',   targetId: 'bsc', targetInputIndex: 4, isClockWire: true },
+      { id: 'wo0', sourceId: 'bsc', sourceOutputIndex: 0, targetId: 'po', targetInputIndex: 0 },
+      { id: 'wo1', sourceId: 'bsc', sourceOutputIndex: 1, targetId: 'so', targetInputIndex: 0 },
+    ],
+  }, { topName: 'bsc_test', header: false });
+  check('BSC: shift reg declared',    /reg\s+bsc_bsc_shift/.test(v));
+  check('BSC: upd reg declared',      /reg\s+bsc_bsc_upd/.test(v));
+  check('BSC: shift mux on shift-en', /bsc_bsc_shift\s*<=\s*\(shift\s*\?\s*si\s*:\s*pi\)/.test(v));
+  check('BSC: upd captures on mode',  /if\s+\(mode\)\s+begin[\s\S]*bsc_bsc_upd\s*<=\s*bsc_bsc_shift/.test(v));
+  check('BSC: PO mode-mux',           /assign\s+net_bsc_0\s*=\s*\(mode\s*\?\s*bsc_bsc_upd\s*:\s*pi\)/.test(v));
+  check('BSC: SO from shift reg',     /assign\s+net_bsc_1\s*=\s*bsc_bsc_shift/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('BSC: iverilog parses', r.ok, r.stderr);
+  }
+}
+
 // ── PIPE_REG (pipeline register with stall/flush) ───────────
 console.log('PIPE_REG');
 {

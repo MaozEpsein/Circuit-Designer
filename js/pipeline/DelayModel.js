@@ -36,6 +36,9 @@ export const DEFAULT_DELAY_PS = {
   SCAN_FF:     0,
   LFSR:        0,
   MISR:        0,    // clocked, no combinational delay through it
+  BIST_CONTROLLER: 0, // clocked state machine, no combinational delay
+  JTAG_TAP: 0,        // clocked TAP FSM
+  BOUNDARY_SCAN_CELL: 50, // small mux + shift cell — mostly pass-through
   LATCH_SLOT:  0,
   INPUT:       0,
   OUTPUT:      0,

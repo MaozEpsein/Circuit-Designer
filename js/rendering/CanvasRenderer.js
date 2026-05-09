@@ -1083,13 +1083,23 @@ function _nodeOutputAnchor(node, outputIndex) {
     return { x: node.x + w / 2, y: startY + outputIndex * spread };
   }
   if (MEMORY_TYPE_SET.has(node.type)) {
-    const { w } = _memoryNodeSize(node);
+    const { w, h } = _memoryNodeSize(node);
     if ((node.type === 'FIFO' || node.type === 'STACK') && outputIndex >= 1) {
       const yOff = outputIndex === 1 ? 18 : 36; // FULL, EMPTY
       return { x: node.x + w / 2, y: node.y - 18 + yOff };
     }
     if (node.type === 'COUNTER' && outputIndex === 1) {
       return { x: node.x + w / 2, y: node.y + 18 }; // TC
+    }
+    // Multi-output DFT-orchestrator types — distribute pins down the
+    // right edge so each output gets its own anchor.
+    if (node.type === 'BIST_CONTROLLER' || node.type === 'JTAG_TAP' || node.type === 'BOUNDARY_SCAN_CELL') {
+      const outCount = node.type === 'BIST_CONTROLLER' ? 4
+                     : node.type === 'JTAG_TAP'        ? 3
+                     : 2;
+      const spread = Math.max(14, (h - 16) / Math.max(1, outCount - 1 || 1));
+      const startY = node.y - ((outCount - 1) * spread) / 2;
+      return { x: node.x + w / 2, y: startY + outputIndex * spread };
     }
     return { x: node.x + w / 2, y: node.y - (node.type === 'FIFO' || node.type === 'STACK' ? 18 : 0) }; // Q
   }
@@ -1252,14 +1262,19 @@ function _nodeInputAnchor(_src, node, inputIndex, isClockWire) {
   if (MEMORY_TYPE_SET.has(node.type)) {
     const { w, h } = _memoryNodeSize(node);
     const inCount = _getNodeInputCount(node);
-    // CLK input at bottom center
-    if (inputIndex === inCount - 1) {
+    // Pick clock pin index per type. Most memory types have CLK as
+    // the LAST input; JTAG_TAP puts it at index 0 (IEEE TCK convention).
+    const clkIdx = node.type === 'JTAG_TAP' ? 0 : (inCount - 1);
+    if (inputIndex === clkIdx) {
       return { x: node.x, y: node.y + h / 2 };
     }
     const dataCount = inCount - 1;
+    // Map non-clock inputs to a 0..dataCount-1 ordinal so they spread
+    // evenly even when the clock pin isn't at the end.
+    const dataOrdinal = inputIndex < clkIdx ? inputIndex : (inputIndex - 1);
     const spread = (h - 20) / Math.max(1, dataCount - 1);
     const startY = node.y - (h - 20) / 2;
-    return { x: node.x - w / 2, y: dataCount === 1 ? node.y : startY + inputIndex * spread };
+    return { x: node.x - w / 2, y: dataCount === 1 ? node.y : startY + dataOrdinal * spread };
   }
   if (node.type === 'GATE_SLOT') {
     const spread  = 18;
@@ -3177,12 +3192,26 @@ function _memoryInputLabel(node, i) {
   if (node.type === 'STACK')    return ['DATA', 'PUSH', 'POP', 'CLR', 'CLK'][i] || '';
   if (node.type === 'PC')       return ['JMP_A', 'JMP', 'EN', 'CLR', 'CLK'][i] || '';
   if (node.type === 'IR')       return ['INSTR', 'LD', 'CLK'][i] || '';
+  if (node.type === 'LFSR')     return ['CLK'][i] || '';
+  if (node.type === 'MISR') {
+    const w = node.bitWidth || 4;
+    return i < w ? ('D' + i) : 'CLK';
+  }
+  if (node.type === 'BIST_CONTROLLER') return ['START', 'RESET', 'SIG', 'CLK'][i] || '';
+  if (node.type === 'JTAG_TAP')        return ['TCK', 'TMS', 'TDI', 'TRST'][i] || '';
+  if (node.type === 'BOUNDARY_SCAN_CELL') return ['PI', 'SI', 'MODE', 'SHIFT', 'CLK'][i] || '';
   return i.toString();
 }
 
 function _memoryNodeSize(node) {
   const inCount = _getNodeInputCount(node);
-  const outCount = (node.type === 'FIFO' || node.type === 'STACK') ? 3 : node.type === 'COUNTER' ? 2 : 1;
+  const outCount =
+    (node.type === 'FIFO' || node.type === 'STACK') ? 3 :
+    node.type === 'COUNTER' ? 2 :
+    node.type === 'BIST_CONTROLLER' ? 4 :
+    node.type === 'JTAG_TAP' ? 3 :
+    node.type === 'BOUNDARY_SCAN_CELL' ? 2 :
+    1;
   const maxPins = Math.max(inCount, outCount);
   const w = 100;
   const h = Math.max(60, maxPins * 18 + 16);
@@ -3210,7 +3239,7 @@ function _drawMemoryNode(node, val, hovered, ffStates) {
   ctx.shadowBlur = 0;
 
   // Type label
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', JTAG_TAP: 'JTAG TAP', BOUNDARY_SCAN_CELL: 'BSC' };
   ctx.fillStyle = '#c0a0f0';
   ctx.font = 'bold 11px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
@@ -3238,25 +3267,45 @@ function _drawMemoryNode(node, val, hovered, ffStates) {
     ctx.fillText(bufLen + '/' + depth, node.x, node.y + 24);
   }
 
-  // Input labels on left
+  // Input labels on left — skip whichever index is the clock pin.
   const inCount = _getNodeInputCount(node);
-  const inDataCount = inCount - 1; // exclude CLK
+  const clkIdx = node.type === 'JTAG_TAP' ? 0 : (inCount - 1);
+  const inDataCount = inCount - 1; // exclude CLK from the left rail
   const inSpread = (h - 20) / Math.max(1, inDataCount - 1);
   const inStartY = node.y - (h - 20) / 2;
   ctx.fillStyle = '#6a5090';
   ctx.font = '7px JetBrains Mono, monospace';
   ctx.textAlign = 'right';
-  for (let i = 0; i < inDataCount; i++) {
-    const pinY = inDataCount === 1 ? node.y : inStartY + i * inSpread;
+  for (let i = 0; i < inCount; i++) {
+    if (i === clkIdx) continue;
+    const ord = i < clkIdx ? i : (i - 1);
+    const pinY = inDataCount === 1 ? node.y : inStartY + ord * inSpread;
     ctx.fillText(_memoryInputLabel(node, i), x + 14, pinY + 1);
   }
 
-  // Output label on right
+  // Output labels on right.
   ctx.textAlign = 'left';
   ctx.fillStyle = '#6a5090';
-  ctx.fillText('Q', x + w - 12, node.y + 1);
-  if (node.type === 'COUNTER') {
-    ctx.fillText('TC', x + w - 14, node.y + 18);
+  if (node.type === 'BIST_CONTROLLER') {
+    const labels = ['DONE', 'PASS', 'TM', 'STATE'];
+    const spread = Math.max(14, (h - 16) / 3);
+    const startY = node.y - 1.5 * spread;
+    for (let i = 0; i < 4; i++) ctx.fillText(labels[i], x + w - 26, startY + i * spread + 1);
+  } else if (node.type === 'JTAG_TAP') {
+    const labels = ['TDO', 'STATE', 'IR'];
+    const spread = Math.max(14, (h - 16) / 2);
+    const startY = node.y - spread;
+    for (let i = 0; i < 3; i++) ctx.fillText(labels[i], x + w - 24, startY + i * spread + 1);
+  } else if (node.type === 'BOUNDARY_SCAN_CELL') {
+    const labels = ['PO', 'SO'];
+    const spread = Math.max(14, (h - 16));
+    const startY = node.y - spread / 2;
+    for (let i = 0; i < 2; i++) ctx.fillText(labels[i], x + w - 14, startY + i * spread + 1);
+  } else {
+    ctx.fillText('Q', x + w - 12, node.y + 1);
+    if (node.type === 'COUNTER') {
+      ctx.fillText('TC', x + w - 14, node.y + 18);
+    }
   }
 
   // CLK triangle at bottom-left
@@ -3888,6 +3937,9 @@ function _getNodeInputCount(node) {
   if (node.type === 'SCAN_FF') return 4;     // D, TI, TE, CLK
   if (node.type === 'LFSR')    return 1;     // CLK only
   if (node.type === 'MISR')    return (node.bitWidth || 4) + 1;   // D[0..N-1] + CLK
+  if (node.type === 'BIST_CONTROLLER') return 4;     // START, RESET, SIG_IN, CLK
+  if (node.type === 'JTAG_TAP') return 4;            // TCK, TMS, TDI, TRST
+  if (node.type === 'BOUNDARY_SCAN_CELL') return 5;  // PI, SI, MODE, SHIFT, CLK
   if (node.type === 'MUX') {
     const n = node.inputCount || 2;
     return n + Math.ceil(Math.log2(n)); // data + select
@@ -4006,6 +4058,12 @@ export function getInputAnchors(node) {
     } else if (node.type === 'MISR') {
       const w = node.bitWidth || 4;
       label = i < w ? ('D' + i) : 'CLK';
+    } else if (node.type === 'BIST_CONTROLLER') {
+      label = ['START', 'RESET', 'SIG', 'CLK'][i] || '';
+    } else if (node.type === 'JTAG_TAP') {
+      label = ['TCK', 'TMS', 'TDI', 'TRST'][i] || '';
+    } else if (node.type === 'BOUNDARY_SCAN_CELL') {
+      label = ['PI', 'SI', 'MODE', 'SHIFT', 'CLK'][i] || '';
     } else if (node.type === 'ALU') {
       label = ['A', 'B', 'OP'][i] || '';
     } else if (node.type === 'HANDSHAKE') {

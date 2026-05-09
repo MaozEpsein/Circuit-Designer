@@ -1,0 +1,77 @@
+{
+  "_dft": {
+    "_doc": "JTAG + boundary-scan demo (Layer 7).\n\n  Anatomy:\n    • CLOCK tck — drives the TAP and every BSC in lock-step.\n    • Three INPUTs tms / tdi / trst feed the TAP; pulse TMS to walk the 16-state FSM, drive TDI when shifting, raise TRST to force Test-Logic-Reset.\n    • JTAG_TAP — IEEE 1149.1 controller. STATE / IR / TDO are exported to OUTPUTs for visibility.\n    • Four BOUNDARY_SCAN_CELLs (bsc0..bsc3) form a scan ring around four 'core' inputs (core0..core3). MODE / SHIFT are gated by the TAP's STATE and IR via small combinational helpers (here driven directly by external inputs to keep the demo readable).\n    • Outputs po0..po3 show the cells' pad outputs (passing through in normal mode, latched-test value in test mode); so0..so3 expose the per-cell shift bits so the chain is visible.\n\n  Suggested play:\n    1. Open the DFT panel and scroll to JTAG TAPS — see TAP state name change as you toggle TMS and STEP.\n    2. From TLR (5×TMS=1), navigate TMS=0 → Run-Test/Idle, then TMS=1,1,0,0 → Shift-DR. Now each STEP shifts TDI through the chain (watch DR climb in the panel).\n    3. Switch SHIFT=1, MODE=0 to load the BSC chain from SI; switch MODE=1 to drive the latched bits onto po0..po3 in test mode."
+  },
+  "nodes": [
+    { "type": "CLOCK", "x": -560, "y": -260, "value": 0, "label": "tck", "id": "tck" },
+    { "type": "INPUT", "x": -560, "y": -200, "fixedValue": 0, "label": "tms",   "id": "tms" },
+    { "type": "INPUT", "x": -560, "y": -160, "fixedValue": 0, "label": "tdi",   "id": "tdi" },
+    { "type": "INPUT", "x": -560, "y": -120, "fixedValue": 0, "label": "trst",  "id": "trst" },
+
+    { "type": "JTAG_TAP", "x": -300, "y": -180, "irBits": 4, "idcode": 345367457, "label": "TAP", "id": "tap" },
+
+    { "type": "OUTPUT", "x":  20, "y": -240, "targetValue": 0, "sandbox": true, "label": "TDO",   "id": "tdo_out" },
+    { "type": "OUTPUT", "x":  20, "y": -200, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "STATE", "id": "tap_state" },
+    { "type": "OUTPUT", "x":  20, "y": -160, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "IR",    "id": "tap_ir" },
+
+    { "type": "INPUT", "x": -560, "y":  60, "fixedValue": 1, "label": "core0", "id": "core0" },
+    { "type": "INPUT", "x": -560, "y": 120, "fixedValue": 0, "label": "core1", "id": "core1" },
+    { "type": "INPUT", "x": -560, "y": 180, "fixedValue": 1, "label": "core2", "id": "core2" },
+    { "type": "INPUT", "x": -560, "y": 240, "fixedValue": 1, "label": "core3", "id": "core3" },
+
+    { "type": "INPUT", "x": -560, "y":  20, "fixedValue": 0, "label": "MODE",  "id": "mode_in" },
+    { "type": "INPUT", "x": -560, "y": -20, "fixedValue": 0, "label": "SHIFT", "id": "shift_in" },
+    { "type": "INPUT", "x": -560, "y":  -60, "fixedValue": 0, "label": "SI_in", "id": "si_in" },
+
+    { "type": "BOUNDARY_SCAN_CELL", "x": -260, "y":  60, "label": "bsc0", "id": "bsc0" },
+    { "type": "BOUNDARY_SCAN_CELL", "x": -260, "y": 120, "label": "bsc1", "id": "bsc1" },
+    { "type": "BOUNDARY_SCAN_CELL", "x": -260, "y": 180, "label": "bsc2", "id": "bsc2" },
+    { "type": "BOUNDARY_SCAN_CELL", "x": -260, "y": 240, "label": "bsc3", "id": "bsc3" },
+
+    { "type": "OUTPUT", "x": 20, "y":  60, "targetValue": 0, "sandbox": true, "label": "po0", "id": "po0" },
+    { "type": "OUTPUT", "x": 20, "y": 120, "targetValue": 0, "sandbox": true, "label": "po1", "id": "po1" },
+    { "type": "OUTPUT", "x": 20, "y": 180, "targetValue": 0, "sandbox": true, "label": "po2", "id": "po2" },
+    { "type": "OUTPUT", "x": 20, "y": 240, "targetValue": 0, "sandbox": true, "label": "po3", "id": "po3" },
+
+    { "type": "OUTPUT", "x": 200, "y": 240, "targetValue": 0, "sandbox": true, "label": "SO_out", "id": "so_out" }
+  ],
+  "wires": [
+    { "id": "wt_tck",  "sourceId": "tck",  "targetId": "tap", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "wt_tms",  "sourceId": "tms",  "targetId": "tap", "targetInputIndex": 1 },
+    { "id": "wt_tdi",  "sourceId": "tdi",  "targetId": "tap", "targetInputIndex": 2 },
+    { "id": "wt_trst", "sourceId": "trst", "targetId": "tap", "targetInputIndex": 3 },
+
+    { "id": "wt_tdo", "sourceId": "tap", "sourceOutputIndex": 0, "targetId": "tdo_out",   "targetInputIndex": 0 },
+    { "id": "wt_st",  "sourceId": "tap", "sourceOutputIndex": 1, "targetId": "tap_state", "targetInputIndex": 0 },
+    { "id": "wt_ir",  "sourceId": "tap", "sourceOutputIndex": 2, "targetId": "tap_ir",    "targetInputIndex": 0 },
+
+    { "id": "wb0_pi",   "sourceId": "core0",   "targetId": "bsc0", "targetInputIndex": 0 },
+    { "id": "wb0_si",   "sourceId": "si_in",   "targetId": "bsc0", "targetInputIndex": 1 },
+    { "id": "wb0_md",   "sourceId": "mode_in", "targetId": "bsc0", "targetInputIndex": 2 },
+    { "id": "wb0_sh",   "sourceId": "shift_in","targetId": "bsc0", "targetInputIndex": 3 },
+    { "id": "wb0_clk",  "sourceId": "tck",     "targetId": "bsc0", "targetInputIndex": 4, "isClockWire": true },
+    { "id": "wb0_po",   "sourceId": "bsc0", "sourceOutputIndex": 0, "targetId": "po0", "targetInputIndex": 0 },
+
+    { "id": "wb1_pi",   "sourceId": "core1",   "targetId": "bsc1", "targetInputIndex": 0 },
+    { "id": "wb1_si",   "sourceId": "bsc0", "sourceOutputIndex": 1, "targetId": "bsc1", "targetInputIndex": 1 },
+    { "id": "wb1_md",   "sourceId": "mode_in", "targetId": "bsc1", "targetInputIndex": 2 },
+    { "id": "wb1_sh",   "sourceId": "shift_in","targetId": "bsc1", "targetInputIndex": 3 },
+    { "id": "wb1_clk",  "sourceId": "tck",     "targetId": "bsc1", "targetInputIndex": 4, "isClockWire": true },
+    { "id": "wb1_po",   "sourceId": "bsc1", "sourceOutputIndex": 0, "targetId": "po1", "targetInputIndex": 0 },
+
+    { "id": "wb2_pi",   "sourceId": "core2",   "targetId": "bsc2", "targetInputIndex": 0 },
+    { "id": "wb2_si",   "sourceId": "bsc1", "sourceOutputIndex": 1, "targetId": "bsc2", "targetInputIndex": 1 },
+    { "id": "wb2_md",   "sourceId": "mode_in", "targetId": "bsc2", "targetInputIndex": 2 },
+    { "id": "wb2_sh",   "sourceId": "shift_in","targetId": "bsc2", "targetInputIndex": 3 },
+    { "id": "wb2_clk",  "sourceId": "tck",     "targetId": "bsc2", "targetInputIndex": 4, "isClockWire": true },
+    { "id": "wb2_po",   "sourceId": "bsc2", "sourceOutputIndex": 0, "targetId": "po2", "targetInputIndex": 0 },
+
+    { "id": "wb3_pi",   "sourceId": "core3",   "targetId": "bsc3", "targetInputIndex": 0 },
+    { "id": "wb3_si",   "sourceId": "bsc2", "sourceOutputIndex": 1, "targetId": "bsc3", "targetInputIndex": 1 },
+    { "id": "wb3_md",   "sourceId": "mode_in", "targetId": "bsc3", "targetInputIndex": 2 },
+    { "id": "wb3_sh",   "sourceId": "shift_in","targetId": "bsc3", "targetInputIndex": 3 },
+    { "id": "wb3_clk",  "sourceId": "tck",     "targetId": "bsc3", "targetInputIndex": 4, "isClockWire": true },
+    { "id": "wb3_po",   "sourceId": "bsc3", "sourceOutputIndex": 0, "targetId": "po3", "targetInputIndex": 0 },
+    { "id": "wb3_so",   "sourceId": "bsc3", "sourceOutputIndex": 1, "targetId": "so_out", "targetInputIndex": 0 }
+  ]
+}

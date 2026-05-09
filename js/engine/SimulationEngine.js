@@ -685,6 +685,20 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           ms.reg = (node.seed ?? 0) & _mask(sz);
           ms.q   = ms.reg;
         }
+        if (node.type === 'BIST_CONTROLLER') {
+          ms.bistState  = 0;       // IDLE
+          ms.cycleCount = 0;
+        }
+        if (node.type === 'JTAG_TAP') {
+          ms.tapState = 0;         // Test-Logic-Reset
+          ms.ir       = 0;
+          ms.dr       = 0;         // current DR shift register
+          ms.tdo      = 0;
+        }
+        if (node.type === 'BOUNDARY_SCAN_CELL') {
+          ms.shift = 0;            // shift-cell stored bit
+          ms.upd   = 0;            // updated/latched bit driving PO when MODE=1
+        }
         ffStates.set(id, ms);
       }
       value = ms.q ?? 0;
@@ -767,6 +781,33 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       if (node.type === 'FIFO' || node.type === 'STACK') {
         nodeValues.set(id + '__out1', ms.full ?? 0);
         nodeValues.set(id + '__out2', ms.empty ?? 1);
+      }
+      // BIST_CONTROLLER: 4 outputs derived from state.
+      //   out0 = DONE      (state ∈ {DONE, FAIL})
+      //   out1 = PASS      (state == DONE only)
+      //   out2 = TEST_MODE (state ∈ {SETUP, RUN})
+      //   out3 = STATE     (raw 3-bit code)
+      if (node.type === 'BIST_CONTROLLER') {
+        const s = ms.bistState ?? 0;
+        nodeValues.set(id,            (s >= 4)       ? 1 : 0);   // DONE
+        nodeValues.set(id + '__out1', (s === 4)      ? 1 : 0);   // PASS
+        nodeValues.set(id + '__out2', (s === 1 || s === 2) ? 1 : 0);  // TEST_MODE
+        nodeValues.set(id + '__out3', s);
+      }
+      // JTAG_TAP: out0 = TDO (1 bit), out1 = STATE (4 bits), out2 = IR
+      if (node.type === 'JTAG_TAP') {
+        nodeValues.set(id,            (ms.tdo | 0) & 1);
+        nodeValues.set(id + '__out1', (ms.tapState | 0) & 0xf);
+        nodeValues.set(id + '__out2', (ms.ir | 0));
+      }
+      // BOUNDARY_SCAN_CELL: out0 = PO (mode-mux of PI vs upd), out1 = SO
+      if (node.type === 'BOUNDARY_SCAN_CELL') {
+        const inputSlots = inputs.get(id) || [];
+        const pi   = (nodeValues.get(inputSlots.find(s => s.inputIndex === 0)?.sourceId) ?? 0) & 1;
+        const mode = (nodeValues.get(inputSlots.find(s => s.inputIndex === 2)?.sourceId) ?? 0) & 1;
+        const po = mode ? ((ms.upd | 0) & 1) : pi;
+        nodeValues.set(id,            po);                    // PO
+        nodeValues.set(id + '__out1', (ms.shift | 0) & 1);    // SO
       }
       // REG_FILE_DP: dual-port async read
       if (node.type === 'REG_FILE_DP') {
@@ -1272,6 +1313,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms.reg = (node.seed ?? 0) & m;
         ms.q   = ms.reg;
       }
+      if (node.type === 'BIST_CONTROLLER') {
+        // State machine: 0 IDLE, 1 SETUP, 2 RUN, 3 COMPARE, 4 DONE, 5 FAIL.
+        ms.bistState  = 0;
+        ms.cycleCount = 0;
+      }
       ffStates.set(node.id, ms);
     }
 
@@ -1432,6 +1478,125 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           ms.sigMatch = null;
         }
 
+      } else if (node.type === 'BIST_CONTROLLER') {
+        // BIST sequencer state machine. Pins:
+        //   START(0), RESET(1), SIG_IN(2), CLK(3)
+        // States (3-bit): 0 IDLE, 1 SETUP, 2 RUN, 3 COMPARE, 4 DONE, 5 FAIL.
+        // RESET (sync) overrides every transition and returns to IDLE.
+        const sigBits  = node.sigBits || 4;
+        const runLen   = Math.max(1, (node.runLength | 0) || 16);
+        const golden   = ((node.goldenSig | 0) >>> 0) & _mask(sigBits);
+        const start    = (_w(dataSlots[0]) || 0) & 1;
+        const reset    = (_w(dataSlots[1]) || 0) & 1;
+        const sigIn    = (_w(dataSlots[2]) || 0) & _mask(sigBits);
+        if (typeof ms.bistState  !== 'number') ms.bistState  = 0;
+        if (typeof ms.cycleCount !== 'number') ms.cycleCount = 0;
+        if (reset) {
+          ms.bistState  = 0;       // IDLE
+          ms.cycleCount = 0;
+        } else {
+          switch (ms.bistState) {
+            case 0:                 // IDLE — wait for START pulse
+              if (start) { ms.bistState = 1; ms.cycleCount = 0; }
+              break;
+            case 1:                 // SETUP — one cycle to assert TEST_MODE
+              ms.bistState = 2;
+              ms.cycleCount = 0;
+              break;
+            case 2:                 // RUN — count down `runLength` cycles
+              ms.cycleCount++;
+              if (ms.cycleCount >= runLen) ms.bistState = 3;
+              break;
+            case 3:                 // COMPARE — single-cycle decision
+              ms.bistState = (sigIn === golden) ? 4 : 5;
+              break;
+            case 4:                 // DONE — terminal pass; stays put
+            case 5:                 // FAIL — terminal fail; stays put
+              break;
+          }
+        }
+        // Outputs (multi-output via __out keys; primary Q = STATE).
+        ms.q = ms.bistState;        // exposes STATE on the primary out
+
+      } else if (node.type === 'JTAG_TAP') {
+        // IEEE 1149.1 TAP controller. Pins:
+        //   TCK(0), TMS(1), TDI(2), TRST(3)
+        // 16-state FSM advanced on posedge TCK by TMS:
+        //   0 Test-Logic-Reset, 1 Run-Test/Idle,
+        //   2 Select-DR, 3 Capture-DR, 4 Shift-DR, 5 Exit1-DR,
+        //   6 Pause-DR, 7 Exit2-DR, 8 Update-DR,
+        //   9 Select-IR, 10 Capture-IR, 11 Shift-IR, 12 Exit1-IR,
+        //   13 Pause-IR, 14 Exit2-IR, 15 Update-IR.
+        // TMS=0 / TMS=1 transitions per the IEEE state diagram.
+        const tms  = (_w(dataSlots[1]) || 0) & 1;
+        const tdi  = (_w(dataSlots[2]) || 0) & 1;
+        const trst = (_w(dataSlots[3]) || 0) & 1;
+        const irBits = Math.max(1, (node.irBits | 0) || 4);
+        const irMask = _mask(irBits);
+        if (typeof ms.tapState !== 'number') ms.tapState = 0;
+        if (typeof ms.ir       !== 'number') ms.ir       = 0;
+        if (typeof ms.dr       !== 'number') ms.dr       = 0;
+        if (trst) {
+          ms.tapState = 0; ms.ir = 0; ms.dr = 0; ms.tdo = 0;
+        } else {
+          // TMS transition table (rows=current, cols=tms 0/1).
+          const NEXT = [
+            [1, 0],   // 0 TLR
+            [1, 2],   // 1 RTI
+            [3, 9],   // 2 Select-DR
+            [4, 5],   // 3 Capture-DR
+            [4, 5],   // 4 Shift-DR
+            [6, 8],   // 5 Exit1-DR
+            [6, 7],   // 6 Pause-DR
+            [4, 8],   // 7 Exit2-DR
+            [1, 2],   // 8 Update-DR
+            [10, 0],  // 9 Select-IR
+            [11, 12], // 10 Capture-IR
+            [11, 12], // 11 Shift-IR
+            [13, 15], // 12 Exit1-IR
+            [13, 14], // 13 Pause-IR
+            [11, 15], // 14 Exit2-IR
+            [1, 2],   // 15 Update-IR
+          ];
+          // Shift behaviour BEFORE state transition (data shifts during
+          // Shift-* on the rising edge that keeps us in that state).
+          if (ms.tapState === 4) {
+            // Shift-DR — DR is a 32-bit shift toward LSB; TDO = LSB.
+            ms.tdo = ms.dr & 1;
+            ms.dr  = ((ms.dr >>> 1) | (tdi << 31)) >>> 0;
+          } else if (ms.tapState === 11) {
+            // Shift-IR
+            ms.tdo = ms.ir & 1;
+            ms.ir  = ((ms.ir >>> 1) | ((tdi & 1) << (irBits - 1))) & irMask;
+          } else if (ms.tapState === 3) {
+            // Capture-DR — preload IDCODE if instruction is IDCODE (LSB
+            // = 1 by convention); otherwise reset DR to 0.
+            ms.dr = (ms.ir & 1) ? ((node.idcode | 0) >>> 0) : 0;
+          } else if (ms.tapState === 10) {
+            // Capture-IR — IEEE mandates loading 0...01 into IR.
+            ms.ir = 1 & irMask;
+          }
+          ms.tapState = NEXT[ms.tapState][tms];
+        }
+        ms.q = ms.tdo;
+
+      } else if (node.type === 'BOUNDARY_SCAN_CELL') {
+        // Boundary-scan cell. Pins: PI(0), SI(1), MODE(2), SHIFT(3), CLK(4)
+        // SHIFT=1 → shift cell loads SI on each clock (chain mode).
+        // SHIFT=0 → cell captures PI (capture phase).
+        // MODE=1 → PO = updated/latched value (test mode); else PO = PI.
+        // Update happens whenever MODE rises 0→1 (latched copy of shift).
+        const pi    = (_w(dataSlots[0]) || 0) & 1;
+        const si    = (_w(dataSlots[1]) || 0) & 1;
+        const mode  = (_w(dataSlots[2]) || 0) & 1;
+        const shift = (_w(dataSlots[3]) || 0) & 1;
+        if (typeof ms.shift !== 'number') ms.shift = 0;
+        if (typeof ms.upd   !== 'number') ms.upd   = 0;
+        ms.shift = shift ? si : pi;
+        if (mode && !ms.modePrev) ms.upd = ms.shift;     // rising MODE captures
+        ms.modePrev = mode;
+        ms.q = mode ? ms.upd : pi;
+
       } else if (node.type === 'STACK') {
         // Inputs: DATA(0), PUSH(1), POP(2), CLR(3), CLK
         const data = _w(dataSlots[0]);
@@ -1576,6 +1741,22 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         if (node.type === 'FIFO' || node.type === 'STACK') {
           nodeValues.set(node.id + '__out1', ms.full ?? 0);
           nodeValues.set(node.id + '__out2', ms.empty ?? 1);
+        }
+        if (node.type === 'BIST_CONTROLLER') {
+          const s = ms.bistState ?? 0;
+          ms.q = (s >= 4) ? 1 : 0;     // primary out = DONE
+          nodeValues.set(node.id + '__out1', (s === 4)      ? 1 : 0);
+          nodeValues.set(node.id + '__out2', (s === 1 || s === 2) ? 1 : 0);
+          nodeValues.set(node.id + '__out3', s);
+        }
+        if (node.type === 'JTAG_TAP') {
+          ms.q = (ms.tdo | 0) & 1;
+          nodeValues.set(node.id + '__out1', (ms.tapState | 0) & 0xf);
+          nodeValues.set(node.id + '__out2', (ms.ir | 0));
+        }
+        if (node.type === 'BOUNDARY_SCAN_CELL') {
+          ms.q = (ms.q | 0) & 1;       // PO already set in Phase 2b
+          nodeValues.set(node.id + '__out1', (ms.shift | 0) & 1);
         }
         successors.get(node.id)?.forEach(({ wire }) => {
           const outIdx = wire.sourceOutputIndex || 0;

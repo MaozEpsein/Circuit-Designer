@@ -1,0 +1,63 @@
+{
+  "_dft": {
+    "_doc": "BIST integration — orchestrating LFSR + DUT + MISR with a BIST_CONTROLLER.\n\n  Wiring:\n    • CLOCK drives every sequential element (LFSR, MISR, BIST_CTRL) in lock-step.\n    • LFSR_pat — 4-bit Fibonacci generator, taps [3,0], seed=1. Free-runs on CLK and emits a pseudo-random pattern bit on its serial Q output.\n    • DUT — four XOR gates that mix the LFSR pattern bit with four manually-driven INPUTs (d0..d3). This is the 'device under test' whose responses the MISR will compact.\n    • MISR_sig — 4-bit signature compactor, taps [3,0]. Reads the 4 DUT response bits each cycle, builds a signature.\n    • BIST_CTRL — the orchestrator. Reads START + RESET, monitors MISR_sig.Q as SIG_IN, runs for 8 cycles, then COMPAREs against goldenSig.\n\n  How to use:\n    1. Hit RUN. The BIST_CTRL panel section shows state = IDLE, cycle = 0/8.\n    2. Click ✎ on the goldenSig field if you want to set an expected signature, or leave it as 0x0 to demonstrate FAIL.\n    3. Pulse START high once (the START input has stepValues 0,1,0,0,... so STEP from time-0 will arm it on tick 1).\n    4. Watch the FSM: IDLE → SETUP → RUN (cycleCount climbs each tick) → at cycle 8, COMPARE → DONE (PASS, status pill green) or FAIL (red).\n    5. Click ✎ → capture the live MISR signature into BIST.goldenSig, RESET, START again — should now go DONE-PASS.\n\n  Outputs visualized:\n    • LFSR_Q  — the serial pattern bit feeding the DUT.\n    • SIG     — live 4-bit MISR signature.\n    • DONE    — high in DONE or FAIL.\n    • PASS    — high only in DONE.\n    • TEST_MODE — high during SETUP and RUN (use to gate scan-enable, isolate the DUT, etc.).\n    • STATE   — the raw 3-bit FSM state for debugging."
+  },
+  "nodes": [
+    { "type": "CLOCK", "x": -560, "y": -180, "value": 0, "label": "clk", "id": "clk" },
+
+    { "type": "INPUT", "x": -560, "y": -100, "fixedValue": 0, "stepValues": [0,1,0,0,0,0,0,0,0,0,0,0,0,0], "label": "START", "id": "start" },
+    { "type": "INPUT", "x": -560, "y":  -60, "fixedValue": 0, "label": "RESET", "id": "reset" },
+
+    { "type": "LFSR", "x": -300, "y": -100, "bitWidth": 4, "taps": [3, 0], "seed": 1, "label": "LFSR_pat", "id": "lfsr_pat" },
+    { "type": "OUTPUT", "x": -100, "y": -160, "targetValue": 0, "sandbox": true, "label": "LFSR_Q", "id": "lfsr_q_out" },
+
+    { "type": "INPUT", "x": -560, "y":  60, "fixedValue": 1, "label": "d0", "id": "d0" },
+    { "type": "INPUT", "x": -560, "y": 100, "fixedValue": 0, "label": "d1", "id": "d1" },
+    { "type": "INPUT", "x": -560, "y": 140, "fixedValue": 1, "label": "d2", "id": "d2" },
+    { "type": "INPUT", "x": -560, "y": 180, "fixedValue": 1, "label": "d3", "id": "d3" },
+
+    { "type": "XOR", "x": -300, "y":  60, "label": "DUT0", "id": "dut0" },
+    { "type": "XOR", "x": -300, "y": 100, "label": "DUT1", "id": "dut1" },
+    { "type": "XOR", "x": -300, "y": 140, "label": "DUT2", "id": "dut2" },
+    { "type": "XOR", "x": -300, "y": 180, "label": "DUT3", "id": "dut3" },
+
+    { "type": "MISR", "x": -60, "y": 120, "bitWidth": 4, "taps": [3, 0], "seed": 0, "goldenSig": 0, "label": "MISR_sig", "id": "misr_sig" },
+    { "type": "OUTPUT", "x": 200, "y": 120, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "SIG", "id": "sig_out" },
+
+    { "type": "BIST_CONTROLLER", "x": 240, "y": -80, "sigBits": 4, "runLength": 8, "goldenSig": 0, "label": "BIST_CTRL", "id": "bist_ctrl" },
+    { "type": "OUTPUT", "x": 480, "y": -160, "targetValue": 0, "sandbox": true, "label": "DONE", "id": "done_out" },
+    { "type": "OUTPUT", "x": 480, "y": -120, "targetValue": 0, "sandbox": true, "label": "PASS", "id": "pass_out" },
+    { "type": "OUTPUT", "x": 480, "y":  -80, "targetValue": 0, "sandbox": true, "label": "TEST_MODE", "id": "tm_out" },
+    { "type": "OUTPUT", "x": 480, "y":  -40, "targetValue": 0, "sandbox": true, "bitWidth": 3, "label": "STATE", "id": "state_out" }
+  ],
+  "wires": [
+    { "id": "w_clk_lfsr", "sourceId": "clk", "targetId": "lfsr_pat", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "w_lfsr_q",   "sourceId": "lfsr_pat", "sourceOutputIndex": 0, "targetId": "lfsr_q_out", "targetInputIndex": 0 },
+
+    { "id": "w_dut0_a", "sourceId": "lfsr_pat", "sourceOutputIndex": 0, "targetId": "dut0", "targetInputIndex": 0 },
+    { "id": "w_dut0_b", "sourceId": "d0",       "targetId": "dut0", "targetInputIndex": 1 },
+    { "id": "w_dut1_a", "sourceId": "lfsr_pat", "sourceOutputIndex": 0, "targetId": "dut1", "targetInputIndex": 0 },
+    { "id": "w_dut1_b", "sourceId": "d1",       "targetId": "dut1", "targetInputIndex": 1 },
+    { "id": "w_dut2_a", "sourceId": "lfsr_pat", "sourceOutputIndex": 0, "targetId": "dut2", "targetInputIndex": 0 },
+    { "id": "w_dut2_b", "sourceId": "d2",       "targetId": "dut2", "targetInputIndex": 1 },
+    { "id": "w_dut3_a", "sourceId": "lfsr_pat", "sourceOutputIndex": 0, "targetId": "dut3", "targetInputIndex": 0 },
+    { "id": "w_dut3_b", "sourceId": "d3",       "targetId": "dut3", "targetInputIndex": 1 },
+
+    { "id": "w_misr_d0", "sourceId": "dut0", "targetId": "misr_sig", "targetInputIndex": 0 },
+    { "id": "w_misr_d1", "sourceId": "dut1", "targetId": "misr_sig", "targetInputIndex": 1 },
+    { "id": "w_misr_d2", "sourceId": "dut2", "targetId": "misr_sig", "targetInputIndex": 2 },
+    { "id": "w_misr_d3", "sourceId": "dut3", "targetId": "misr_sig", "targetInputIndex": 3 },
+    { "id": "w_misr_clk","sourceId": "clk",  "targetId": "misr_sig", "targetInputIndex": 4, "isClockWire": true },
+    { "id": "w_misr_q",  "sourceId": "misr_sig", "sourceOutputIndex": 0, "targetId": "sig_out", "targetInputIndex": 0 },
+
+    { "id": "w_bist_start","sourceId": "start", "targetId": "bist_ctrl", "targetInputIndex": 0 },
+    { "id": "w_bist_reset","sourceId": "reset", "targetId": "bist_ctrl", "targetInputIndex": 1 },
+    { "id": "w_bist_sig",  "sourceId": "misr_sig", "sourceOutputIndex": 0, "targetId": "bist_ctrl", "targetInputIndex": 2 },
+    { "id": "w_bist_clk",  "sourceId": "clk",   "targetId": "bist_ctrl", "targetInputIndex": 3, "isClockWire": true },
+
+    { "id": "w_done", "sourceId": "bist_ctrl", "sourceOutputIndex": 0, "targetId": "done_out",  "targetInputIndex": 0 },
+    { "id": "w_pass", "sourceId": "bist_ctrl", "sourceOutputIndex": 1, "targetId": "pass_out",  "targetInputIndex": 0 },
+    { "id": "w_tm",   "sourceId": "bist_ctrl", "sourceOutputIndex": 2, "targetId": "tm_out",    "targetInputIndex": 0 },
+    { "id": "w_st",   "sourceId": "bist_ctrl", "sourceOutputIndex": 3, "targetId": "state_out", "targetInputIndex": 0 }
+  ]
+}

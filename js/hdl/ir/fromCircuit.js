@@ -18,6 +18,18 @@ function nodeBitWidth(node, outIdx = 0) {
   if (node?.type === 'COUNTER' && outIdx === 1) return 1;        // TC is 1-bit
   if (node?.type === 'LFSR')                     return 1;        // serial Q is 1-bit (MSB)
   if (node?.type === 'MISR')                     return Math.max(1, (node.bitWidth || 4) | 0);  // Q = full signature
+  // BIST_CONTROLLER outputs:
+  //   out0 DONE (1), out1 PASS (1), out2 TEST_MODE (1), out3 STATE (3-bit)
+  if (node?.type === 'BIST_CONTROLLER')          return outIdx === 3 ? 3 : 1;
+  // JTAG_TAP outputs: out0 TDO (1), out1 STATE (4), out2 IR (irBits)
+  if (node?.type === 'JTAG_TAP') {
+    if (outIdx === 0) return 1;
+    if (outIdx === 1) return 4;
+    if (outIdx === 2) return Math.max(1, (node.irBits | 0) || 4);
+    return 1;
+  }
+  // BOUNDARY_SCAN_CELL outputs: out0 PO (1), out1 SO (1)
+  if (node?.type === 'BOUNDARY_SCAN_CELL')        return 1;
   // CU control outputs: out0 = ALU_OP (3-bit op selector), all others
   // are single-bit control signals.
   if (node?.type === 'CU') return outIdx === 0 ? 3 : 1;

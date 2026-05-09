@@ -142,6 +142,9 @@ export class CommandPalette {
       { id: 'place-scanff', label: 'Place SCAN Flip-Flop (DFT)', category: 'Test', action: () => bus.emit('palette:tool', 'place-scanff') },
       { id: 'place-lfsr',   label: 'Place LFSR (DFT pattern generator)', category: 'Test', action: () => bus.emit('palette:tool', 'place-lfsr') },
       { id: 'place-misr',   label: 'Place MISR (DFT signature compactor)', category: 'Test', action: () => bus.emit('palette:tool', 'place-misr') },
+      { id: 'place-bist',   label: 'Place BIST Controller (DFT sequencer)', category: 'Test', action: () => bus.emit('palette:tool', 'place-bist') },
+      { id: 'place-jtag',   label: 'Place JTAG TAP (IEEE 1149.1)',         category: 'Test', action: () => bus.emit('palette:tool', 'place-jtag') },
+      { id: 'place-bsc',    label: 'Place Boundary-Scan Cell (DFT)',       category: 'Test', action: () => bus.emit('palette:tool', 'place-bsc') },
     ];
 
     // Actions

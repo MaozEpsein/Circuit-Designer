@@ -971,6 +971,39 @@ function _updatePropsPanel() {
   } else {
     if (misrGoldRow) misrGoldRow.style.display = 'none';
   }
+  // BIST_CONTROLLER properties: runLength, sigBits, goldenSig.
+  const bistRunRow  = document.getElementById('prop-bist-runlen-row');
+  const bistRunInp  = document.getElementById('prop-bist-runlen-input');
+  const bistSigRow  = document.getElementById('prop-bist-sigbits-row');
+  const bistSigSel  = document.getElementById('prop-bist-sigbits-select');
+  const bistGoldRow = document.getElementById('prop-bist-golden-row');
+  const bistGoldInp = document.getElementById('prop-bist-golden-input');
+  if (node.type === 'BIST_CONTROLLER') {
+    if (bistRunRow)  bistRunRow.style.display  = '';
+    if (bistSigRow)  bistSigRow.style.display  = '';
+    if (bistGoldRow) bistGoldRow.style.display = '';
+    if (bistRunInp)  bistRunInp.value  = String(node.runLength ?? 16);
+    if (bistSigSel)  bistSigSel.value  = String(node.sigBits ?? 4);
+    if (bistGoldInp) bistGoldInp.value = '0x' + ((node.goldenSig | 0) >>> 0).toString(16);
+  } else {
+    if (bistRunRow)  bistRunRow.style.display  = 'none';
+    if (bistSigRow)  bistSigRow.style.display  = 'none';
+    if (bistGoldRow) bistGoldRow.style.display = 'none';
+  }
+  // JTAG_TAP properties: irBits, idcode.
+  const jtagIrRow  = document.getElementById('prop-jtag-irbits-row');
+  const jtagIrSel  = document.getElementById('prop-jtag-irbits-select');
+  const jtagIdRow  = document.getElementById('prop-jtag-idcode-row');
+  const jtagIdInp  = document.getElementById('prop-jtag-idcode-input');
+  if (node.type === 'JTAG_TAP') {
+    if (jtagIrRow) jtagIrRow.style.display = '';
+    if (jtagIdRow) jtagIdRow.style.display = '';
+    if (jtagIrSel) jtagIrSel.value = String(node.irBits ?? 4);
+    if (jtagIdInp) jtagIdInp.value = '0x' + ((node.idcode | 0) >>> 0).toString(16);
+  } else {
+    if (jtagIrRow) jtagIrRow.style.display = 'none';
+    if (jtagIdRow) jtagIdRow.style.display = 'none';
+  }
   if (node.type !== 'CACHE') {
     const linesRow = document.getElementById('prop-cache-lines-row');
     const mapRow   = document.getElementById('prop-cache-mapping-row');
@@ -1195,6 +1228,56 @@ document.getElementById('prop-misr-golden-input')?.addEventListener('change', (e
   else val = parseInt(raw, 10);
   if (!Number.isFinite(val) || val < 0) return;
   const masked = val & ((1 << (node.bitWidth || 4)) - 1);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { goldenSig: masked }));
+});
+
+// BIST_CONTROLLER properties.
+document.getElementById('prop-bist-runlen-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'BIST_CONTROLLER') return;
+  let v = parseInt(e.target.value, 10);
+  if (!Number.isFinite(v) || v < 1) v = 1;
+  if (v > 65535) v = 65535;
+  e.target.value = String(v);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { runLength: v }));
+  state.ffStates?.delete(node.id);
+});
+document.getElementById('prop-bist-sigbits-select')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'BIST_CONTROLLER') return;
+  const v = parseInt(e.target.value, 10);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { sigBits: v }));
+  state.ffStates?.delete(node.id);
+});
+document.getElementById('prop-jtag-irbits-select')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'JTAG_TAP') return;
+  const v = parseInt(e.target.value, 10);
+  if (!Number.isFinite(v) || v < 1) return;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { irBits: v }));
+  state.ffStates?.delete(node.id);
+});
+document.getElementById('prop-jtag-idcode-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'JTAG_TAP') return;
+  const raw = String(e.target.value || '').trim();
+  let v = NaN;
+  if (raw.startsWith('0x') || raw.startsWith('0X')) v = parseInt(raw.slice(2), 16);
+  else if (raw.startsWith('0b') || raw.startsWith('0B')) v = parseInt(raw.slice(2), 2);
+  else v = parseInt(raw, 10);
+  if (!Number.isFinite(v) || v < 0) return;
+  commands.execute(new SetNodePropsCommand(scene, node.id, { idcode: v >>> 0 }));
+});
+document.getElementById('prop-bist-golden-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'BIST_CONTROLLER') return;
+  const raw = String(e.target.value || '').trim();
+  let val = NaN;
+  if (raw.startsWith('0x') || raw.startsWith('0X')) val = parseInt(raw.slice(2), 16);
+  else if (raw.startsWith('0b') || raw.startsWith('0B')) val = parseInt(raw.slice(2), 2);
+  else val = parseInt(raw, 10);
+  if (!Number.isFinite(val) || val < 0) return;
+  const masked = val & ((1 << (node.sigBits || 4)) - 1);
   commands.execute(new SetNodePropsCommand(scene, node.id, { goldenSig: masked }));
 });
 
@@ -2323,7 +2406,8 @@ function _refreshMemInspector() {
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
     n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
     n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG' ||
-    n.type === 'LFSR' || n.type === 'MISR'
+    n.type === 'LFSR' || n.type === 'MISR' || n.type === 'BIST_CONTROLLER' ||
+    n.type === 'JTAG_TAP' || n.type === 'BOUNDARY_SCAN_CELL'
   );
 
   if (memNodes.length === 0) {
@@ -2331,7 +2415,7 @@ function _refreshMemInspector() {
     return;
   }
 
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR', MISR: 'MISR' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', JTAG_TAP: 'JTAG', BOUNDARY_SCAN_CELL: 'BSC' };
   let html = '';
 
   for (const node of memNodes) {
@@ -4653,6 +4737,20 @@ const EXAMPLES = [
     desc: 'Three SCAN-FFs chained for scan-based testing. Each has D, TI (test input), TE (test enable), CLK. With TE=0, each behaves like a normal D flip-flop fed from its own D input. With TE=1, each loads from TI = the previous SCAN-FF\'s Q — so a value injected at SCAN_IN shifts through the chain on every clock edge and emerges at SCAN_OUT after 3 cycles. Open the DFT panel (T) to see the SCAN CHAINS section auto-detect the chain: ff_a → ff_b → ff_c. Toggle TE in the input panel and step the clock to watch the shift in action.',
     tags: ['dft', 'scan', 'scan-ff', 'sequential'],
     file: 'examples/circuits/dft-scan-chain-3.json',
+  },
+  {
+    id: 'dft-jtag-boundary-scan',
+    title: '8. DFT — JTAG TAP + boundary-scan ring',
+    desc: 'IEEE 1149.1 in action. A JTAG_TAP runs the 16-state Test-Logic FSM driven by TMS on posedge TCK; toggle TMS in the input panel and STEP to walk it (5×TMS=1 always lands you in Test-Logic-Reset). Four BOUNDARY_SCAN_CELLs form a scan ring around four "core" inputs core0..core3 — SI of each cell chains to SO of the previous one, so a value driven into the ring shifts cell-to-cell on every clock when SHIFT=1. With MODE=0 each pad output po_i passes core_i through transparently; MODE=1 swaps to the latched test bit captured during the last update. The DFT panel\'s JTAG TAPS section shows the TAP state name (Test-Logic-Reset, Shift-DR, Update-IR, …), live IR + DR, and the IDCODE. Open the side panel to edit IR width / IDCODE inline.',
+    tags: ['dft', 'jtag', 'boundary-scan', 'fsm', 'verilog'],
+    file: 'examples/circuits/dft-jtag-boundary-scan.json',
+  },
+  {
+    id: 'dft-bist-integration',
+    title: '7. DFT — BIST integration (LFSR + DUT + MISR + BIST_CTRL)',
+    desc: 'End-to-end Built-In Self-Test loop. A BIST_CONTROLLER orchestrates an 8-cycle test run: it monitors START, walks IDLE → SETUP → RUN → COMPARE → DONE/FAIL, and drives TEST_MODE high during the active phases. An LFSR generates a serial pattern bit per cycle; four XOR gates mix it with manual inputs d0..d3 to form the DUT response; a 4-bit MISR compacts those responses into a signature that feeds the BIST controller as SIG_IN. To run: open the DFT panel and scroll to BIST CONTROLLERS, hit RUN, and pulse START — watch state advance and the cycle counter tick up to 8. The default goldenSig=0 will trigger FAIL (red pill) — click ✎ to capture the live MISR signature, RESET, START again, observe DONE-PASS (green).',
+    tags: ['dft', 'bist', 'lfsr', 'misr', 'integration', 'fsm', 'verilog'],
+    file: 'examples/circuits/dft-bist-integration.json',
   },
   {
     id: 'dft-misr-signature',

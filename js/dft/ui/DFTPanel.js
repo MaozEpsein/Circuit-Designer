@@ -199,6 +199,8 @@ export class DFTPanel {
     this._body    = document.getElementById('dft-panel-body');
     this._closeBtn   = document.getElementById('btn-dft-close');
     this._fsBtn      = document.getElementById('btn-dft-fullscreen');
+    this._collapseAllBtn = document.getElementById('btn-dft-collapse-all');
+    this._editAllBtn     = document.getElementById('btn-dft-edit-all');
     this._visible    = false;
 
     this._runBtn  = document.getElementById('btn-dft-run');
@@ -210,7 +212,8 @@ export class DFTPanel {
     // `chain_0` (positional, stable per scene) or `lfsr_<nodeId>` (by
     // node id, also stable). The set survives a re-render so the
     // user's fold choices aren't undone by a fault-sim refresh.
-    this._collapsedBlocks = new Set();
+    this._collapsedBlocks   = new Set();
+    this._collapsedSections = new Set();
     // Per-field LFSR edit state. Key shape: `<lfsrId>:<field>`. A
     // field is in view mode (read-only text + pencil) until the user
     // clicks the pencil; then it enters edit mode (input + save/
@@ -233,6 +236,8 @@ export class DFTPanel {
 
     if (this._closeBtn) this._closeBtn.addEventListener('click', () => this.hide());
     if (this._fsBtn)    this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
+    if (this._collapseAllBtn) this._collapseAllBtn.addEventListener('click', () => this._toggleCollapseAll());
+    if (this._editAllBtn)     this._editAllBtn.addEventListener('click', () => this._toggleEditAll());
     if (this._runBtn)   this._runBtn.addEventListener('click', () => this._runFaultSim());
     if (this._genBtn)   this._genBtn.addEventListener('click', () => this._generateRandomVectors(16));
 
@@ -245,15 +250,93 @@ export class DFTPanel {
       // edit on a tick-rendered card, etc. Click never fires when
       // mouseup lands on a different DOM node than mousedown.
       this._body.addEventListener('mousedown', (e) => {
-        const trg = e.target.closest('[data-action="misr-radix"]');
-        if (!trg) return;
-        e.preventDefault();
-        const r = trg.dataset.radix;
-        if (r === 'bin' || r === 'dec' || r === 'hex') {
-          this._misrRadix = r;
-          if (this._visible) this._render();
+        // Radix toggle.
+        const radixTrg = e.target.closest('[data-action="misr-radix"]');
+        if (radixTrg) {
+          e.preventDefault();
+          const r = radixTrg.dataset.radix;
+          if (r === 'bin' || r === 'dec' || r === 'hex') {
+            this._misrRadix = r;
+            if (this._visible) this._render();
+          }
+          return;
+        }
+        // Info toggle. Bound on mousedown because the panel re-renders
+        // every tick — a click event whose mousedown and mouseup land
+        // on different DOM nodes never fires.
+        const infoTrg = e.target.closest('[data-action="toggle-info"]');
+        if (infoTrg) {
+          e.preventDefault();
+          e.stopPropagation();
+          const section = infoTrg.dataset.section;
+          if (!section) return;
+          if (this._infoOpen.has(section)) this._closeInfoPopovers();
+          else                              this._openInfoPopover(section);
+          return;
+        }
+        // Section header collapse — same survival reasoning.
+        const headerTrg = e.target.closest('.dft-section-header');
+        if (headerTrg && !e.target.closest('button, [data-action]')) {
+          const section = headerTrg.parentElement;
+          if (section && section.classList.contains('dft-section')) {
+            e.preventDefault();
+            const id = section.dataset.section || '';
+            const nowCollapsed = !section.classList.contains('dft-section-collapsed');
+            section.classList.toggle('dft-section-collapsed', nowCollapsed);
+            if (nowCollapsed) this._collapsedSections.add(id);
+            else              this._collapsedSections.delete(id);
+            const tog = headerTrg.querySelector('.dft-section-toggle');
+            if (tog) tog.textContent = nowCollapsed ? '▸' : '▾';
+          }
+          return;
+        }
+        // Pencil edit / save / cancel — also re-rendered every tick.
+        const editTrg = e.target.closest('[data-action="lfsr-edit"], [data-action="lfsr-save"], [data-action="lfsr-cancel"]');
+        if (editTrg) {
+          e.preventDefault();
+          const lfsrId = editTrg.dataset.lfsrId;
+          const field  = editTrg.dataset.field;
+          if (!lfsrId || !field) return;
+          const action = editTrg.dataset.action;
+          if (action === 'lfsr-edit') {
+            this._editingFields.add(`${lfsrId}:${field}`);
+            if (this._visible) this._render();
+            const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
+            inp?.focus(); inp?.select?.();
+          } else if (action === 'lfsr-save') {
+            const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
+            if (inp) this._commitLfsrEdit(inp);
+            this._editingFields.delete(`${lfsrId}:${field}`);
+            if (this._visible) this._render();
+          } else if (action === 'lfsr-cancel') {
+            this._editingFields.delete(`${lfsrId}:${field}`);
+            if (this._visible) this._render();
+          }
+          return;
+        }
+        // Per-block (chain / lfsr / misr / bist) collapse.
+        const blockHeader = e.target.closest('.dft-chain-block[data-block-id] .dft-chain-header');
+        if (blockHeader && !e.target.closest('.dft-chain-status[data-action], button, [data-action]')) {
+          const block = blockHeader.closest('.dft-chain-block');
+          const id = block?.dataset.blockId;
+          if (id) {
+            e.preventDefault();
+            if (this._collapsedBlocks.has(id)) {
+              this._collapsedBlocks.delete(id);
+              block.classList.remove('collapsed');
+            } else {
+              this._collapsedBlocks.add(id);
+              block.classList.add('collapsed');
+            }
+            const tog = blockHeader.querySelector('.dft-chain-toggle');
+            if (tog) tog.textContent = block.classList.contains('collapsed') ? '▸' : '▾';
+          }
+          return;
         }
       });
+      // toggle-vectors stays on click — it's outside the per-tick
+      // re-render path. Pencil edit / save / cancel moved to the
+      // mousedown listener above for the same survival reason.
       this._body.addEventListener('click', (e) => {
         const trg = e.target.closest('[data-action]');
         if (!trg) return;
@@ -262,42 +345,9 @@ export class DFTPanel {
           if (this._visible) this._render();
           return;
         }
-        // LFSR field edit lifecycle. Pencil enters edit mode, save
-        // commits, cancel discards. Each click triggers a re-render
-        // so the field swaps between view and edit shapes.
-        const lfsrId = trg.dataset.lfsrId;
-        const field  = trg.dataset.field;
-        if (trg.dataset.action === 'lfsr-edit'   && lfsrId && field) {
-          this._editingFields.add(`${lfsrId}:${field}`);
-          if (this._visible) this._render();
-          // Move focus to the freshly-rendered input.
-          const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
-          inp?.focus(); inp?.select?.();
-          return;
-        }
-        if (trg.dataset.action === 'lfsr-save'   && lfsrId && field) {
-          const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
-          if (inp) this._commitLfsrEdit(inp);     // re-renders if successful
-          this._editingFields.delete(`${lfsrId}:${field}`);
-          if (this._visible) this._render();
-          return;
-        }
-        if (trg.dataset.action === 'lfsr-cancel' && lfsrId && field) {
-          this._editingFields.delete(`${lfsrId}:${field}`);
-          if (this._visible) this._render();
-        }
-        if (trg.dataset.action === 'misr-radix') {
-          // Handled in the mousedown listener above — `click` doesn't
-          // fire reliably here because the panel re-renders mid-touch.
-          return;
-        }
-        if (trg.dataset.action === 'toggle-info') {
-          e.stopPropagation();
-          const section = trg.dataset.section;
-          if (!section) return;
-          if (this._infoOpen.has(section)) this._closeInfoPopovers();
-          else                              this._openInfoPopover(section);
-        }
+        // misr-radix and toggle-info are handled in the mousedown
+        // listener above — click doesn't fire reliably here because
+        // the panel re-renders mid-touch.
       });
       // Keyboard shortcuts inside the LFSR edit input — Enter saves,
       // Escape cancels.
@@ -372,6 +422,8 @@ export class DFTPanel {
     if (!this._el) return;
     const on = this._el.classList.toggle('dft-fullscreen');
     if (this._fsBtn) this._fsBtn.textContent = on ? 'EXIT FS' : 'FULLSCREEN';
+    if (this._collapseAllBtn) this._collapseAllBtn.style.display = on ? '' : 'none';
+    if (this._editAllBtn)     this._editAllBtn.style.display     = on ? '' : 'none';
     if (on) {
       this._fsSaved = {
         width:    this._el.style.width,
@@ -395,6 +447,68 @@ export class DFTPanel {
         this._el.insertBefore(this._summary, this._body);
       }
     }
+  }
+
+  // Fullscreen-only "collapse all / expand all". Toggles between
+  // every section + per-block being folded vs. all open. State lives
+  // alongside the per-section / per-block sets so individual users
+  // can still drill back in after a global expand.
+  _toggleCollapseAll() {
+    // Discover live section ids from the DOM (set by
+    // _applyCollapsibleSections from each header's className).
+    const sectionIds = Array.from(this._body?.querySelectorAll('.dft-section') || [])
+      .map(s => s.dataset.section).filter(Boolean);
+    const blockIds = Array.from(this._body?.querySelectorAll('.dft-chain-block[data-block-id]') || [])
+      .map(b => b.dataset.blockId).filter(Boolean);
+    const anyOpen = sectionIds.some(s => !this._collapsedSections.has(s)) ||
+                    blockIds.some(b => !this._collapsedBlocks.has(b));
+    if (anyOpen) {
+      sectionIds.forEach(s => this._collapsedSections.add(s));
+      blockIds.forEach(b => this._collapsedBlocks.add(b));
+      if (this._collapseAllBtn) this._collapseAllBtn.textContent = '▸ EXPAND ALL';
+    } else {
+      this._collapsedSections.clear();
+      this._collapsedBlocks.clear();
+      if (this._collapseAllBtn) this._collapseAllBtn.textContent = '▾ COLLAPSE ALL';
+    }
+    if (this._visible) this._render();
+  }
+
+  // Fullscreen-only "edit all / save all". Opens every editable
+  // field (LFSR seed/taps/width, MISR golden, BIST runLength/golden)
+  // for parallel editing; on second press, commits each one and
+  // returns to view mode.
+  _toggleEditAll() {
+    const allNodes = this._scene?.nodes || [];
+    const fields = [];
+    allNodes.forEach(n => {
+      if (n.type === 'LFSR') {
+        fields.push(`${n.id}:bitWidth`, `${n.id}:seed`, `${n.id}:taps`);
+      } else if (n.type === 'MISR') {
+        fields.push(`${n.id}:bitWidth`, `${n.id}:seed`, `${n.id}:taps`, `${n.id}:goldenSig`);
+      } else if (n.type === 'BIST_CONTROLLER') {
+        fields.push(`${n.id}:runLength`, `${n.id}:goldenSig`);
+      } else if (n.type === 'JTAG_TAP') {
+        fields.push(`${n.id}:irBits`, `${n.id}:idcode`);
+      }
+    });
+    const anyEditing = fields.some(k => this._editingFields.has(k));
+    if (anyEditing) {
+      // SAVE ALL — commit every open input, then close.
+      fields.forEach(k => {
+        if (!this._editingFields.has(k)) return;
+        const [id, field] = k.split(':');
+        const inp = this._body?.querySelector(
+          `input[data-lfsr-id="${id}"][data-field="${field}"]`);
+        if (inp) this._commitLfsrEdit(inp);
+        this._editingFields.delete(k);
+      });
+      if (this._editAllBtn) this._editAllBtn.textContent = '✎ EDIT ALL';
+    } else {
+      fields.forEach(k => this._editingFields.add(k));
+      if (this._editAllBtn) this._editAllBtn.textContent = '💾 SAVE ALL';
+    }
+    if (this._visible) this._render();
   }
 
   // Render pass. Layer 0 only emits the placeholder body — every
@@ -424,6 +538,8 @@ export class DFTPanel {
       this._renderScanChains() +
       this._renderPatternGenerators() +
       this._renderSignatureCompactors() +
+      this._renderBistControllers() +
+      this._renderJtagTaps() +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
@@ -813,10 +929,46 @@ export class DFTPanel {
     const field = input.dataset.field;
     const node  = this._scene?.nodes?.find(n => n.id === id);
     if (!node) return;
-    if (node.type !== 'LFSR' && node.type !== 'MISR') return;
+    if (node.type !== 'LFSR' && node.type !== 'MISR' && node.type !== 'BIST_CONTROLLER' && node.type !== 'JTAG_TAP') return;
 
     const raw = (input.value || '').trim();
     let next;
+    // JTAG_TAP's irBits: small positive integer.
+    if (field === 'irBits') {
+      const v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 1 || v > 16) { input.value = node.irBits ?? 4; return; }
+      node.irBits = v;
+      const ffStates = window.state?.ffStates;
+      if (ffStates?.delete) ffStates.delete(node.id);
+      bus.emit('node:edited', { node, field });
+      if (this._visible) this._render();
+      return;
+    }
+    // JTAG_TAP's idcode: 32-bit value, dec / hex / bin.
+    if (field === 'idcode') {
+      let v;
+      if (/^0[xX][0-9a-fA-F]+$/.test(raw))      v = parseInt(raw.slice(2), 16);
+      else if (/^0[bB][01]+$/.test(raw))        v = parseInt(raw.slice(2), 2);
+      else if (/^[0-9]+$/.test(raw))            v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 0) {
+        input.value = '0x' + ((node.idcode | 0) >>> 0).toString(16); return;
+      }
+      node.idcode = v >>> 0;
+      bus.emit('node:edited', { node, field });
+      if (this._visible) this._render();
+      return;
+    }
+    // BIST_CONTROLLER's runLength: positive integer.
+    if (field === 'runLength') {
+      const v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 1 || v > 65535) { input.value = node.runLength; return; }
+      node.runLength = v;
+      const ffStates = window.state?.ffStates;
+      if (ffStates?.delete) ffStates.delete(node.id);
+      bus.emit('node:edited', { node, field });
+      if (this._visible) this._render();
+      return;
+    }
     if (field === 'goldenSig') {
       // Special: blank input clears the golden signature back to null.
       if (raw === '') { node.goldenSig = null; bus.emit('node:edited', { node, field }); if (this._visible) this._render(); return; }
@@ -998,7 +1150,7 @@ export class DFTPanel {
             <span class="dft-lfsr-k">width</span>
             ${this._renderLfsrField(lfsr.id, 'bitWidth',
               `<code>${width}</code> <small>bits</small>`,
-              { current: width, hint: 'integer 1–24', inputType: 'number', minMax: 'min="1" max="24"' })}    /* LFSR — period sim caps at 24 */
+              { current: width, hint: 'integer 1–24', inputType: 'number', minMax: 'min="1" max="24"' })}
             <span class="dft-lfsr-k">seed</span>
             ${this._renderLfsrField(lfsr.id, 'seed',
               `<code>${seed.toString(2).padStart(width, '0')}</code> <small>(0x${seed.toString(16)})</small>`,
@@ -1208,6 +1360,229 @@ export class DFTPanel {
       </span>`;
   }
 
+  // ── BIST CONTROLLERS ────────────────────────────────────────
+  // One block per BIST_CONTROLLER node — current state name, cycle
+  // counter against runLength, golden signature (editable), and a
+  // status pill that mirrors the FSM (idle / running / pass / fail).
+  _renderBistControllers() {
+    const allNodes = this._scene?.nodes || [];
+    const ctls     = allNodes.filter(n => n.type === 'BIST_CONTROLLER');
+
+    const headerHtml = `<span class="dft-section-title">BIST CONTROLLERS` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="bist" title="What does this section show?">i</button>` +
+      `</span>`;
+    const infoPanel = this._infoOpen.has('bist') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Each BIST_CONTROLLER orchestrates one self-test run: assert TEST_MODE for runLength cycles while LFSR + MISR do their work, then compare the captured signature to the golden value and latch PASS or FAIL.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">idle</span>
+          <span class="dft-info-text">Waiting for START. Pulse the START input to begin the run.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">running</span>
+          <span class="dft-info-text">In SETUP / RUN — TEST_MODE high, cycle counter advancing toward runLength.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">pass</span>
+          <span class="dft-info-text">Run completed and the captured MISR signature matched goldenSig — design is fault-free under this test.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">fail</span>
+          <span class="dft-info-text">Captured signature didn't match — at least one fault sensitised by the test.</span>
+        </div>
+      </div>` : '';
+
+    if (ctls.length === 0) {
+      return `
+        <div class="dft-bist-header dft-section-header">${headerHtml}</div>${infoPanel}
+        <div class="dft-empty">No BIST_CONTROLLER in scene — drop one (TEST tab) to sequence a self-test run end-to-end.</div>
+      `;
+    }
+
+    const ffStates = window.state?.ffStates;
+    const STATE_NAMES = ['IDLE', 'SETUP', 'RUN', 'COMPARE', 'DONE', 'FAIL'];
+    const radix = this._misrRadix;
+    const fmtVal = (v, W) => {
+      if (radix === 'dec') return String(v >>> 0);
+      if (radix === 'hex') return '0x' + (v >>> 0).toString(16);
+      return (v >>> 0).toString(2).padStart(W, '0');
+    };
+
+    const blocks = ctls.map(ctl => {
+      const sigBits = Math.max(1, (ctl.sigBits | 0) || 4);
+      const runLen  = Math.max(1, (ctl.runLength | 0) || 16);
+      const golden  = (ctl.goldenSig | 0) & ((1 << sigBits) - 1);
+      const ms      = ffStates?.get?.(ctl.id);
+      const stateN  = (ms && typeof ms.bistState === 'number') ? ms.bistState : 0;
+      const cycles  = (ms && typeof ms.cycleCount === 'number') ? ms.cycleCount : 0;
+      const sName   = STATE_NAMES[stateN] || '?';
+
+      let cls, label;
+      if (stateN === 4)      { cls = 'ok';   label = 'pass'; }
+      else if (stateN === 5) { cls = 'bad';  label = 'fail'; }
+      else if (stateN === 0) { cls = 'warn'; label = 'idle'; }
+      else                   { cls = 'warn'; label = 'running'; }
+
+      const blockId = `bist_${ctl.id}`;
+      const collapsed = this._collapsedBlocks.has(blockId);
+      return `
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${blockId}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
+            <span class="dft-chain-title">${ctl.label || ctl.id}</span>
+            <span class="dft-chain-len">${sigBits}-bit sig · ${runLen}-cycle run</span>
+            <span class="dft-chain-status ${cls}">${label}</span>
+          </div>
+          <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">state</span>
+            <span class="dft-lfsr-v">
+              <code>${sName}</code> <small>(code ${stateN})</small>
+            </span>
+            <span class="dft-lfsr-k">cycle</span>
+            <span class="dft-lfsr-v">
+              <code>${cycles}</code> <small>of ${runLen}${stateN === 2 ? ' (RUN in progress)' : ''}</small>
+            </span>
+            <span class="dft-lfsr-k">runLength</span>
+            ${this._renderMisrField(ctl.id, 'runLength',
+              `<code>${runLen}</code> <small>cycles per RUN phase</small>`,
+              { current: runLen, inputType: 'number', minMax: 'min="1" max="65535"',
+                hint: 'integer ≥ 1' })}
+            <span class="dft-lfsr-k">golden</span>
+            ${this._renderMisrField(ctl.id, 'goldenSig',
+              `<code>${fmtVal(golden, sigBits)}</code>`,
+              { current: '0x' + golden.toString(16),
+                hint: 'dec, 0xHEX, or 0bBIN — expected MISR sig at end of RUN' })}
+            <span class="dft-lfsr-k">sigBits</span>
+            <span class="dft-lfsr-v">
+              <code>${sigBits}</code> <small>bits — set to match the connected MISR's width</small>
+            </span>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="dft-bist-header dft-section-header">${headerHtml}</div>${infoPanel}
+      <div class="dft-perf-row">
+        <span class="k">Controllers</span><span class="v">${ctls.length}</span>
+      </div>
+      ${blocks}
+    `;
+  }
+
+  // ── JTAG TAPS (Layer 7) ────────────────────────────────────
+  // One block per JTAG_TAP node: current TAP state name (one of 16),
+  // IR + DR contents, IDCODE, and how many BOUNDARY_SCAN_CELLs sit
+  // in the current scene.
+  _renderJtagTaps() {
+    const allNodes = this._scene?.nodes || [];
+    const taps     = allNodes.filter(n => n.type === 'JTAG_TAP');
+    const bscCount = allNodes.filter(n => n.type === 'BOUNDARY_SCAN_CELL').length;
+
+    const headerHtml = `<span class="dft-section-title">JTAG TAPS` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="jtag" title="What does this section show?">i</button>` +
+      `</span>`;
+    const infoPanel = this._infoOpen.has('jtag') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Each JTAG TAP runs the IEEE 1149.1 16-state FSM. TMS on posedge TCK walks states; Shift-IR/DR clock TDI through the IR / DR registers and emit TDO. Boundary-scan cells form the chain that lets a tester poke and read every IO pin.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">TLR</span>
+          <span class="dft-info-text">Test-Logic-Reset — TAP idle, IR cleared. Reached after 5×TMS=1 from anywhere.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">Shift-DR/IR</span>
+          <span class="dft-info-text">Active shifting — TDI is being clocked into the chain, TDO emits the LSB.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">Update-*</span>
+          <span class="dft-info-text">Latch the shifted value into the parallel hold register (e.g. boundary-scan cell update).</span>
+        </div>
+      </div>` : '';
+
+    if (taps.length === 0) {
+      return `
+        <div class="dft-jtag-header dft-section-header">${headerHtml}</div>${infoPanel}
+        <div class="dft-empty">No JTAG_TAP in scene — drop one (TEST tab) to drive boundary-scan / debug-test pins (TCK / TMS / TDI / TRST → TDO).</div>
+      `;
+    }
+
+    const STATE_NAMES = [
+      'Test-Logic-Reset', 'Run-Test/Idle',
+      'Select-DR', 'Capture-DR', 'Shift-DR', 'Exit1-DR', 'Pause-DR', 'Exit2-DR', 'Update-DR',
+      'Select-IR', 'Capture-IR', 'Shift-IR', 'Exit1-IR', 'Pause-IR', 'Exit2-IR', 'Update-IR',
+    ];
+    const ffStates = window.state?.ffStates;
+    const radix = this._misrRadix;
+    const fmtVal = (v, W) => {
+      if (radix === 'dec') return String(v >>> 0);
+      if (radix === 'hex') return '0x' + (v >>> 0).toString(16);
+      return (v >>> 0).toString(2).padStart(W, '0');
+    };
+
+    const blocks = taps.map(tap => {
+      const irBits = Math.max(1, (tap.irBits | 0) || 4);
+      const ms     = ffStates?.get?.(tap.id);
+      const stateN = (ms && typeof ms.tapState === 'number') ? ms.tapState : 0;
+      const sName  = STATE_NAMES[stateN] || '?';
+      const ir     = (ms && typeof ms.ir === 'number') ? ms.ir : 0;
+      const dr     = (ms && typeof ms.dr === 'number') ? ms.dr : 0;
+      const idcode = (tap.idcode | 0) >>> 0;
+
+      let cls, label;
+      if (stateN === 4 || stateN === 11)        { cls = 'ok';   label = 'shifting'; }
+      else if (stateN === 0)                    { cls = 'warn'; label = 'TLR'; }
+      else if (stateN === 8 || stateN === 15)   { cls = 'warn'; label = 'updated'; }
+      else                                      { cls = 'warn'; label = 'idle'; }
+
+      const blockId = `jtag_${tap.id}`;
+      const collapsed = this._collapsedBlocks.has(blockId);
+      return `
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${blockId}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
+            <span class="dft-chain-title">${tap.label || tap.id}</span>
+            <span class="dft-chain-len">${irBits}-bit IR · 32-bit DR</span>
+            <span class="dft-chain-status ${cls}">${label}</span>
+          </div>
+          <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">state</span>
+            <span class="dft-lfsr-v">
+              <code>${sName}</code> <small>(code ${stateN})</small>
+            </span>
+            <span class="dft-lfsr-k">IR</span>
+            <span class="dft-lfsr-v">
+              <code>${fmtVal(ir, irBits)}</code> <small>${irBits}-bit instruction</small>
+            </span>
+            <span class="dft-lfsr-k">DR</span>
+            <span class="dft-lfsr-v">
+              <code>${fmtVal(dr, 32)}</code> <small>32-bit data shift</small>
+            </span>
+            <span class="dft-lfsr-k">irBits</span>
+            ${this._renderMisrField(tap.id, 'irBits',
+              `<code>${irBits}</code>`,
+              { current: irBits, inputType: 'number', minMax: 'min="1" max="16"',
+                hint: 'IR width — 4–8 typical' })}
+            <span class="dft-lfsr-k">IDCODE</span>
+            ${this._renderMisrField(tap.id, 'idcode',
+              `<code>0x${idcode.toString(16).padStart(8, '0')}</code>`,
+              { current: '0x' + idcode.toString(16),
+                hint: 'dec, 0xHEX, or 0bBIN — 32-bit JEP-106 device code' })}
+            <span class="dft-lfsr-k">BSCs</span>
+            <span class="dft-lfsr-v">
+              <code>${bscCount}</code> <small>boundary-scan cells in scene</small>
+            </span>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="dft-jtag-header dft-section-header">${headerHtml}</div>${infoPanel}
+      <div class="dft-perf-row">
+        <span class="k">TAP controllers</span><span class="v">${taps.length}</span>
+      </div>
+      ${blocks}
+    `;
+  }
+
   // ── FAULT LIST ──────────────────────────────────────────────
   _renderFaultList(wires) {
     // Section header + ⓘ legend for the fault model abbreviations.
@@ -1367,46 +1742,21 @@ export class DFTPanel {
       while (section.nextSibling && !(section.nextSibling.className || '').endsWith('-header')) {
         section.appendChild(section.nextSibling);
       }
-      // Add a toggle indicator + click handler.
+      // Re-apply collapsed state from prior render (the wrapper DOM
+      // is rebuilt from scratch on every _render, so the class needs
+      // to be re-added from this._collapsedSections).
+      if (this._collapsedSections.has(section.dataset.section)) {
+        section.classList.add('dft-section-collapsed');
+      }
       if (!h.querySelector('.dft-section-toggle')) {
         const toggle = document.createElement('span');
         toggle.className = 'dft-section-toggle';
-        toggle.textContent = '▾';
+        toggle.textContent = section.classList.contains('dft-section-collapsed') ? '▸' : '▾';
         h.appendChild(toggle);
       }
-      h.addEventListener('click', (e) => {
-        // Don't collapse when the click landed on an actionable child
-        // (e.g. the ⓘ info button). Lets sub-controls inside section
-        // headers fire without dragging the whole section closed.
-        if (e.target.closest('button, [data-action]')) return;
-        section.classList.toggle('dft-section-collapsed');
-        const tog = h.querySelector('.dft-section-toggle');
-        if (tog) tog.textContent = section.classList.contains('dft-section-collapsed') ? '▸' : '▾';
-      });
-    });
-
-    // Per-block collapse — works for any .dft-chain-block carrying a
-    // data-block-id. Today: scan chains and LFSR pattern-generator
-    // blocks. Tomorrow: any new per-item block (MISR, BIST controller,
-    // JTAG TAP) that wants the same fold affordance.
-    const blockHeaders = this._body.querySelectorAll('.dft-chain-block[data-block-id] .dft-chain-header');
-    blockHeaders.forEach(h => {
-      h.addEventListener('click', (e) => {
-        if (e.target.closest('.dft-chain-status[data-action]')) return;
-        const block = h.closest('.dft-chain-block');
-        if (!block) return;
-        const id = block.dataset.blockId;
-        if (!id) return;
-        if (this._collapsedBlocks.has(id)) {
-          this._collapsedBlocks.delete(id);
-          block.classList.remove('collapsed');
-        } else {
-          this._collapsedBlocks.add(id);
-          block.classList.add('collapsed');
-        }
-        const tog = h.querySelector('.dft-chain-toggle');
-        if (tog) tog.textContent = block.classList.contains('collapsed') ? '▸' : '▾';
-      });
+      // Click handlers for collapse + per-block toggle live on
+      // _body's delegated mousedown listener (bound once in init) so
+      // they survive the per-tick re-render.
     });
   }
 }

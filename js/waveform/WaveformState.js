@@ -161,7 +161,8 @@ const PICKABLE_TYPES = new Set([
   'RAM', 'ROM', 'CACHE', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
-  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR', 'MISR',
+  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR', 'MISR', 'BIST_CONTROLLER',
+  'JTAG_TAP', 'BOUNDARY_SCAN_CELL',
 ]);
 
 const TYPE_TO_SIG_TYPE = {
@@ -171,6 +172,8 @@ const TYPE_TO_SIG_TYPE = {
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
   ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff', LFSR: 'memory', MISR: 'memory',
+  BIST_CONTROLLER: 'compute',
+  JTAG_TAP: 'compute', BOUNDARY_SCAN_CELL: 'compute',
 };
 
 // ── Output pins (mirror SimulationEngine __out indices) ──
@@ -186,6 +189,9 @@ const PINS_BY_TYPE = {
   FIFO:        [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   STACK:       [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   COUNTER:     [['Q', 0], ['TC', 1]],
+  BIST_CONTROLLER: [['DONE', 0], ['PASS', 1], ['TEST_MODE', 2], ['STATE', 3]],
+  JTAG_TAP:    [['TDO', 0], ['STATE', 1], ['IR', 2]],
+  BOUNDARY_SCAN_CELL: [['PO', 0], ['SO', 1]],
   HANDSHAKE:   [['S', 0], ['F', 1]],
   HDU:         [['PCWrite', 0], ['IFIDWrite', 1], ['Bubble', 2]],
   FWD:         [['ForwardA', 0], ['ForwardB', 1]],

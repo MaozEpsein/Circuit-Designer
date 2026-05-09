@@ -755,6 +755,13 @@
 #pipeline-panel.pipeline-fullscreen {
   font-size: 20px;       /* base bump — children using em/rem inherit */
 }
+/* When ANALYSIS is fullscreen, drop the global body{zoom:0.8} so the
+   panel renders at the user's native browser scale (parallel to how
+   #dft-panel handles its own zoom counter). The :has() selector lets
+   the body itself opt out cleanly without JS book-keeping. */
+body:has(#pipeline-panel.pipeline-fullscreen) {
+  zoom: 1;
+}
 #pipeline-panel.pipeline-fullscreen #pipeline-panel-body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(620px, 1fr));
@@ -928,7 +935,7 @@
   letter-spacing: 1px;
   flex: 0 0 auto;
 }
-#pipeline-panel-header > div { display: flex; gap: 6px; }
+#pipeline-panel-header > div { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* Override the tiny inline font-size on header buttons — scales with panel tier. */
 #pipeline-panel-header button {

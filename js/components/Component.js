@@ -50,6 +50,9 @@ export const COMPONENT_TYPES = {
   SCAN_FF:      'SCAN_FF',
   LFSR:         'LFSR',
   MISR:         'MISR',
+  BIST_CONTROLLER: 'BIST_CONTROLLER',
+  JTAG_TAP:           'JTAG_TAP',
+  BOUNDARY_SCAN_CELL: 'BOUNDARY_SCAN_CELL',
 };
 
 /**
@@ -85,7 +88,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR', 'MISR'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR', 'MISR', 'BIST_CONTROLLER', 'JTAG_TAP', 'BOUNDARY_SCAN_CELL'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -119,6 +122,39 @@ export function createComponent(type, x, y) {
       // are bit positions (0-indexed from LSB) XORed to form the new
       // bit. Default: 4-bit, taps [3, 0] → x^4+x+1, period 15.
       return { ...base, bitWidth: 4, taps: [3, 0], seed: 1, label: 'LFSR' };
+    case COMPONENT_TYPES.BIST_CONTROLLER:
+      // Built-In Self-Test Controller — a small state machine that
+      // orchestrates a BIST run: assert TEST_MODE, count `runLength`
+      // cycles while the LFSR + MISR do their work, then compare the
+      // captured signature against `goldenSig` and latch PASS / FAIL.
+      // Pin layout:
+      //   Inputs : START(0), RESET(1), SIG_IN(2, sigBits-wide), CLK(3)
+      //   Outputs: DONE(0), PASS(1), TEST_MODE(2), STATE(3, 3-bit)
+      // States  : IDLE=0, SETUP=1, RUN=2, COMPARE=3, DONE=4, FAIL=5
+      return { ...base,
+        sigBits: 4, runLength: 16, goldenSig: 0,
+        label: 'BIST_CTRL' };
+    case COMPONENT_TYPES.JTAG_TAP:
+      // IEEE 1149.1 TAP controller — 16-state FSM driven by TMS on
+      // posedge TCK. Holds an Instruction Register (IR) plus a few
+      // Data Registers (boundary, bypass, idcode). Pin layout:
+      //   Inputs : TCK(0), TMS(1), TDI(2), TRST(3)
+      //   Outputs: TDO(0), STATE(1, 4-bit), IR(2, irBits-wide)
+      // States  : 0..15, with 0 = Test-Logic-Reset.
+      return { ...base,
+        irBits: 4,           // IR width (typical 4–8)
+        idcode: 0x149511A1,  // 32-bit IDCODE shifted out for IDCODE instr
+        bsrLength: 4,        // boundary-scan-register length (cells in chain)
+        label: 'JTAG_TAP' };
+    case COMPONENT_TYPES.BOUNDARY_SCAN_CELL:
+      // IEEE 1149.1 boundary-scan cell. Wraps one IO pad with a
+      // capture-update shift cell. Pin layout:
+      //   Inputs : PI(0, parallel from core), SI(1, serial from prev cell),
+      //            MODE(2, 0=normal-pass-through, 1=test-update),
+      //            SHIFT(3, 1=shift-DR phase),
+      //            CLK(4)
+      //   Outputs: PO(0, to pad), SO(1, serial to next cell)
+      return { ...base, label: 'BSC' };
     case COMPONENT_TYPES.MISR:
       // Multiple Input Signature Register — a Fibonacci LFSR with N
       // additional data inputs (one per bit) that XOR into the chain

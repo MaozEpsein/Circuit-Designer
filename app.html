@@ -102,6 +102,9 @@
           <span class="palette-chip palette-ff" data-tool="place-scanff" draggable="true" title="DFT scan flip-flop — D + TI inputs, TE select. Chains via TI ← previous Q for scan-based testing.">SCAN-FF</span>
           <span class="palette-chip palette-block" data-tool="place-lfsr" draggable="true" title="Linear-Feedback Shift Register — pseudo-random pattern generator for BIST. Default: 4-bit, x^4+x+1, period 15.">LFSR</span>
           <span class="palette-chip palette-block" data-tool="place-misr" draggable="true" title="Multiple Input Signature Register — compresses N-bit test responses into a compact signature. Default: 4-bit, x^4+x+1.">MISR</span>
+          <span class="palette-chip palette-block" data-tool="place-bist" draggable="true" title="BIST Controller — orchestrates a Built-In Self-Test run. State machine: IDLE→SETUP→RUN→COMPARE→DONE/FAIL. Drives TEST_MODE for `runLength` cycles, then compares the captured MISR signature against `goldenSig`.">BIST</span>
+          <span class="palette-chip palette-block" data-tool="place-jtag" draggable="true" title="JTAG TAP — IEEE 1149.1 Test Access Port controller. 16-state FSM driven by TMS on posedge TCK. Holds Instruction Register + Data Registers; the gateway for boundary-scan / debug.">JTAG</span>
+          <span class="palette-chip palette-block" data-tool="place-bsc" draggable="true" title="Boundary-Scan Cell — wraps one IO pad with a capture/update shift cell. Chains via SI ← previous SO. Lets a TAP shift test patterns out and capture pad responses without device removal.">BSC</span>
         </div>
         <div class="palette-panel" data-panel="cpu">
           <span class="palette-chip palette-block" data-tool="place-alu" draggable="true">ALU</span>
@@ -216,6 +219,41 @@
       <div class="design-prop-row" id="prop-misr-golden-row" style="display:none" title="Golden signature — the expected MISR value after a clean test run. Leave blank to clear. Compared against live SIG to detect faults.">
         <span>Golden</span>
         <input id="prop-misr-golden-input" type="text" maxlength="12" placeholder="blank, 0x0F, 15, 0b1111" style="width:84px" />
+      </div>
+      <div class="design-prop-row" id="prop-bist-runlen-row" style="display:none" title="Number of test cycles the BIST controller runs LFSR + DUT + MISR before COMPARE.">
+        <span>Run Len</span>
+        <input id="prop-bist-runlen-input" type="number" min="1" max="65535" step="1" value="16" style="width:84px" />
+      </div>
+      <div class="design-prop-row" id="prop-bist-sigbits-row" style="display:none" title="Width (bits) of the signature being compared against goldenSig.">
+        <span>Sig Bits</span>
+        <select id="prop-bist-sigbits-select">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+          <option value="8">8</option>
+          <option value="16">16</option>
+          <option value="32">32</option>
+        </select>
+      </div>
+      <div class="design-prop-row" id="prop-bist-golden-row" style="display:none" title="Golden signature — the value SIG_IN must match at COMPARE for PASS. Anything else triggers FAIL.">
+        <span>Golden</span>
+        <input id="prop-bist-golden-input" type="text" maxlength="12" placeholder="0, 0x0F, 0b1111" style="width:84px" />
+      </div>
+      <div class="design-prop-row" id="prop-jtag-irbits-row" style="display:none" title="IR width in bits. IEEE 1149.1 mandates ≥ 2; 4–8 typical for real silicon.">
+        <span>IR Bits</span>
+        <select id="prop-jtag-irbits-select">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="16">16</option>
+        </select>
+      </div>
+      <div class="design-prop-row" id="prop-jtag-idcode-row" style="display:none" title="32-bit IDCODE — JEP-106 manufacturer + part + revision. Shifted out of TDO when the IDCODE instruction is loaded into IR.">
+        <span>IDCODE</span>
+        <input id="prop-jtag-idcode-input" type="text" maxlength="14" placeholder="0x149511A1" style="width:104px" />
       </div>
       <div class="design-prop-row" id="prop-memaddr-row" style="display:none">
         <span>Addr Bits</span>
@@ -462,6 +500,8 @@
       <div>
         <button id="btn-dft-gen-random" class="btn-secondary" style="font-size:9px;background:#1a0d2a;border-color:#6a4aaa;color:#cc99ff" title="Generate N=16 random test vectors and re-run fault sim. Honest baseline — production ATPG (TetraMAX, Modus) would generate fault-targeted vectors instead.">GEN RANDOM</button>
         <button id="btn-dft-run" class="btn-secondary" style="font-size:9px;background:#2a1a08;border-color:#aa6a2a;color:#ffb878" title="Run combinational fault simulation against the scene's current test vectors">RUN FAULT SIM</button>
+        <button id="btn-dft-collapse-all" class="btn-secondary dft-fs-only" style="font-size:9px;display:none" title="Collapse / expand every section and per-block item at once">▾ COLLAPSE ALL</button>
+        <button id="btn-dft-edit-all" class="btn-secondary dft-fs-only" style="font-size:9px;display:none" title="Open every editable field across the panel for parallel editing. Click again to save them all.">✎ EDIT ALL</button>
         <button id="btn-dft-fullscreen" class="btn-secondary" style="font-size:9px" title="Toggle fullscreen (Esc to exit)">FULLSCREEN</button>
         <button id="btn-dft-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
       </div>

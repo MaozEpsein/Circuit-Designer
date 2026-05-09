@@ -150,6 +150,15 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Default UI scale: app baked at 80% so a fresh 100% browser-zoom
+   visit matches the previously-recommended look. DFT panel opts out
+   via a counter-zoom (1 / 0.8 = 1.25) so its own px sizing remains
+   authoritative. */
+body { zoom: 0.8; }
+#dft-panel { zoom: 1.25; }
+/* #pipeline-panel.pipeline-fullscreen counter-zoom lives in app.css next
+   to the other fullscreen rules so they cascade together. */
+
 /* ── Canvas ─────────────────────────────────────────────── */
 
 #game-canvas {
