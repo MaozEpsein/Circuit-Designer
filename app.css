@@ -3364,6 +3364,34 @@
 .dft-chain-te-source { color: #ffd0a0; }
 .dft-chain-te-source.warn { color: #ff8060; font-style: italic; }
 
+/* Pattern Generators (LFSR) — uses the same chain-block frame so the
+   panel stays visually consistent. The 4-row inner grid lays out
+   key/value pairs (seed, poly, period, drives) in a tidy column. */
+.dft-lfsr-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  column-gap: 10px; row-gap: 4px;
+  align-items: center;
+  font-size: 11px;
+}
+.dft-lfsr-k {
+  color: #876; text-align: right;
+  text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;
+}
+.dft-lfsr-v { color: #f0e2cf; }
+.dft-lfsr-v code { color: #ffd0a0; }
+.dft-lfsr-v small { color: #876; font-size: 9px; margin-left: 6px; }
+/* Sink chip — green when it lands on a scan-in (this LFSR is acting
+   as a real BIST source); plain text otherwise. */
+.dft-lfsr-sink-scan {
+  color: #80f0a0;
+  background: rgba(40,160,80,0.10);
+  padding: 1px 6px; border-radius: 3px;
+  border: 1px solid #2a6a4a;
+}
+.dft-lfsr-sink-scan small { color: #6ac08a; }
+.dft-lfsr-sink small { color: #876; }
+
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {
   padding: 1.5em 1.2em;

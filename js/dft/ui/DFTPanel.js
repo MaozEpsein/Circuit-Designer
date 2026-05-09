@@ -93,6 +93,69 @@ export function describeChainEndpoints(chain, allNodes, wires) {
   return { scanIn, scanOut, teSource, teShared };
 }
 
+/**
+ * Compute an LFSR's true period by direct simulation. Starts from
+ * `seed`, runs the same Fibonacci shift the engine uses, and stops
+ * when a state repeats (Floyd-style "first revisit" detection via a
+ * Set). For a primitive polynomial of width N, the period equals
+ * 2^N - 1 — every non-zero state visited exactly once. Anything
+ * shorter means the polynomial is reducible / non-primitive (still
+ * legal but useless for max-length BIST).
+ *
+ * Capped at 2^N iterations to keep wide LFSRs from hanging the UI.
+ * Returns:
+ *   { period, maxPeriod, isMaxLength, stuckAtZero }
+ *   • stuckAtZero = seed is 0; the LFSR would never advance.
+ */
+export function lfsrPeriod(width, taps, seed) {
+  width = Math.max(1, Math.min(24, width | 0));
+  const mask = (1 << width) - 1;
+  const maxPeriod = mask;     // 2^N - 1 — the all-zero state is excluded
+  if ((seed & mask) === 0) return { period: 0, maxPeriod, isMaxLength: false, stuckAtZero: true };
+  const seen = new Set();
+  let s = seed & mask;
+  while (!seen.has(s)) {
+    seen.add(s);
+    let xor = 0;
+    for (const t of taps) xor ^= ((s >> t) & 1);
+    s = (((s << 1) | xor) & mask) >>> 0;
+    if (seen.size > maxPeriod) break;     // safety
+  }
+  return { period: seen.size, maxPeriod, isMaxLength: seen.size === maxPeriod, stuckAtZero: false };
+}
+
+/**
+ * Format the tap list as a compact summary: degree + tap positions.
+ * "x⁴ taps[3,0]" rather than a fully-expanded polynomial — the
+ * Fibonacci-vs-Galois mapping rules differ across textbooks and
+ * getting the symbolic form wrong is worse than skipping it.
+ */
+export function lfsrPolynomial(width, taps) {
+  const sup = (n) => String(n).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]).join('');
+  const sorted = (taps || []).slice().sort((a, b) => b - a);
+  return `x${sup(width)} taps[${sorted.join(',')}]`;
+}
+
+/**
+ * Resolve where each LFSR's serial Q output is delivered. For DFT,
+ * the interesting case is "Q drives the TI of a chain head" — that
+ * marks the LFSR as a BIST pattern source. Returns:
+ *   { sinks: [{ type, label, nodeId, isScanIn }], drivesScan: bool }
+ */
+export function describeLfsrSinks(lfsr, allNodes, wires) {
+  const nodeById = new Map(allNodes.map(n => [n.id, n]));
+  const sinks = wires
+    .filter(w => w.sourceId === lfsr.id)
+    .map(w => {
+      const dst = nodeById.get(w.targetId);
+      if (!dst) return null;
+      const isScanIn = dst.type === 'SCAN_FF' && (w.targetInputIndex || 0) === 1;
+      return { type: dst.type, label: dst.label || dst.id, nodeId: dst.id, isScanIn };
+    })
+    .filter(Boolean);
+  return { sinks, drivesScan: sinks.some(s => s.isScanIn) };
+}
+
 export function detectScanChains(scanFFs, wires) {
   if (scanFFs.length === 0) return [];
   const ffById = new Map(scanFFs.map(n => [n.id, n]));
@@ -278,6 +341,7 @@ export class DFTPanel {
       this._renderTestabilityOverview(wires, { injStuck, injOpen, injBrdg, injTotal }) +
       this._renderFaultCoverage() +
       this._renderScanChains() +
+      this._renderPatternGenerators() +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
@@ -611,6 +675,83 @@ export class DFTPanel {
         ${orphanCount ? `<span class="k">Orphans</span><span class="v">${orphanCount}</span>` : ''}
       </div>
       ${rowsHtml || '<div style="padding:0 1.2em;color:#876">No completed chains — wire SCAN-FF outputs into the next SCAN-FF\'s TI input to form a chain.</div>'}
+    `;
+  }
+
+  // ── PATTERN GENERATORS (LFSRs) ─────────────────────────────
+  // Layer-4 surface in the DFT panel. Lists every LFSR in the scene,
+  // computes its true period, names its polynomial, and flags whether
+  // the serial Q drives a SCAN_FF's TI — i.e. whether this LFSR is
+  // wired up as a real BIST pattern source or is just sitting there.
+  _renderPatternGenerators() {
+    const allNodes = this._scene?.nodes || [];
+    const wires    = this._scene?.wires || [];
+    const lfsrs    = allNodes.filter(n => n.type === 'LFSR');
+    if (lfsrs.length === 0) {
+      return `
+        <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS</div>
+        <div class="dft-empty">No LFSR in scene — drop one (LOGIC tab) to enable BIST-style pseudo-random testing.</div>
+      `;
+    }
+    const blocks = lfsrs.map((lfsr) => {
+      const width = Math.max(1, lfsr.bitWidth | 0);
+      const seed  = (lfsr.seed ?? 1) & ((1 << width) - 1);
+      const taps  = Array.isArray(lfsr.taps) ? lfsr.taps.slice() : [width - 1, 0];
+      const period = lfsrPeriod(width, taps, seed);
+      const sinks = describeLfsrSinks(lfsr, allNodes, wires);
+
+      // Health classifier: max-length + drives a scan-in = green;
+      // sub-max polynomial OR not driving any scan = amber; stuck-at-0
+      // seed = red.
+      let cls, label;
+      if (period.stuckAtZero)               { cls = 'bad';  label = 'seed=0'; }
+      else if (period.isMaxLength && sinks.drivesScan) { cls = 'ok';   label = 'BIST source'; }
+      else if (period.isMaxLength)          { cls = 'warn'; label = 'unused'; }
+      else                                   { cls = 'warn'; label = 'sub-max'; }
+
+      const sinkText = sinks.sinks.length === 0
+        ? '<span class="dft-chain-end-empty">(Q not connected)</span>'
+        : sinks.sinks.map(s =>
+            `<span class="${s.isScanIn ? 'dft-lfsr-sink-scan' : 'dft-lfsr-sink'}">${s.label} <small>[${s.type}${s.isScanIn ? '·TI' : ''}]</small></span>`
+          ).join(', ');
+
+      return `
+        <div class="dft-chain-block">
+          <div class="dft-chain-header" style="cursor:default">
+            <span class="dft-chain-title">${lfsr.label || lfsr.id}</span>
+            <span class="dft-chain-len">${width}-bit</span>
+            <span class="dft-chain-status ${cls}">${label}</span>
+          </div>
+          <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">seed</span>
+            <span class="dft-lfsr-v"><code>${seed.toString(2).padStart(width, '0')}</code> <small>(0x${seed.toString(16)})</small></span>
+            <span class="dft-lfsr-k">shape</span>
+            <span class="dft-lfsr-v"><code>${lfsrPolynomial(width, taps)}</code> <small>(Fibonacci, shift-left)</small></span>
+            <span class="dft-lfsr-k">period</span>
+            <span class="dft-lfsr-v">
+              <code>${period.period}</code>
+              <small>of ${period.maxPeriod} max ${period.isMaxLength ? '✓ max-length' : `(${Math.round(100 * period.period / period.maxPeriod)}% — non-primitive)`}</small>
+            </span>
+            <span class="dft-lfsr-k">drives</span>
+            <span class="dft-lfsr-v">${sinkText}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    const goodCount = lfsrs.filter(l => {
+      const w = Math.max(1, l.bitWidth | 0);
+      const seed = (l.seed ?? 1) & ((1 << w) - 1);
+      const taps = Array.isArray(l.taps) ? l.taps : [w - 1, 0];
+      return lfsrPeriod(w, taps, seed).isMaxLength;
+    }).length;
+
+    return `
+      <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS</div>
+      <div class="dft-perf-row">
+        <span class="k">LFSRs</span><span class="v">${lfsrs.length}</span>
+        <span class="k">Max-length polynomials</span><span class="v">${goodCount} of ${lfsrs.length}</span>
+      </div>
+      ${blocks}
     `;
   }
 
