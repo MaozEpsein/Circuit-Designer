@@ -143,6 +143,11 @@ export class DFTPanel {
     // Layer 2 — last fault-sim result. null until the user clicks RUN.
     // Cleared when the scene mutates (vectors / topology may have changed).
     this._lastSim = null;
+    // Per-chain collapsed state. The set holds the IDs of chains the
+    // user folded so the collapsed view survives a re-render. Chains
+    // are identified by their position in detectScanChains() output
+    // (`chain_0`, `chain_1`, …) — stable across the same scene.
+    this._collapsedChains = new Set();
     // Layer 2.5 — toggled when the user clicks the [source] tag in the
     // FAULT COVERAGE row. Expands an inline table of every test vector
     // and per-vector output, so the user can see exactly what stimulus
@@ -561,9 +566,12 @@ export class DFTPanel {
         teTextCls = 'warn';
       }
 
+      const chainKey = `chain_${idx}`;
+      const collapsed = this._collapsedChains.has(chainKey);
       return `
-        <div class="dft-chain-block">
-          <div class="dft-chain-header">
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-chain-id="${chainKey}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
             <span class="dft-chain-title">chain_${idx}</span>
             <span class="dft-chain-len">${chain.length} cell${chain.length === 1 ? '' : 's'}</span>
             <span class="dft-chain-status ${health.cls}">${health.label}</span>
@@ -748,6 +756,31 @@ export class DFTPanel {
         section.classList.toggle('dft-section-collapsed');
         const tog = h.querySelector('.dft-section-toggle');
         if (tog) tog.textContent = section.classList.contains('dft-section-collapsed') ? '▸' : '▾';
+      });
+    });
+
+    // Per-chain collapse handlers — clicking a chain header folds the
+    // flow + TE bar so only the title row remains. State is persisted
+    // in this._collapsedChains so it survives the next _render().
+    const chainHeaders = this._body.querySelectorAll('.dft-chain-block .dft-chain-header');
+    chainHeaders.forEach(h => {
+      h.addEventListener('click', (e) => {
+        // Allow clicks on the status pill / inner controls to bubble
+        // out without folding (none today, but keeps the door open).
+        if (e.target.closest('.dft-chain-status[data-action]')) return;
+        const block = h.closest('.dft-chain-block');
+        if (!block) return;
+        const id = block.dataset.chainId;
+        if (!id) return;
+        if (this._collapsedChains.has(id)) {
+          this._collapsedChains.delete(id);
+          block.classList.remove('collapsed');
+        } else {
+          this._collapsedChains.add(id);
+          block.classList.add('collapsed');
+        }
+        const tog = h.querySelector('.dft-chain-toggle');
+        if (tog) tog.textContent = block.classList.contains('collapsed') ? '▸' : '▾';
       });
     });
   }

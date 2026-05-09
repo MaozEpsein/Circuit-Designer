@@ -3268,7 +3268,24 @@
   margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid #2a1a08;
+  cursor: pointer; user-select: none;
 }
+.dft-chain-header:hover { background: rgba(255,160,40,0.06); }
+.dft-chain-toggle {
+  color: #aa6a2a; font-size: 10px; line-height: 1;
+  width: 10px; text-align: center;
+}
+/* Collapsed chain — only the title row is visible. Margin/padding of
+   the block itself shrink so a column of folded chains stays compact. */
+.dft-chain-block.collapsed {
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+.dft-chain-block.collapsed .dft-chain-header {
+  margin-bottom: 0; padding-bottom: 0; border-bottom: none;
+}
+.dft-chain-block.collapsed .dft-chain-flow,
+.dft-chain-block.collapsed .dft-chain-te { display: none; }
 .dft-chain-title {
   color: #ffb878; font-weight: 600; letter-spacing: 0.5px;
 }
