@@ -217,6 +217,10 @@ export class DFTPanel {
     // cancel). The set survives re-render so a partial edit isn't
     // lost when the panel refreshes for some other reason.
     this._editingFields = new Set();
+    // Per-section info popovers — Set of section keys (e.g.
+    // 'patterns') currently expanded. Each section can stash a small
+    // explanatory block under its header via the ⓘ button.
+    this._infoOpen = new Set();
     // Layer 2.5 — toggled when the user clicks the [source] tag in the
     // FAULT COVERAGE row. Expands an inline table of every test vector
     // and per-vector output, so the user can see exactly what stimulus
@@ -262,6 +266,18 @@ export class DFTPanel {
         }
         if (trg.dataset.action === 'lfsr-cancel' && lfsrId && field) {
           this._editingFields.delete(`${lfsrId}:${field}`);
+          if (this._visible) this._render();
+        }
+        if (trg.dataset.action === 'toggle-info') {
+          // The button sits inside .dft-section-header, whose click
+          // handler collapses the whole section. Stop propagation so
+          // clicking ⓘ shows the info popover without folding the
+          // section under it.
+          e.stopPropagation();
+          const section = trg.dataset.section;
+          if (!section) return;
+          if (this._infoOpen.has(section)) this._infoOpen.delete(section);
+          else                              this._infoOpen.add(section);
           if (this._visible) this._render();
         }
       });
@@ -819,9 +835,34 @@ export class DFTPanel {
     const allNodes = this._scene?.nodes || [];
     const wires    = this._scene?.wires || [];
     const lfsrs    = allNodes.filter(n => n.type === 'LFSR');
+    const infoBtn = `<button class="dft-info-btn" data-action="toggle-info" data-section="patterns" title="What do the status pills mean?">ⓘ</button>`;
+    const infoPanel = this._infoOpen.has('patterns') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-title">LFSR status meanings</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">BIST source</span>
+          <span class="dft-info-text">Polynomial is primitive (period = 2<sup>N</sup>−1, every non-zero state visited exactly once) <em>and</em> the LFSR's Q output is wired to a SCAN_FF's TI pin. The LFSR is acting as a real BIST pattern generator. Nothing to fix.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">unused</span>
+          <span class="dft-info-text">Polynomial is primitive (max-length sequence) but Q is not wired into any scan chain. The pattern source is good, but it isn't driving anything that participates in a test. <strong>Fix:</strong> route Q to a SCAN_FF's TI input, or to whatever input you want to stimulate during BIST mode.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">sub-max</span>
+          <span class="dft-info-text">The Fibonacci polynomial defined by these taps is reducible — its true period is shorter than 2<sup>N</sup>−1, so the LFSR loops through fewer distinct states than its width allows. BIST coverage will be poor: the same patterns repeat on a short cycle. <strong>Fix:</strong> pick taps from a primitive-polynomial table (e.g. for 6 bits use [5,4] instead of [5,3]).</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">seed=0</span>
+          <span class="dft-info-text">Initial state is all zeros. A Fibonacci LFSR seeded with 0 stays at 0 forever — every tap reads 0, so the XOR feedback is 0, so the next state is 0 again. The LFSR will never generate any pattern. <strong>Fix:</strong> set the seed to any non-zero value.</span>
+        </div>
+        <div class="dft-info-foot">Status combines two judgments: <em>polynomial quality</em> (primitive vs. reducible) and <em>actual usage</em> (Q wired to a scan input or not).</div>
+      </div>
+    ` : '';
+
     if (lfsrs.length === 0) {
       return `
-        <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS</div>
+        <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS ${infoBtn}</div>
+        ${infoPanel}
         <div class="dft-empty">No LFSR in scene — drop one (LOGIC tab) to enable BIST-style pseudo-random testing.</div>
       `;
     }
@@ -889,7 +930,8 @@ export class DFTPanel {
     }).length;
 
     return `
-      <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS</div>
+      <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS ${infoBtn}</div>
+      ${infoPanel}
       <div class="dft-perf-row">
         <span class="k">LFSRs</span><span class="v">${lfsrs.length}</span>
         <span class="k">Max-length polynomials</span><span class="v">${goodCount} of ${lfsrs.length}</span>
@@ -1036,7 +1078,11 @@ export class DFTPanel {
         toggle.textContent = '▾';
         h.appendChild(toggle);
       }
-      h.addEventListener('click', () => {
+      h.addEventListener('click', (e) => {
+        // Don't collapse when the click landed on an actionable child
+        // (e.g. the ⓘ info button). Lets sub-controls inside section
+        // headers fire without dragging the whole section closed.
+        if (e.target.closest('button, [data-action]')) return;
         section.classList.toggle('dft-section-collapsed');
         const tog = h.querySelector('.dft-section-toggle');
         if (tog) tog.textContent = section.classList.contains('dft-section-collapsed') ? '▸' : '▾';

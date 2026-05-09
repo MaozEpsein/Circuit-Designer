@@ -3433,6 +3433,67 @@
   color: #6a5a4a; font-size: 9px; font-style: italic;
 }
 
+/* Section info button — small ⓘ in the section header that toggles
+   an explanatory popover below. Sized to fit the header line, with
+   a hover ring so it reads as clickable. */
+.dft-info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  margin-left: 8px; padding: 0;
+  background: transparent;
+  border: 1px solid #4a3018;
+  border-radius: 50%;
+  color: #876;
+  cursor: pointer;
+  font-size: 10px; font-style: italic; font-family: serif;
+  vertical-align: middle;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.dft-info-btn:hover {
+  color: #ffb878; border-color: #aa6a2a; background: rgba(255,160,40,0.10);
+}
+/* The popover itself — sits inline under the section header so the
+   user doesn't lose context. Same amber accent palette as the rest
+   of the DFT panel. */
+.dft-info-panel {
+  margin: 6px 1.2em 12px;
+  padding: 12px 14px;
+  background: #0e1218;
+  border: 1px solid #3a2818;
+  border-left: 3px solid #6a4a2a;
+  border-radius: 4px;
+  font: 11px/1.45 'JetBrains Mono', monospace;
+  color: #d8c8a0;
+}
+.dft-info-title {
+  color: #ffb878; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.7px; font-size: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2a1a08;
+}
+.dft-info-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  column-gap: 12px;
+  margin-bottom: 6px;
+  align-items: start;
+}
+.dft-info-row .dft-chain-status {
+  margin-left: 0;        /* override the auto-pushed status pill */
+  justify-self: start;
+}
+.dft-info-text { color: #d0d8e4; }
+.dft-info-text strong { color: #ffd0a0; }
+.dft-info-text em      { color: #c8b89a; font-style: italic; }
+.dft-info-text sup     { font-size: 9px; }
+.dft-info-foot {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #2a1a08;
+  color: #876; font-size: 10px; font-style: italic;
+}
+
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {
   padding: 1.5em 1.2em;
