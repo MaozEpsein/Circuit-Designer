@@ -170,27 +170,36 @@ registerTranslator(COMPONENT_TYPES.ALU, (node, ctx) => {
   const rRef = makeRef(rNet.name, W);
   const cRef = cNet ? makeRef(cNet.name, 1) : null;
 
-  // Width-extended addition wire so we can slice the carry-out cleanly.
-  // Continuous-assigned outside the always block; the case body just
-  // references its top bit.
-  const extName = `${rNet.name}_addext`;
+  // Width-extended wires for clean carry slicing on operations whose
+  // engine semantics produce a carry-out:
+  //   *_addext = {1'b0, a} + {1'b0, b}    → ADD carry  (top bit)
+  //   *_shlext = {1'b0, a} << b           → SHL carry  (top bit)
+  // (SUB borrow uses `a < b` directly, CMP uses `a > b`. AND/OR/XOR/
+  //  SHR don't produce a carry — engine matches.)
+  const extName  = `${rNet.name}_addext`;
+  const shlName  = `${rNet.name}_shlext`;
   const extraNets = [
     makeNet({ name: extName, width: W + 1, kind: NET_KIND.WIRE, sourceRef: sr }),
+    makeNet({ name: shlName, width: W + 1, kind: NET_KIND.WIRE, sourceRef: sr }),
   ];
   const aExt = { kind: 'Concat', sourceRef: sr, attributes: [],
     parts: [makeLiteral(0, 1, sr), a], width: W + 1 };
   const bExt = { kind: 'Concat', sourceRef: sr, attributes: [],
     parts: [makeLiteral(0, 1, sr), b], width: W + 1 };
-  const assigns = [{
-    kind: 'Assign', sourceRef: sr, attributes: [],
-    lhs: makeRef(extName, W + 1),
-    rhs: makeBinaryOp('+', aExt, bExt, W + 1, sr),
-  }];
+  const assigns = [
+    { kind: 'Assign', sourceRef: sr, attributes: [],
+      lhs: makeRef(extName, W + 1),
+      rhs: makeBinaryOp('+', aExt, bExt, W + 1, sr) },
+    { kind: 'Assign', sourceRef: sr, attributes: [],
+      lhs: makeRef(shlName, W + 1),
+      rhs: makeBinaryOp('<<', aExt, b, W + 1, sr) },
+  ];
 
   // Per-op (rExpr, cExpr) tuples. The R column produces a value of W
   // bits; the C column produces a 1-bit flag (0 when not meaningful
   // for that op so it never goes "stuck" between cycles).
   const addCarry  = makeSlice(extName, W, W, sr);
+  const shlCarry  = makeSlice(shlName, W, W, sr);
   const subBorrow = makeBinaryOp('<', a, b, 1, sr);
   const cmpGT     = makeBinaryOp('>', a, b, 1, sr);
   const arms = [
@@ -199,7 +208,7 @@ registerTranslator(COMPONENT_TYPES.ALU, (node, ctx) => {
     { op: 2, r: makeBinaryOp('&',  a, b, W, sr),                              c: lit01     },
     { op: 3, r: makeBinaryOp('|',  a, b, W, sr),                              c: lit01     },
     { op: 4, r: makeBinaryOp('^',  a, b, W, sr),                              c: lit01     },
-    { op: 5, r: makeBinaryOp('<<', a, b, W, sr),                              c: lit01     },
+    { op: 5, r: makeBinaryOp('<<', a, b, W, sr),                              c: shlCarry  },
     { op: 6, r: makeBinaryOp('>>', a, b, W, sr),                              c: lit01     },
     { op: 7, r: makeTernary(                                                                    // CMP
         makeBinaryOp('==', a, b, 1, sr),

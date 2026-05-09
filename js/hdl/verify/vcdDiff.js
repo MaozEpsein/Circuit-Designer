@@ -65,14 +65,20 @@ function parseVCD(text) {
 // { ok, firstDivergence?: { time, signal, expected, actual } }.
 //
 // Options:
-//   signals     — restrict the diff to these names only (others are
-//                 ignored). Without it, every signal that appears on
-//                 either side participates.
-//   startTime   — skip every comparison step strictly before this
-//                 time. Used by sequential L2 to ignore the
-//                 stability window where iverilog regs are still 'x'
-//                 and the native simulator already has them at 0.
-export function vcdDiff(expectedText, actualText, { signals = null, startTime = 0 } = {}) {
+//   signals      — restrict the diff to these names only (others are
+//                  ignored). Without it, every signal that appears on
+//                  either side participates.
+//   startTime    — skip every comparison step strictly before this
+//                  time. Used by sequential L2 to ignore the
+//                  stability window where iverilog regs are still 'x'
+//                  and the native simulator already has them at 0.
+//   sampleTimes  — when set, comparisons happen ONLY at these times
+//                  (intervening change events still update state but
+//                  are not checked). Used for clocked designs whose
+//                  async-read outputs ripple between clock edges; the
+//                  L2 contract is "match at sample boundaries", not
+//                  "match every nanosecond".
+export function vcdDiff(expectedText, actualText, { signals = null, startTime = 0, sampleTimes = null } = {}) {
   const a = parseVCD(expectedText);
   const b = parseVCD(actualText);
 
@@ -101,6 +107,7 @@ export function vcdDiff(expectedText, actualText, { signals = null, startTime = 
       ib++;
     }
     if (t < startTime) continue;     // honour the stability window
+    if (sampleTimes && !sampleTimes.has(t)) continue;
     for (const [name, s] of state) {
       if (s.expected !== s.actual) {
         return { ok: false, firstDivergence: { time: t, signal: name, expected: s.expected, actual: s.actual } };

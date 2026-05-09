@@ -229,6 +229,14 @@ export function runL2Sequential(circuit, opts = {}) {
 
   const clkNode = circuit.nodes.find(n => n.type === 'CLOCK');
   if (!clkNode) return { ok: false, reason: 'sequential harness needs a CLOCK node' };
+  // Phase-4-aware components (PC, REG_FILE, REG_FILE_DP) check
+  // `wire.isClockWire` to spot the clock edge in their post-pass. The
+  // harness shouldn't force the user to remember to flag every wire,
+  // so we auto-mark any wire whose source is a CLOCK node. Operates
+  // on the user's own array; harmless even if already set.
+  for (const w of circuit.wires) {
+    if (w.sourceId === clkNode.id) w.isClockWire = true;
+  }
   const dataInputs = circuit.nodes.filter(n => n.type === 'INPUT');
   const outputs    = circuit.nodes.filter(n => n.type === 'OUTPUT');
   if (outputs.length === 0) {
@@ -368,7 +376,14 @@ export function runL2Sequential(circuit, opts = {}) {
 
   const outNames = outputs.map(n => sanitizeIdentifier(n.label || n.id, 'out'));
   const startTime = stabilityCycles * period + halfPeriod;
-  const diff = vcdDiff(expectedVCD, r.vcd, { signals: outNames, startTime });
+  // Diff only at clock-edge sample times. Async-read components
+  // (REG_FILE / RAM / ROM with re=1) update their outputs between
+  // edges in iverilog when address changes, but the native engine
+  // only re-evaluates per cycle. The L2 contract is "match at
+  // sample boundaries"; in-between ripples are intentional.
+  const sampleTimes = new Set();
+  for (let i = 0; i < cycles; i++) sampleTimes.add(i * period + halfPeriod);
+  const diff = vcdDiff(expectedVCD, r.vcd, { signals: outNames, startTime, sampleTimes });
   if (!diff.ok) return { ok: false, divergence: diff.firstDivergence };
   return { ok: true };
 }
