@@ -211,6 +211,12 @@ export class DFTPanel {
     // node id, also stable). The set survives a re-render so the
     // user's fold choices aren't undone by a fault-sim refresh.
     this._collapsedBlocks = new Set();
+    // Per-field LFSR edit state. Key shape: `<lfsrId>:<field>`. A
+    // field is in view mode (read-only text + pencil) until the user
+    // clicks the pencil; then it enters edit mode (input + save/
+    // cancel). The set survives re-render so a partial edit isn't
+    // lost when the panel refreshes for some other reason.
+    this._editingFields = new Set();
     // Layer 2.5 — toggled when the user clicks the [source] tag in the
     // FAULT COVERAGE row. Expands an inline table of every test vector
     // and per-vector output, so the user can see exactly what stimulus
@@ -232,26 +238,48 @@ export class DFTPanel {
         if (trg.dataset.action === 'toggle-vectors') {
           this._vectorsViewOpen = !this._vectorsViewOpen;
           if (this._visible) this._render();
+          return;
+        }
+        // LFSR field edit lifecycle. Pencil enters edit mode, save
+        // commits, cancel discards. Each click triggers a re-render
+        // so the field swaps between view and edit shapes.
+        const lfsrId = trg.dataset.lfsrId;
+        const field  = trg.dataset.field;
+        if (trg.dataset.action === 'lfsr-edit'   && lfsrId && field) {
+          this._editingFields.add(`${lfsrId}:${field}`);
+          if (this._visible) this._render();
+          // Move focus to the freshly-rendered input.
+          const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
+          inp?.focus(); inp?.select?.();
+          return;
+        }
+        if (trg.dataset.action === 'lfsr-save'   && lfsrId && field) {
+          const inp = this._body.querySelector(`input[data-lfsr-id="${lfsrId}"][data-field="${field}"]`);
+          if (inp) this._commitLfsrEdit(inp);     // re-renders if successful
+          this._editingFields.delete(`${lfsrId}:${field}`);
+          if (this._visible) this._render();
+          return;
+        }
+        if (trg.dataset.action === 'lfsr-cancel' && lfsrId && field) {
+          this._editingFields.delete(`${lfsrId}:${field}`);
+          if (this._visible) this._render();
         }
       });
-      // Inline-edit handler for the LFSR pattern-generator fields.
-      // Inputs carry data-lfsr-id (which node to mutate) and
-      // data-field (which property: seed / taps / bitWidth). We
-      // commit on `change` (blur or Enter) — `input` would re-render
-      // mid-typing and steal focus.
-      this._body.addEventListener('change', (e) => {
-        const inp = e.target.closest('input[data-lfsr-id]');
-        if (!inp) return;
-        this._commitLfsrEdit(inp);
-      });
-      // Enter on an LFSR field commits + blurs (so the user gets
-      // visual confirmation the value was accepted).
+      // Keyboard shortcuts inside the LFSR edit input — Enter saves,
+      // Escape cancels.
       this._body.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
         const inp = e.target.closest('input[data-lfsr-id]');
         if (!inp) return;
-        e.preventDefault();
-        inp.blur();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this._commitLfsrEdit(inp);
+          this._editingFields.delete(`${inp.dataset.lfsrId}:${inp.dataset.field}`);
+          if (this._visible) this._render();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          this._editingFields.delete(`${inp.dataset.lfsrId}:${inp.dataset.field}`);
+          if (this._visible) this._render();
+        }
       });
     }
     document.addEventListener('keydown', (e) => {
@@ -749,6 +777,39 @@ export class DFTPanel {
     if (this._visible) this._render();
   }
 
+  // Render one editable LFSR field. Two states:
+  //   view  → the value as text + ✏ pencil button (click to edit)
+  //   edit  → an <input> + ✓ save + ✕ cancel buttons
+  // Edit state lives in this._editingFields keyed `<id>:<field>` so
+  // re-renders preserve it.
+  _renderLfsrField(lfsrId, field, viewHtml, opts = {}) {
+    const key = `${lfsrId}:${field}`;
+    const editing = this._editingFields.has(key);
+    if (!editing) {
+      return `
+        <span class="dft-lfsr-v">
+          ${viewHtml}
+          <button class="dft-lfsr-edit" data-lfsr-id="${lfsrId}" data-field="${field}"
+                  data-action="lfsr-edit" title="Edit ${field}">✎</button>
+        </span>`;
+    }
+    const inputType = opts.inputType || 'text';
+    const minMax    = opts.minMax || '';
+    return `
+      <span class="dft-lfsr-v">
+        <input class="dft-lfsr-input" type="${inputType}" ${minMax}
+               data-lfsr-id="${lfsrId}" data-field="${field}"
+               value="${opts.current ?? ''}"
+               title="${opts.hint || ''}"
+               autofocus>
+        <button class="dft-lfsr-save"   data-lfsr-id="${lfsrId}" data-field="${field}"
+                data-action="lfsr-save"   title="Save (Enter)">💾</button>
+        <button class="dft-lfsr-cancel" data-lfsr-id="${lfsrId}" data-field="${field}"
+                data-action="lfsr-cancel" title="Cancel (Esc)">✕</button>
+        <small class="dft-lfsr-hint">${opts.hint || ''}</small>
+      </span>`;
+  }
+
   // ── PATTERN GENERATORS (LFSRs) ─────────────────────────────
   // Layer-4 surface in the DFT panel. Lists every LFSR in the scene,
   // computes its true period, names its polynomial, and flags whether
@@ -798,28 +859,17 @@ export class DFTPanel {
           </div>
           <div class="dft-lfsr-grid">
             <span class="dft-lfsr-k">width</span>
-            <span class="dft-lfsr-v">
-              <input class="dft-lfsr-input" type="number" min="1" max="24" step="1"
-                     data-lfsr-id="${lfsr.id}" data-field="bitWidth"
-                     value="${width}">
-              <small>bits (1–24)</small>
-            </span>
+            ${this._renderLfsrField(lfsr.id, 'bitWidth',
+              `<code>${width}</code> <small>bits</small>`,
+              { current: width, hint: 'integer 1–24', inputType: 'number', minMax: 'min="1" max="24"' })}
             <span class="dft-lfsr-k">seed</span>
-            <span class="dft-lfsr-v">
-              <input class="dft-lfsr-input dft-lfsr-input-wide" type="text"
-                     data-lfsr-id="${lfsr.id}" data-field="seed"
-                     value="0x${seed.toString(16)}"
-                     title="Decimal (15) or hex (0xF) or binary (0b1111)">
-              <small><code>${seed.toString(2).padStart(width, '0')}</code></small>
-            </span>
-            <span class="dft-lfsr-k">taps</span>
-            <span class="dft-lfsr-v">
-              <input class="dft-lfsr-input dft-lfsr-input-wide" type="text"
-                     data-lfsr-id="${lfsr.id}" data-field="taps"
-                     value="${taps.join(',')}"
-                     title="Comma-separated bit positions (0=LSB)">
-              <small>${lfsrPolynomial(width, taps)}</small>
-            </span>
+            ${this._renderLfsrField(lfsr.id, 'seed',
+              `<code>${seed.toString(2).padStart(width, '0')}</code> <small>(0x${seed.toString(16)})</small>`,
+              { current: '0x' + seed.toString(16), hint: 'dec, 0xHEX, or 0bBIN — truncated to width' })}
+            <span class="dft-lfsr-k">shape</span>
+            ${this._renderLfsrField(lfsr.id, 'taps',
+              `<code>${lfsrPolynomial(width, taps)}</code> <small>(Fibonacci LFSR, shift-left; XOR of tap bits drops into the new LSB each clock)</small>`,
+              { current: taps.join(','), hint: 'comma-separated bit positions (0 = LSB)' })}
             <span class="dft-lfsr-k">period</span>
             <span class="dft-lfsr-v">
               <code>${period.period}</code>
