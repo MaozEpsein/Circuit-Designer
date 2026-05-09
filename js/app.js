@@ -2984,6 +2984,359 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
 // Verilog export — opens a preview modal with syntax-highlit output,
 // at-a-glance stats, header toggle, copy / download actions, and a
 // command hint for verifying with iverilog. Phase-7 of the HDL plan.
+// Verilog import — Phase 12. Drag-and-drop OR IMPORT .V button opens
+// the modal; once a file is loaded, the user picks a top module and a
+// fidelity mode, then either replaces the current scene or adds the
+// imported circuit as a sub-circuit. All the heavy lifting lives in
+// js/hdl/VerilogExporter.js (importVerilog) + js/hdl/ui/ImportModal.js
+// (helpers); this IIFE is just the DOM glue.
+(async function initVerilogImport() {
+  const { importVerilog } = await import('./hdl/VerilogExporter.js');
+  const { listModuleNames, pickTopModule, buildImportReport, formatParseError } =
+    await import('./hdl/ui/ImportModal.js');
+
+  const btnOpen     = document.getElementById('btn-import-verilog');
+  const overlay     = document.getElementById('vimport-overlay');
+  const closeBtn    = document.getElementById('vimport-close');
+  const dropZone    = document.getElementById('vimport-drop');
+  const pickBtn     = document.getElementById('vimport-pick');
+  const pickDirBtn  = document.getElementById('vimport-pick-dir');
+  const fileInput   = document.getElementById('vimport-file');
+  const dirInput    = document.getElementById('vimport-dir');
+  const previewBox  = document.getElementById('vimport-preview');
+  const filenameEl  = document.getElementById('vimport-filename');
+  const filesList   = document.getElementById('vimport-files');
+  const topSel      = document.getElementById('vimport-top');       // hidden input carrying current value
+  const topLabel    = document.getElementById('vimport-top-label');  // visible name shown next to the dropdown header
+  const topRow      = document.getElementById('vimport-top-row');    // wrapper for the inline picker (shown when modules detected)
+  const topList     = document.getElementById('vimport-top-list');   // <span>'s container with one chip per candidate
+  const modeSel     = document.getElementById('vimport-mode');
+  const errorEl     = document.getElementById('vimport-error');
+  const reportEl    = document.getElementById('vimport-report');
+  const btnReplace  = document.getElementById('vimport-replace');
+  const btnAdd      = document.getElementById('vimport-add');
+  if (!btnOpen || !overlay) return;
+
+  // Modal state — most recent successful parse + circuit waiting for
+  // the user to commit. Supports N files concatenated into one source.
+  let _state = { sources: [], filenames: [], source: null, modules: [], lastCircuit: null };
+
+  function open()  { overlay.classList.remove('hidden'); }
+  function close() { overlay.classList.add('hidden'); _resetState(); }
+  function _resetState() {
+    _state = { sources: [], filenames: [], source: null, modules: [], lastCircuit: null };
+    previewBox.style.display = 'none';
+    errorEl.style.display = 'none';
+    reportEl.style.display = 'none';
+    if (filesList) { filesList.style.display = 'none'; filesList.innerHTML = ''; }
+    btnReplace.disabled = true;
+    btnAdd.disabled = true;
+    fileInput.value = '';
+    if (dirInput) dirInput.value = '';
+  }
+  function _showError(headline, snippet) {
+    errorEl.style.display = 'block';
+    errorEl.textContent = headline + (snippet ? '\n\n' + snippet : '');
+    reportEl.style.display = 'none';
+    btnReplace.disabled = true;
+    btnAdd.disabled = true;
+  }
+  function _showReport(line) {
+    reportEl.style.display = 'block';
+    reportEl.textContent = line;
+    errorEl.style.display = 'none';
+    btnReplace.disabled = false;
+    btnAdd.disabled = false;
+  }
+
+  // Load N files (or one). Each file is read, concatenated with a
+  // banner comment so the parser's line:col diagnostics still point
+  // at the right source. The top-module dropdown then lists every
+  // module across every file.
+  async function _loadFiles(files) {
+    try { await _loadFilesImpl(files); }
+    catch (e) { _showError(`Internal error: ${e.message}`); console.error(e); }
+  }
+  async function _loadFilesImpl(files) {
+    if (!files || files.length === 0) return;
+    const VERILOG_RE = /\.(v|vh|sv|svh)$/i;
+    const accepted = [...files].filter(f => VERILOG_RE.test(f.name));
+    if (accepted.length === 0) {
+      _showError('No Verilog (.v / .sv) files found in the selection.');
+      return;
+    }
+    // Sort deterministically by full path so two imports of the same
+    // folder produce the same ordering (and the same parser output).
+    accepted.sort((a, b) => {
+      const ap = a.webkitRelativePath || a.name;
+      const bp = b.webkitRelativePath || b.name;
+      return ap < bp ? -1 : ap > bp ? 1 : 0;
+    });
+    const sources = [];
+    const filenames = [];
+    let totalBytes = 0;
+    for (const file of accepted) {
+      const text = await file.text();
+      sources.push(`// ===== ${file.webkitRelativePath || file.name} =====\n${text}`);
+      filenames.push(file.webkitRelativePath || file.name);
+      totalBytes += text.length;
+    }
+    _state.sources   = sources;
+    _state.filenames = filenames;
+    _state.source    = sources.join('\n');
+    filenameEl.textContent = accepted.length === 1
+      ? `${filenames[0]} — ${totalBytes} bytes`
+      : `${accepted.length} files — ${totalBytes} bytes total`;
+    previewBox.style.display = 'flex';
+    // List the loaded files so the user knows what got picked up.
+    if (filesList) {
+      if (accepted.length === 1) {
+        filesList.style.display = 'none';
+      } else {
+        filesList.style.display = 'block';
+        filesList.innerHTML = filenames
+          .map(n => `<div>• ${n}</div>`).join('');
+      }
+    }
+    // Populate the top-module dropdown with every module name across
+    // every file. The picker lets the user choose ANY of them as the
+    // top — the rest become candidates for sub-module resolution.
+    // Try the lexer-based listing first; fall back to a tolerant regex
+    // if it returns nothing (some files have constructs that throw the
+    // lexer mid-stream — the regex still finds the module headers).
+    _state.modules = listModuleNames(_state.source);
+    if (_state.modules.length === 0) {
+      _state.modules = [..._state.source.matchAll(/\bmodule\s+([A-Za-z_]\w*)\b/g)]
+        .map(m => m[1]);
+    }
+    if (_state.modules.length === 0) {
+      _showError('No `module ... endmodule` declarations found.');
+      return;
+    }
+    const top = pickTopModule(_state.modules);
+    _setTop(top);
+    // Inline chip picker — one button per candidate, always visible
+    // (no popup gymnastics, no native <select> dependency).
+    if (topRow && topList) {
+      topRow.style.display = 'flex';
+      topList.innerHTML = '';
+      for (const m of _state.modules) {
+        const chip = document.createElement('span');
+        chip.textContent = m;
+        chip.dataset.value = m;
+        chip.style.cssText = 'padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;background:rgba(80,200,160,0.06);border:1px solid rgba(80,200,160,0.3);color:#cfe6f0';
+        chip.addEventListener('mouseenter', () => { if (chip.dataset.value !== topSel.value) chip.style.background = 'rgba(80,200,160,0.18)'; });
+        chip.addEventListener('mouseleave', () => { _refreshChips(); });
+        chip.addEventListener('click', () => { _setTop(m); _refreshChips(); _runImport(); });
+        topList.appendChild(chip);
+      }
+      _refreshChips();
+    }
+    _runImport();
+  }
+  // Helper to update both the hidden input and the visible label.
+  function _setTop(name) {
+    if (topSel)   topSel.value = name || '';
+    if (topLabel) topLabel.textContent = name || '—';
+  }
+  // Visually mark the selected chip; reset siblings to the resting style.
+  function _refreshChips() {
+    if (!topList) return;
+    const selected = topSel?.value;
+    for (const chip of topList.children) {
+      if (chip.dataset.value === selected) {
+        chip.style.background  = '#4aa088';
+        chip.style.color       = '#0a0e14';
+        chip.style.fontWeight  = 'bold';
+      } else {
+        chip.style.background  = 'rgba(80,200,160,0.06)';
+        chip.style.color       = '#cfe6f0';
+        chip.style.fontWeight  = 'normal';
+      }
+    }
+  }
+  // Backward-compatible single-file entry kept for callers that only
+  // had one File at hand (e.g. the legacy drop handler before the
+  // multi-file rewrite).
+  async function _loadFile(file) { return _loadFiles(file ? [file] : []); }
+
+  function _runImport() {
+    if (!_state.source) return;
+    try {
+      const { circuit, errors } = importVerilog(_state.source, { layout: true });
+      if (errors && errors.length) {
+        const err = errors[0];
+        const fmt = formatParseError({ message: err.message, srcRange: err.srcRange }, _state.source);
+        _showError(fmt.headline, fmt.snippet);
+        return;
+      }
+      _state.lastCircuit = circuit;
+      const { line } = buildImportReport(circuit);
+      _showReport(line);
+    } catch (e) {
+      const fmt = formatParseError(e, _state.source);
+      _showError(fmt.headline, fmt.snippet);
+    }
+  }
+
+  async function _commit(mode) {
+    if (!_state.lastCircuit) return;
+    if (mode === 'replace') {
+      // Whole-scene replace via the existing scene API + an undo
+      // checkpoint so the import is one atomic step.
+      try {
+        scene.clearAll?.();
+        scene.loadFromJSON?.(_state.lastCircuit);
+        commands.recordCheckpoint?.(`import ${_state.filename}`);
+        bus.emit('scene:loaded', null);
+        bus.emit('scene:changed', null);
+      } catch (e) {
+        _showError(`Replace failed: ${e.message}`);
+        return;
+      }
+    } else {
+      // Add-as-subcircuit: synthesise a SUB_CIRCUIT node holding the
+      // imported scene as `subCircuit` and drop it on the canvas.
+      // Derive `subInputs` / `subOutputs` from the inner scene's
+      // INPUT/CLOCK + OUTPUT nodes so the canvas renderer draws real
+      // pins on the block (without these the block is a port-less
+      // square).
+      const inner = _state.lastCircuit;
+      // The canvas's SUB_CIRCUIT renderer reads `ins[i].label` (not
+      // `name`) for the pin caption, so set both — `label` for the
+      // visual, `name` for any code that walks pins by identifier.
+      const subInputs = (inner.nodes || [])
+        .filter(n => n.type === 'INPUT' || n.type === 'CLOCK')
+        .map(n => ({
+          name: n.label || n.id,
+          label: n.label || n.id,
+          bitWidth: n.bitWidth || 1,
+          isClock: n.type === 'CLOCK',
+        }));
+      const subOutputs = (inner.nodes || [])
+        .filter(n => n.type === 'OUTPUT')
+        .map(n => ({
+          name: n.label || n.id,
+          label: n.label || n.id,
+          bitWidth: n.bitWidth || 1,
+        }));
+      const subId = `imported_${Date.now().toString(36)}`;
+      const cleanName = _state.filename?.replace(/\.v$/i, '') || 'imported';
+      // Place near the existing scene's centroid so the new block lands
+      // visibly next to whatever's already on the canvas. If the canvas
+      // is empty, (0,0) is fine — zoomToFit centres it after.
+      const existing = [...(scene._nodes?.values?.() || [])];
+      let cx = 0, cy = 0;
+      if (existing.length > 0) {
+        for (const n of existing) { cx += n.x | 0; cy += n.y | 0; }
+        cx = Math.round(cx / existing.length) + 200;   // off to the right
+        cy = Math.round(cy / existing.length);
+      }
+      const subNode = {
+        id: subId, type: 'SUB_CIRCUIT',
+        x: cx, y: cy,
+        // Title sits INSIDE the box (subName). Leave `label` blank so
+        // the renderer doesn't duplicate it ABOVE the box.
+        label: '',
+        subName: cleanName,
+        subInputs, subOutputs,
+        subCircuit: inner,
+      };
+      scene.addNode?.(subNode);
+      bus.emit('scene:changed', null);
+      // Make sure the new block is visible — zoom-fit pans + scales so
+      // every node (including the just-added sub-circuit) lands inside
+      // the viewport.
+      try {
+        const Renderer = (await import('./rendering/CanvasRenderer.js')).default
+                       || (await import('./rendering/CanvasRenderer.js'));
+        Renderer.zoomToFit?.([...scene._nodes.values()]);
+      } catch { /* renderer not available — silently skip */ }
+    }
+    close();
+  }
+
+  btnOpen.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  pickBtn.addEventListener('click', () => fileInput.click());
+  if (pickDirBtn && dirInput) {
+    pickDirBtn.addEventListener('click', () => dirInput.click());
+    dirInput.addEventListener('change', () => { _loadFiles([...(dirInput.files || [])]); });
+  }
+  fileInput.addEventListener('change', () => { _loadFiles([...(fileInput.files || [])]); });
+  // (No popup wiring — the inline chip-picker handles selection
+  // directly via per-chip click handlers attached in _loadFiles.)
+  modeSel.addEventListener('change', _runImport);
+  btnReplace.addEventListener('click', () => _commit('replace'));
+  btnAdd.addEventListener('click',     () => _commit('add'));
+
+  // Drop zone — also wire to the canvas to catch drops anywhere.
+  function _bindDrop(el) {
+    el.addEventListener('dragover',  (e) => { e.preventDefault(); el.style.background = 'rgba(80,200,160,0.10)'; });
+    el.addEventListener('dragleave', ()  => { el.style.background = ''; });
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      el.style.background = '';
+      // Two paths: the modern DataTransferItemList (folders + multi-
+      // selection) and the older `files` fallback. Try items first;
+      // if the browser doesn't expose `webkitGetAsEntry`, fall back
+      // to the flat file list.
+      const items = e.dataTransfer?.items;
+      let collected = [];
+      if (items && items.length > 0 && items[0].webkitGetAsEntry) {
+        for (const it of items) {
+          const entry = it.webkitGetAsEntry?.();
+          if (entry) collected.push(...await _walkEntry(entry));
+        }
+      } else {
+        collected = [...(e.dataTransfer?.files || [])];
+      }
+      const verilog = collected.filter(f => /\.(v|vh|sv|svh)$/i.test(f.name));
+      if (verilog.length === 0) return;
+      open();
+      _loadFiles(verilog);
+    });
+  }
+  _bindDrop(dropZone);
+  const canvasEl = document.getElementById('canvas') || document.body;
+  if (canvasEl) _bindDrop(canvasEl);
+
+  // Recursively walk a DataTransferItem entry tree and collect every
+  // File leaf. Browsers expose `entry.file(cb)` (FileEntry) and
+  // `entry.createReader()` (DirectoryEntry) — both async, so we wrap
+  // them in promises and recurse.
+  async function _walkEntry(entry, basePath = '') {
+    if (!entry) return [];
+    if (entry.isFile) {
+      return new Promise(res => entry.file(file => {
+        // Synthesise a webkitRelativePath so the modal lists the file
+        // with its folder context.
+        if (basePath) {
+          try { Object.defineProperty(file, 'webkitRelativePath', { value: basePath + file.name }); }
+          catch { /* ignore — File may be read-only on some browsers */ }
+        }
+        res([file]);
+      }, () => res([])));
+    }
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const all = [];
+      // readEntries returns at most ~100 entries per call; loop until empty.
+      const readBatch = () => new Promise(res => reader.readEntries(res, () => res([])));
+      while (true) {
+        const batch = await readBatch();
+        if (!batch || batch.length === 0) break;
+        for (const child of batch) {
+          all.push(...await _walkEntry(child, basePath + entry.name + '/'));
+        }
+      }
+      return all;
+    }
+    return [];
+  }
+})();
+
 (function initVerilogPreview() {
   const btnOpen     = document.getElementById('btn-export-verilog');
   const overlay     = document.getElementById('verilog-preview-overlay');
@@ -4864,6 +5217,34 @@ const EXAMPLES = [
     desc: 'Phase-6 demo: two instances of a 2:1 mux sub-circuit feed an XOR. Click VERILOG to see one `module mux2(...)` definition emitted above the top, instantiated twice with named ports — content-hash de-duplication collapses identical sub-circuits to a single module shared across all instantiations. Definition order is dependency-correct (sub before top). Try `cpu-detailed` next: it uses a CU sub-circuit which now lifts to its own module instead of the previous `// TODO: SUB_CIRCUIT` stub.',
     tags: ['verilog', 'phase6', 'hierarchy', 'sub-circuit'],
     file: 'examples/circuits/verilog-phase6-hierarchy.json',
+  },
+  {
+    id: 'verilog-phase13-corpus-tour',
+    title: '13. VERILOG — release showcase',
+    desc: 'Phase-13 release: bidirectional Verilog (export + import) with a 1000-seed property-based fuzz suite (1000/1000 pass) backing the round-trip claim. The corpus under `examples/hdl-corpus/` covers a 2:1 MUX with attributes, a 4-bit BCD counter, a 3-state Moore FSM, an ALU mixing arithmetic + bitwise + comparator, and an 8-N-1 UART transmitter. Each file imports cleanly through the full pipeline (parse → elaborate → component infer → auto-layout) and re-exports under both CANONICAL and FIDELITY modes. See `js/hdl/SUPPORTED.md` for the capability matrix and `INSTALL.md` for the optional iverilog / Yosys / nextpnr dependencies.',
+    tags: ['verilog', 'phase13', 'release', 'corpus', 'showcase'],
+    file: 'examples/circuits/verilog-phase13-corpus-tour.json',
+  },
+  {
+    id: 'verilog-phase12-fidelity',
+    title: '12. VERILOG — fidelity-mode round-trip',
+    desc: 'Phase-12 demo: IMPORT .V button + drag-and-drop a `.v` onto the canvas → modal pops with file size, top-module picker, fidelity-mode toggle, parse-error surface, and an import report. Two commit actions: REPLACE CURRENT (whole-scene swap with undo) or ADD AS SUB-CIRCUIT. The companion file at `examples/hdl-corpus/phase12-fidelity-demo.v` exercises the round-trip: import it, then re-export — Fidelity mode preserves the verbatim Verilog (comments, `(* keep *)`, parameter, `$display`); Canonical mode emits clean IR-driven output. Verilog Block hashing makes two imports of the same fragment produce the same canonical hash regardless of whitespace.',
+    tags: ['verilog', 'phase12', 'import', 'fidelity', 'ux'],
+    file: 'examples/circuits/verilog-phase12-fidelity.json',
+  },
+  {
+    id: 'verilog-phase11-layout',
+    title: '11. VERILOG — auto-layout for imports',
+    desc: 'Phase-11 demo: the same 2:1 MUX from `examples/hdl-corpus/phase8-mux2-handwritten.v`, but now with auto-layout applied. The Sugiyama-style topological layering puts INPUTs/CLOCK on the left column, the inferred MUX + register in the middle columns, and OUTPUTs on the rightmost edge. Clock wires are skipped during depth computation so sequential feedback loops don\'t create infinite columns. Two imports of the same `.v` produce identical coordinates (deterministic placement) so re-imports don\'t shuffle the canvas. Run `node examples/tests/test-hdl-layout.mjs` for proof (14 checks).',
+    tags: ['verilog', 'phase11', 'layout', 'import'],
+    file: 'examples/circuits/verilog-phase11-layout.json',
+  },
+  {
+    id: 'verilog-phase10-import',
+    title: '10. VERILOG — import to canvas',
+    desc: 'Phase-10 demo: the canvas equivalent of importing the hand-written 2:1 MUX from `examples/hdl-corpus/phase8-mux2-handwritten.v` end-to-end through parser → elaborator → component inferer. The importer recognises ports, primitive gates (and/or/xor/...), sequential always blocks (with or without async reset → REGISTER), and submodule instantiations. Anything outside the recognised set is preserved as a VERILOG_BLOCK node holding the IR fragment so round-trip stays loss-less. Auto-layout (Phase 11) and the drag-and-drop import modal (Phase 12) are still pending; for now imported nodes ship at (0,0). Run `node examples/tests/test-hdl-toCircuit.mjs` to see proof (28 checks).',
+    tags: ['verilog', 'phase10', 'import', 'inference'],
+    file: 'examples/circuits/verilog-phase10-import.json',
   },
   {
     id: 'verilog-phase9-elaborate',

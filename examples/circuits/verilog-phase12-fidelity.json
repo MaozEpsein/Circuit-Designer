@@ -1,0 +1,12 @@
+{
+  "_doc": "Phase 12 demo — Import UX + Fidelity Mode.\n\nWhat Phase 12 ships:\n  • IMPORT .V button in the bottom toolbar (next to VERILOG export).\n  • Drag-and-drop a `.v` file onto the canvas → opens the Import Modal.\n  • Modal shows: filename + size, top-module picker (auto-pre-selects `top` if present, last module otherwise), Fidelity-mode toggle (CANONICAL / FIDELITY), the first parse error with line:col + caret + source snippet, an import report (`Imported N modules, X gates, Y flip-flops, …`).\n  • Two commit actions: REPLACE CURRENT (whole-scene swap with an undo checkpoint) or ADD AS SUB-CIRCUIT (synthesise a SUB_CIRCUIT node holding the imported scene).\n  • Fidelity Mode: re-emits each IR node's `originalText` (captured by elaborate from the AST source range) verbatim instead of pretty-printing from IR. Comments, attributes, unusual whitespace, identifier casing — all survive byte-for-byte.\n  • Verilog Block hashing: two users importing the same fragment produce the same canonical hash (whitespace/comments don't affect it; semantics do).\n\nTo try the round-trip:\n  1. Click IMPORT .V → pick `examples/hdl-corpus/phase12-fidelity-demo.v`.\n  2. Toggle FIDELITY mode in the dropdown — see import report stays the same.\n  3. ADD AS SUB-CIRCUIT — sample_alu lands on the canvas as a single SUB_CIRCUIT block.\n  4. Click VERILOG to re-export. With Fidelity Mode the output preserves `(* keep *)`, the parameter, and the `$display` line verbatim. Canonical mode emits clean IR-driven Verilog.\n\nVerification: `node examples/tests/test-hdl-fidelity.mjs` (round-trip on the sidecar) + `node examples/tests/test-hdl-import-ux.mjs` (helpers, 24 checks).",
+  "nodes": [
+    { "type": "INPUT",  "x": -360, "y": -200, "fixedValue": 0,                  "label": "rst_n", "id": "phase12_rst" },
+    { "type": "INPUT",  "x": -360, "y": -160, "fixedValue": 0,                  "label": "op",    "id": "phase12_op" },
+    { "type": "INPUT",  "x": -360, "y":  -80, "fixedValue": 0, "bitWidth": 4,   "label": "a",     "id": "phase12_a" },
+    { "type": "INPUT",  "x": -360, "y":  -40, "fixedValue": 0, "bitWidth": 4,   "label": "b",     "id": "phase12_b" },
+    { "type": "CLOCK",  "x": -360, "y":  -240, "value": 0,                      "label": "clk",   "id": "phase12_clk" },
+    { "type": "OUTPUT", "x":  240, "y":  -100, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "result", "id": "phase12_result" }
+  ],
+  "wires": []
+}

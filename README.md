@@ -338,6 +338,45 @@ Run any single file with `node examples/tests/<file>.mjs`.
 
 ---
 
+## HDL Quickstart
+
+**Export a design to Verilog** — click `VERILOG` in the bottom toolbar.
+The modal previews the generated `.v` with syntax highlighting,
+line-number gutter, stats bar, header / top-module toggles, and
+buttons for `COPY`, `DOWNLOAD .v`, `TESTBENCH`, and `PROJECT .ZIP`.
+Stage attributes (set by the pipeline analyzer) appear as
+`// ─── Stage N ───` dividers in the body.
+
+**Import a `.v` file** — click `IMPORT .V` next to the export button,
+or drag the file anywhere on the canvas. The modal shows the file
+name + size, a top-module picker (auto-pre-selected), a fidelity-mode
+toggle, the first parse error (with line:col + caret), and an import
+report. Two commit actions: `REPLACE CURRENT` (whole-scene swap with
+undo) or `ADD AS SUB-CIRCUIT`.
+
+**Fidelity Mode** preserves the source byte-for-byte: comments,
+`(* attributes *)`, parameters, and `$display` calls all survive a
+round-trip. **Canonical Mode** re-emits clean structural Verilog from
+the IR.
+
+**Run the test suite** — `node examples/tests/run-hdl.mjs`. The
+1000-seed property fuzz lives in `test-hdl-fuzz.mjs`; corpus
+round-trip in `test-hdl-corpus-round-trip.mjs`. See
+[INSTALL.md](INSTALL.md) for the optional iverilog / Yosys
+dependencies.
+
+**Troubleshooting:**
+- *"Parse error at L:C"* — the modal points at the offending token. The
+  parser supports the subset documented in [js/hdl/SUPPORTED.md](js/hdl/SUPPORTED.md);
+  constructs outside it land as `VERILOG_BLOCK` placeholders that
+  round-trip safely but don't render as schematic.
+- *"Output is simulation-only"* in the export header — `synthesisSafe:
+  false` was set; multi-driver tri-state preserved as `1'bz` instead of
+  being lowered. Drop the flag for synth-clean output.
+- *Imported circuit looks stacked at the origin* — `autoLayout` ran but
+  zero wires connected the nodes. Usually means the source had ports
+  with names that don't match what the inferer expects (case-sensitive).
+
 ## HDL Toolchain (Verilog Import / Export) — Development Plan
 
 The next major initiative. Converts Circuit Designer from a self-contained simulator into a first-class RTL design tool that interoperates with the industry toolchain (Yosys, Verilator, ModelSim, Vivado, FPGA flows).

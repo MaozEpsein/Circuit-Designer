@@ -159,6 +159,12 @@ body { zoom: 0.8; }
 /* #pipeline-panel.pipeline-fullscreen counter-zoom lives in app.css next
    to the other fullscreen rules so they cascade together. */
 
+/* Verilog import modal: counter-zoom to 1.0 so the native <select>
+   popup renders at full size and the dropdown options are pickable.
+   Without this, body{zoom:0.8} squeezes the option list into a tiny
+   black square. */
+#vimport-overlay { zoom: 1.25; }
+
 /* ── Canvas ─────────────────────────────────────────────── */
 
 #game-canvas {

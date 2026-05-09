@@ -243,7 +243,7 @@ function emitModule(ir, lines) {
 }
 
 export function toVerilog(ir, opts = {}) {
-  const { header = false, headerText = null } = opts;
+  const { header = false, headerText = null, fidelity = false } = opts;
   const lines = [];
   if (header) {
     if (headerText) {
@@ -253,6 +253,17 @@ export function toVerilog(ir, opts = {}) {
     }
     lines.push('');
   }
+  // Fidelity mode (Phase 12): when the entire top module carries an
+  // `originalText` slice (populated by elaborate from the AST source
+  // range), re-emit it verbatim instead of going through the IR
+  // pretty-printer. Comments / unusual whitespace / identifier casing
+  // survive byte-for-byte. Submodules are still emitted IR-driven
+  // unless they too have originalText.
+  if (fidelity) {
+    for (const sub of (ir.submodules || [])) _emitModuleFidelity(sub, lines);
+    _emitModuleFidelity(ir, lines);
+    return lines.join('\n');
+  }
   // Phase-6 hierarchy: emit every submodule definition above the top.
   // Order is deterministic (translator-controlled — fromCircuit appends
   // each new submodule in encounter order, with content-hash de-dup
@@ -261,4 +272,16 @@ export function toVerilog(ir, opts = {}) {
   for (const sub of (ir.submodules || [])) emitModule(sub, lines);
   emitModule(ir, lines);
   return lines.join('\n');
+}
+
+// Fidelity-mode module emit: prefer module-level originalText when
+// present; otherwise fall through to IR-driven emit and per-item
+// fidelity (which uses item-level originalText where available).
+function _emitModuleFidelity(ir, lines) {
+  if (typeof ir.originalText === 'string' && ir.originalText.trim().length > 0) {
+    lines.push(ir.originalText);
+    lines.push('');
+    return;
+  }
+  emitModule(ir, lines);
 }

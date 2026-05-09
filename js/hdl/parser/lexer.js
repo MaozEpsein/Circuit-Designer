@@ -31,6 +31,7 @@ export const KEYWORDS = new Set([
   'or',
   'and', 'nand', 'nor', 'not', 'xor', 'xnor', 'buf', 'bufif0', 'bufif1', 'notif0', 'notif1',
   'parameter', 'localparam',
+  'for', 'while', 'repeat', 'forever',
   'signed', 'unsigned',
 ]);
 
@@ -102,6 +103,21 @@ export function tokenize(source) {
       while (i < N && !(source[i] === '*' && peek(1) === '/')) advance();
       if (i >= N) throw new LexError('unterminated block comment', start.line, start.col);
       advance(2);
+      continue;
+    }
+
+    // Compiler directives — `define / `include / `ifdef / `else /
+    // `endif / `timescale / `default_nettype / `resetall / `undef …
+    // IEEE 1364 §19. The hand-written elaborator doesn't model
+    // pre-processing today; the tolerant move is to consume the
+    // directive's tail (up to end-of-line) and drop it. Multi-file
+    // imports already concat all sources upfront, so `include is
+    // also a no-op.
+    if (ch === '`') {
+      // Single-line directive: consume to end of line. (Multi-line
+      // directives like `ifdef … `endif are handled implicitly because
+      // the body inside is regular Verilog the lexer keeps tokenising.)
+      while (i < N && source[i] !== '\n') advance();
       continue;
     }
 

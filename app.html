@@ -543,6 +543,7 @@
       <button id="btn-export-svg" class="design-action" style="font-size:9px">SVG</button>
       <button id="btn-export-json" class="design-action" style="font-size:9px">JSON</button>
       <button id="btn-export-verilog" class="design-action" style="font-size:9px" title="Export circuit as synthesizable Verilog (.v)">VERILOG</button>
+      <button id="btn-import-verilog" class="design-action" style="font-size:9px;background:rgba(80,200,160,0.10);border-color:#4aa088;color:#9be0c0" title="Import a Verilog .v file as a circuit on the canvas (drag-and-drop also works)">IMPORT .V</button>
       <span style="border-left:1px solid #2a4060;margin:0 4px"></span>
       <button id="btn-zoom-fit" class="design-action" style="font-size:9px">FIT</button>
       <span id="project-name-display" style="color:#4a6080;font-size:9px;font-family:'JetBrains Mono',monospace"></span>
@@ -695,6 +696,62 @@
        Shows the generated Verilog text + COPY/DOWNLOAD buttons.
        Phase-7 will replace this with a richer modal (syntax highlight,
        options, testbench bundle); this is the minimum viable preview. -->
+  <!-- Verilog import modal — Phase 12. Triggered by IMPORT .V button or
+       drag-and-drop of a .v file onto the canvas. -->
+  <input type="file" id="vimport-file" accept=".v,.vh,.sv,.svh,text/plain" multiple style="display:none" />
+  <input type="file" id="vimport-dir"  webkitdirectory directory multiple style="display:none" />
+  <div id="vimport-overlay" class="hidden" style="position:fixed;inset:0;z-index:320;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace">
+    <div id="vimport-modal" style="background:#0a0e14;border:1px solid #4aa088;border-radius:8px;width:min(900px,92vw);max-height:88vh;display:flex;flex-direction:column;color:#cfe6f0;font-size:11px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #2a4060">
+        <span style="color:#9be0c0;font-weight:bold;letter-spacing:1px">IMPORT VERILOG</span>
+        <button id="vimport-close" class="btn-secondary" style="font-size:9px">CLOSE</button>
+      </div>
+      <div id="vimport-body" style="padding:14px 16px;overflow:auto;display:flex;flex-direction:column;gap:10px">
+        <!-- Drop zone -->
+        <div id="vimport-drop" style="border:2px dashed #4aa088;border-radius:8px;padding:20px;text-align:center;color:#9be0c0;cursor:pointer">
+          <div style="font-size:13px;font-weight:bold">Drop a <code>.v</code> file here</div>
+          <div style="margin-top:6px;color:#6a8090">— or —</div>
+          <div style="display:flex;gap:6px;justify-content:center;margin-top:6px">
+            <button id="vimport-pick"     class="btn-secondary" style="font-size:10px">Pick file(s)</button>
+            <button id="vimport-pick-dir" class="btn-secondary" style="font-size:10px">Pick folder</button>
+          </div>
+          <div style="margin-top:8px;color:#6a8090;font-size:9px">Multi-file: drop a folder or pick many files. The top-module dropdown lists every module across them.</div>
+        </div>
+        <!-- Loaded files list (visible once anything is loaded). -->
+        <div id="vimport-files" style="display:none;color:#9be0c0;font-size:10px;background:rgba(80,200,160,0.04);border:1px solid rgba(80,200,160,0.2);padding:6px 10px;border-radius:4px;max-height:120px;overflow:auto"></div>
+        <!-- Top-module picker (visible once modules are detected). The
+             selected name pulses green; click any other to pick it. -->
+        <div id="vimport-top-row" style="display:flex;color:#876;font-size:11px;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(80,200,160,0.06);border:1px solid #4aa088;padding:8px 12px;border-radius:4px;min-height:28px">
+          <span style="color:#9be0c0;font-weight:bold">Top module:</span>
+          <span id="vimport-top-list" style="display:inline-flex;flex-wrap:wrap;gap:6px"></span>
+        </div>
+        <!-- Optional source preview + parse-error surface -->
+        <div id="vimport-preview" style="display:none;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span id="vimport-filename" style="color:#9be0c0"></span>
+            <span style="display:flex;align-items:center;gap:8px">
+              <span style="color:#876;font-size:10px;display:flex;align-items:center;gap:6px">
+                Top: <span id="vimport-top-label" style="color:#9be0c0;font-weight:bold;min-width:80px">—</span>
+                <input type="hidden" id="vimport-top" />
+              </span>
+              <label style="color:#876;font-size:10px">Mode:
+                <select id="vimport-mode" style="background:#0a0e14;color:#cfe6f0;border:1px solid #2a4060;font-family:inherit;font-size:10px;padding:2px 6px;min-width:200px">
+                  <option value="canonical">CANONICAL (re-emit from IR)</option>
+                  <option value="fidelity">FIDELITY (preserve source verbatim)</option>
+                </select>
+              </label>
+            </span>
+          </div>
+          <div id="vimport-error" style="display:none;color:#ff6080;background:rgba(255,80,80,0.05);border:1px solid rgba(255,80,80,0.3);padding:8px;border-radius:4px;white-space:pre-wrap;font-size:10px"></div>
+          <div id="vimport-report" style="color:#9be0c0;background:rgba(80,200,160,0.05);border:1px solid rgba(80,200,160,0.3);padding:8px;border-radius:4px;font-size:10px;display:none"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #2a4060">
+        <button id="vimport-replace" class="btn-secondary" style="font-size:10px" disabled>REPLACE CURRENT</button>
+        <button id="vimport-add" class="btn-secondary" style="font-size:10px;background:rgba(80,200,160,0.10);border-color:#4aa088;color:#9be0c0" disabled>ADD AS SUB-CIRCUIT</button>
+      </div>
+    </div>
+  </div>
   <div id="verilog-preview-overlay" class="hidden">
     <div id="verilog-preview-modal">
       <div id="verilog-preview-header">

@@ -1,0 +1,12 @@
+{
+  "_doc": "Phase 10 demo — IR → circuitJSON & component inference.\n\nThis is the SCENE produced by importing the hand-written 2:1 MUX file at `examples/hdl-corpus/phase8-mux2-handwritten.v` through the full import pipeline:\n\n  text  →  parseVerilog (Phase 8)  →  AST\n        →  elaborate (Phase 9)      →  IR\n        →  toCircuit (Phase 10)    →  this circuit.json\n\nWhat Phase 10 ships:\n  • Ports (input/output/inout) → INPUT / OUTPUT / CLOCK nodes (the importer recognises `clk` / `clock` / `tck` as a clock).\n  • Primitive instances (`and g(y, a, b);` etc.) → GATE_SLOT nodes with the matching `gate` prop.\n  • Sequential always blocks with one NBA (with or without an async-reset if-guard) → REGISTER node, with DATA / CLR / CLK pins wired automatically.\n  • Sub-module instantiations → SUB_CIRCUIT placeholder with the IR preserved on `_verilog` (the inner module won't be re-elaborated until Phase 10b).\n  • Continuous assigns we can't simplify (`assign y = a ^ b;`, `assign s = sel ? a : b;`) → VERILOG_BLOCK node carrying the IR fragment, so the original Verilog text round-trips out untouched.\n\nWhat's NOT yet here (Phase 11+):\n  • Auto-layout — every imported node ships at (0,0) for now; opening this scene shows them stacked. Phase 11 routes them onto a grid.\n  • Drag-and-drop import UX — Phase 12 wires a modal with file-picker + live preview.\n\nRun `node examples/tests/test-hdl-toCircuit.mjs` for the unit suite (28 checks).",
+  "nodes": [
+    { "type": "INPUT",    "x":   0, "y": 0, "fixedValue": 0,                   "label": "clk",  "id": "phase10_clk" },
+    { "type": "INPUT",    "x":   0, "y": 0, "fixedValue": 0,                   "label": "rst",  "id": "phase10_rst" },
+    { "type": "INPUT",    "x":   0, "y": 0, "fixedValue": 0,                   "label": "sel",  "id": "phase10_sel" },
+    { "type": "INPUT",    "x":   0, "y": 0, "fixedValue": 0, "bitWidth": 4,    "label": "d0",   "id": "phase10_d0" },
+    { "type": "INPUT",    "x":   0, "y": 0, "fixedValue": 0, "bitWidth": 4,    "label": "d1",   "id": "phase10_d1" },
+    { "type": "OUTPUT",   "x":   0, "y": 0, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "q",    "id": "phase10_q" }
+  ],
+  "wires": []
+}

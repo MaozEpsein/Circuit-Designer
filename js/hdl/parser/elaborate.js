@@ -354,6 +354,14 @@ function elabStmt(stmt, scope) {
         name: stmt.name, args: stmt.args || [], _verilog: `${stmt.name}(${args});` };
     }
   }
+  // For / Loop statements (Phase 8 parse-only): preserve verbatim
+  // rather than throwing — many corpus files use them in `initial`
+  // blocks for memory init, which the elaborator doesn't lower but
+  // the import path should still accept.
+  if (stmt.kind === 'For' || stmt.kind === 'Loop') {
+    return { kind: stmt.kind, sourceRef: _sr(stmt.srcRange),
+             _verilog: '/* unsynthesised loop */' };
+  }
   throw _unsupported(`statement kind '${stmt.kind}'`, stmt.srcRange);
 }
 

@@ -17,6 +17,34 @@ import './translators/all.js';     // side-effect: registers every translator
 export { sanitizeIdentifier } from './core/identifiers.js';
 export { HDLError, SEVERITY } from './core/HDLError.js';
 
+// Phase 8-10 import path: text → AST → IR → circuit.json. The full
+// pipeline lives in the parser + import dirs; we re-export the
+// convenience wrapper here so callers have one entry point.
+export { parseVerilog }   from './parser/parser.js';
+export { elaborate }      from './parser/elaborate.js';
+export { toCircuit }      from './import/toCircuit.js';
+export { autoLayout, autoLayoutAsync } from './import/autoLayout.js';
+/**
+ * One-shot Verilog import: text → circuit.json with auto-layout.
+ * Throws on lex/parse errors; surfaces elaborate errors via the
+ * `errors` field on the returned object. Pass `{ layout: false }` to
+ * receive the raw circuit with every node at (0,0).
+ */
+export function importVerilog(text, opts = {}) {
+  const { ast } = _parseVerilog(text, opts);
+  const { ir, errors } = _elaborate(ast, { source: text, ...opts });
+  if (!ir) return { circuit: null, errors };
+  const circuit = _toCircuit(ir, opts);
+  if (opts.layout !== false) _autoLayout(circuit, opts);
+  return { circuit, errors };
+}
+// Local re-bindings so the wrapper above doesn't shadow the named
+// exports (which the test suite imports directly).
+import { parseVerilog as _parseVerilog } from './parser/parser.js';
+import { elaborate    as _elaborate }    from './parser/elaborate.js';
+import { toCircuit    as _toCircuit }    from './import/toCircuit.js';
+import { autoLayout   as _autoLayout }   from './import/autoLayout.js';
+
 // Determinism contract: exportCircuit output is byte-identical across runs
 // for a given circuitJSON. A timestamp is emitted ONLY when the caller opts
 // in with `timestamp: true`; without it, round-trip (export → copy → import

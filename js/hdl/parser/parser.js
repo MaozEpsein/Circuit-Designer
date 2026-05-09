@@ -104,8 +104,19 @@ class Parser {
     const startTok = this.peek();
     const modules = [];
     while (!this.is('eof')) {
-      if (this.is('kw', 'module')) modules.push(this.parseModule());
-      else throw new ParseError(`expected 'module'`, this.peek());
+      // Drain top-level (* attribute *) blocks — they belong to the
+      // next module and get attached via parseModule's _drainAttrs.
+      this._drainAttrs();
+      if (this.is('eof')) break;
+      if (this.is('kw', 'module')) {
+        const m = this.parseModule();
+        // Attach any pending attrs to the module itself.
+        if (this._pendingAttrs.length) {
+          attachAttrs(m, this._pendingAttrs);
+          this._pendingAttrs = [];
+        }
+        modules.push(m);
+      } else throw new ParseError(`expected 'module'`, this.peek());
     }
     return mkSource(modules, this.srOf(startTok));
   }
@@ -137,8 +148,11 @@ class Parser {
         this._recoverToStatementBoundary();
       }
     }
-    this.eat('kw', 'endmodule');
-    return mkModule(name, ports, items, this.srOf(head));
+    const endTok = this.eat('kw', 'endmodule');
+    // Span the whole module from `module` head to the end of `endmodule`
+    // so Phase-12 Fidelity Mode can slice the verbatim source.
+    const sr = { ...this.srOf(head), end: endTok.end };
+    return mkModule(name, ports, items, sr);
   }
   _recoverToStatementBoundary() {
     while (!this.is('eof')) {
@@ -302,6 +316,13 @@ class Parser {
     return mkInitial(body, this.srOf(head));
   }
   parseSensitivity() {
+    // IEEE 1364-2005 §9.7.4 allows two forms of the "implicit
+    // sensitivity list": `@(*)` and the bare `@*` shorthand. We accept
+    // both; the bare form skips the open-paren entirely.
+    if (this.is('op', '*') && !this.is('op', '(')) {
+      this.consume();
+      return { star: true };
+    }
     this.eat('op', '(');
     if (this.match('op', '*')) {
       this.eat('op', ')');
@@ -331,12 +352,52 @@ class Parser {
         case 'if':      return this.parseIf();
         case 'case': case 'casez': case 'casex':
                         return this.parseCase();
+        case 'for':     return this.parseFor();
+        case 'while': case 'repeat': case 'forever':
+                        return this.parseLoop();
       }
     }
     // System task / function call as a statement, e.g. $display("…", x);
     if (t.kind === 'sysid') return this.parseSystemCall(true);
     // Assignment statement.
     return this.parseAssignStatement();
+  }
+  // for (init; cond; step) <stmt>
+  // The IR has no looping construct; for-loops in the input are
+  // typically `initial begin for (i=0; i<N; i=i+1) mem[i] = 0; end`
+  // patterns that would unroll at elaboration. Phase 8/9 doesn't
+  // unroll — we surface the loop as a verbatim AST node so re-export
+  // keeps it.
+  parseFor() {
+    const head = this.eat('kw', 'for');
+    this.eat('op', '(');
+    // init: ID = expr ;
+    const init = this.parseAssignStatement();
+    // cond: expr ;
+    const cond = this.parseExpr();
+    this.eat('op', ';');
+    // step: ID = expr (no trailing ; because parseAssignStatement
+    // already consumes one — but here we have no `;`, just `)`).
+    const stepLhs = this.parseLvalue();
+    if (!this.match('op', '=')) this.eat('op', '=');
+    const stepRhs = this.parseExpr();
+    this.eat('op', ')');
+    const body = this.parseStatement();
+    return { kind: 'For', srcRange: this.srOf(head), init, cond,
+             step: { kind: AST_KIND.BlockingAssign, lhs: stepLhs, rhs: stepRhs }, body };
+  }
+  // while/repeat/forever — accept the syntax, surface as a placeholder
+  // statement node so the parser doesn't get stuck. The elaborator
+  // doesn't lower these (they're rarely synthesisable as-is).
+  parseLoop() {
+    const head = this.consume();
+    if (head.text !== 'forever') {
+      this.eat('op', '(');
+      this.parseExpr();
+      this.eat('op', ')');
+    }
+    const body = this.parseStatement();
+    return { kind: 'Loop', srcRange: this.srOf(head), loopKind: head.text, body };
   }
   // Parse `$name(arg, …)`. When `asStmt` is true, also consume the
   // trailing semicolon and return a SystemCall AST node.
