@@ -495,39 +495,90 @@ export class DFTPanel {
       return !tiW;     // head with no TI driver at all
     };
 
-    const fmtEnd = (e, fallbackText) => e
-      ? `<code class="dft-chain-end">${e.label} <span class="dft-chain-end-type">[${e.type}]</span></code>`
-      : `<span class="dft-chain-end-empty">${fallbackText}</span>`;
+    // Pad renderer — rounded "scan-in / scan-out" port at either end
+    // of the flow. Empty pads (unwired) keep the shape but get the
+    // dashed-red `.empty` style so the chain reads as broken.
+    const padHtml = (e, kind, missingMsg) => {
+      if (!e) return `
+        <div class="dft-chain-pad empty">
+          <small>${kind}</small>
+          <strong>(unwired)</strong>
+          <small title="${missingMsg}">⚠</small>
+        </div>`;
+      return `
+        <div class="dft-chain-pad">
+          <small>${kind}</small>
+          <strong>${e.label}</strong>
+          <small>${e.type}</small>
+        </div>`;
+    };
+
+    // Health classifier — drives the status pill colour and label.
+    // healthy : both ends wired AND TE shared  → green pill
+    // warn    : TE shared but missing one end, or per-cell TE       → amber pill
+    // bad     : both ends unwired (incl. orphan)                    → red pill
+    const classifyHealth = (ends, orphan) => {
+      const inOk  = !!ends.scanIn;
+      const outOk = !!ends.scanOut;
+      const teOk  = ends.teShared && !!ends.teSource;
+      if (orphan) return { cls: 'bad',  label: 'orphan' };
+      if (inOk && outOk && teOk) return { cls: 'ok', label: 'healthy' };
+      if (!inOk && !outOk)       return { cls: 'bad',  label: 'broken' };
+      return { cls: 'warn', label: 'warn' };
+    };
 
     const rowsHtml = chains.map((chain, idx) => {
       const ends = describeChainEndpoints(chain, allNodes, wires);
-      const cells = chain.map(ff => `<code>${ff.label || ff.id}</code>`).join(' → ');
       const orphan = isOrphan(chain);
-      const teLine = ends.teShared
-        ? `TE shared ← ${fmtEnd(ends.teSource, '(unwired)')}`
-        : `TE per-cell (${chain.length} TE pins, not unified)`;
-      const orphanTag = orphan
-        ? `<span class="dft-chain-orphan">orphan</span>` : '';
+      const health = classifyHealth(ends, orphan);
+
+      // Build the inline flow: pad → cell → arrow → cell → ... → pad.
+      // Arrows live as separate inline elements so they can pick up
+      // the chain's amber accent and align baseline with the boxes.
+      const cellChunks = [];
+      for (let c = 0; c < chain.length; c++) {
+        if (c > 0) cellChunks.push(`<span class="dft-chain-arrow">→</span>`);
+        cellChunks.push(`<div class="dft-chain-cell"><strong>${chain[c].label || chain[c].id}</strong></div>`);
+      }
+
+      // TE bar — three flavours of dash pattern carry the meaning:
+      //   solid  : one source feeds every cell's TE
+      //   split  : each cell has its own TE (unusual; flag it)
+      //   absent : at least one cell's TE is unwired entirely
+      let teBarCls, teText, teTextCls = '';
+      if (ends.teShared && ends.teSource) {
+        teBarCls = '';
+        teText = `shared ← ${ends.teSource.label} [${ends.teSource.type}]`;
+      } else {
+        // Distinguish "all wired but to different sources" from "some unwired".
+        const teDrivers = chain.map(ff =>
+          wires.find(w => w.targetId === ff.id && w.targetInputIndex === 2));
+        const anyMissing = teDrivers.some(w => !w);
+        teBarCls = anyMissing ? 'absent' : 'split';
+        teText = anyMissing
+          ? `${teDrivers.filter(w => !w).length} of ${chain.length} cells have no TE driver`
+          : `per-cell TE (${chain.length} distinct sources)`;
+        teTextCls = 'warn';
+      }
+
       return `
         <div class="dft-chain-block">
-          <div class="dft-chain-title">
-            chain_${idx} <span class="dft-chain-len">· length ${chain.length}</span> ${orphanTag}
+          <div class="dft-chain-header">
+            <span class="dft-chain-title">chain_${idx}</span>
+            <span class="dft-chain-len">${chain.length} cell${chain.length === 1 ? '' : 's'}</span>
+            <span class="dft-chain-status ${health.cls}">${health.label}</span>
           </div>
-          <div class="dft-chain-row">
-            <span class="dft-chain-pin">scan-in</span>
-            ${fmtEnd(ends.scanIn, '(unwired — chain has no test-vector source)')}
+          <div class="dft-chain-flow">
+            ${padHtml(ends.scanIn,  'scan-in',  'no test-vector source')}
+            <span class="dft-chain-arrow">→</span>
+            ${cellChunks.join('')}
+            <span class="dft-chain-arrow">→</span>
+            ${padHtml(ends.scanOut, 'scan-out', 'response is unobservable')}
           </div>
-          <div class="dft-chain-row">
-            <span class="dft-chain-pin">cells</span>
-            ${cells}
-          </div>
-          <div class="dft-chain-row">
-            <span class="dft-chain-pin">scan-out</span>
-            ${fmtEnd(ends.scanOut, '(unwired — chain response is unobservable)')}
-          </div>
-          <div class="dft-chain-row">
-            <span class="dft-chain-pin">test-en</span>
-            ${teLine}
+          <div class="dft-chain-te">
+            <span class="dft-chain-te-label">TE</span>
+            <span class="dft-chain-te-bar ${teBarCls}"></span>
+            <span class="dft-chain-te-source ${teTextCls}">${teText}</span>
           </div>
         </div>`;
     }).join('');

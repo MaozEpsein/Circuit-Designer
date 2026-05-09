@@ -3248,44 +3248,104 @@
 .dft-perf-row .k { color: #876;     white-space: nowrap; }
 .dft-perf-row .v { color: #f0e2cf;  font-weight: bold; }
 
-/* Per-chain block: small framed group showing scan-in / cells /
-   scan-out / TE pin in a 4-row mini-table. Compact so multiple
-   chains stay readable in a single panel scroll. */
+/* Per-chain block: a horizontal flow diagram that reads like a real
+   scan-chain whiteboard sketch — rounded pads at the ends, square
+   cells in the middle, arrows between, and a TE bar running underneath
+   the whole thing. Status chip in the header turns colour based on
+   chain health (healthy / orphan / unwired). */
 .dft-chain-block {
-  margin: 6px 1.2em 8px;
-  padding: 6px 10px;
-  background: rgba(255,160,40,0.04);
+  margin: 8px 1.2em 12px;
+  padding: 10px 14px 12px;
+  background: linear-gradient(180deg, rgba(255,160,40,0.05), rgba(255,160,40,0.02));
+  border: 1px solid #3a2818;
   border-left: 2px solid #aa6a2a;
-  border-radius: 0 3px 3px 0;
+  border-radius: 4px;
   font: 11px/1.4 'JetBrains Mono', monospace;
+}
+
+.dft-chain-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2a1a08;
 }
 .dft-chain-title {
   color: #ffb878; font-weight: 600; letter-spacing: 0.5px;
-  margin-bottom: 4px;
 }
-.dft-chain-len { color: #876; font-weight: normal; }
-.dft-chain-orphan {
-  display: inline-block; margin-left: 8px;
-  padding: 0 6px; border-radius: 2px;
-  background: #2a1a08; color: #ff8060;
+.dft-chain-len { color: #876; font-size: 10px; }
+.dft-chain-status {
+  margin-left: auto;
+  padding: 2px 8px; border-radius: 10px;
   font-size: 9px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.7px;
 }
-.dft-chain-row {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  column-gap: 8px;
-  padding: 1px 0;
-  color: #f0e2cf;
+.dft-chain-status.ok    { background: #0e2a18; color: #80f0a0; border: 1px solid #2a6a4a; }
+.dft-chain-status.warn  { background: #2a1a08; color: #ffb878; border: 1px solid #6a4a2a; }
+.dft-chain-status.bad   { background: #2a0a14; color: #ff8060; border: 1px solid #6a2030; }
+
+/* Horizontal flow row: pad → cells → pad. Wraps cleanly when the
+   chain is long; the gap keeps everything breathable. */
+.dft-chain-flow {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px;
 }
-.dft-chain-pin {
-  color: #876; text-align: right;
-  text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;
-  align-self: center;
+.dft-chain-pad, .dft-chain-cell {
+  display: inline-flex; flex-direction: column; align-items: center;
+  padding: 4px 10px;
+  background: #1a1208;
+  border: 1px solid #4a3018;
+  font-size: 10px;
+  min-width: 56px;
 }
-.dft-chain-end { color: #ffd0a0; }
-.dft-chain-end-type { color: #876; font-size: 9px; }
-.dft-chain-end-empty { color: #ff8060; font-style: italic; }
+.dft-chain-pad {
+  border-radius: 14px;
+  border-color: #6a4a2a;
+  background: linear-gradient(180deg, #1f1408, #15100a);
+}
+.dft-chain-pad strong { color: #ffd0a0; font-weight: 600; }
+.dft-chain-pad small  { color: #876; font-size: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+.dft-chain-cell {
+  border-radius: 3px;
+  border-color: #5a4028;
+}
+.dft-chain-cell strong { color: #f0e2cf; font-weight: 600; }
+/* Empty pad — the chain has no scan-in or no scan-out wired. We still
+   keep the pad shape so the diagram's symmetry survives, but mark it
+   in red so it visibly fails the eye test. */
+.dft-chain-pad.empty {
+  background: rgba(255,80,80,0.08);
+  border-color: #8a2030;
+  border-style: dashed;
+}
+.dft-chain-pad.empty strong { color: #ff8060; font-style: italic; font-size: 9px; }
+.dft-chain-arrow {
+  color: #aa6a2a; font-size: 14px; line-height: 1;
+  user-select: none;
+}
+
+/* TE bar — a horizontal line under the flow that visually carries
+   the test-enable across every cell. The label sits at the left,
+   the source description at the right, the line itself stretches. */
+.dft-chain-te {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #2a1a08;
+  font-size: 10px;
+}
+.dft-chain-te-label {
+  color: #876; text-transform: uppercase; letter-spacing: 0.7px;
+  min-width: 28px;
+}
+.dft-chain-te-bar {
+  flex: 1 1 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #aa6a2a, transparent);
+}
+.dft-chain-te-bar.split  { background: repeating-linear-gradient(90deg, #6a4a2a 0 6px, transparent 6px 12px); }
+.dft-chain-te-bar.absent { background: repeating-linear-gradient(90deg, #8a2030 0 4px, transparent 4px 10px); }
+.dft-chain-te-source { color: #ffd0a0; }
+.dft-chain-te-source.warn { color: #ff8060; font-style: italic; }
 
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {
