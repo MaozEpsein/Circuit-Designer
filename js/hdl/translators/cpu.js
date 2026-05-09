@@ -1033,9 +1033,16 @@ registerTranslator(COMPONENT_TYPES.STACK, (node, ctx) => {
   const notFull  = makeBinaryOp('<', spRef, litDepth, 1, sr);
   const notEmpty = makeBinaryOp('>', spRef, lit0p, 1, sr);
 
+  // Q-after-push: the canvas engine sets ms.q to the freshly-pushed
+  // value (Q acts as a peek of the current top). We mirror that in
+  // Verilog so the L2 diff lines up — without it, Q would only
+  // change on pop, which is a defensible standalone semantics but
+  // diverges from the engine's behaviour the user already sees on
+  // the canvas.
   const pushBranch = [
     { kind: 'NonBlockingAssign',
       lhs: makeIndex(memName, spRef, W, sr), rhs: dataRef },
+    { kind: 'NonBlockingAssign', lhs: qIntRef, rhs: dataRef },
     { kind: 'NonBlockingAssign', lhs: spRef,
       rhs: makeBinaryOp('+', spRef, lit1p, ptrW, sr) },
   ];

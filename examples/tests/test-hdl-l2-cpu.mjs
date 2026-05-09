@@ -117,15 +117,11 @@ check('emits constant value', runL2({
   ],
 }, { topName: 'imm_test' }));
 
-// ── REG_FILE — semantic divergence (TODO in own follow-up) ───
-// The engine evaluates REG_FILE's read in a separate post-pass that
-// updates ms.q at write commit time, so the read at cycle N reflects
-// data committed at cycle N. The translator's async read mirrors the
-// canonical Verilog model (read returns whatever's in the array). On
-// a tight write-then-read loop the two diverge by one cycle. Needs a
-// translator/engine alignment commit; doesn't reflect a translator
-// bug per se. Skipped here to keep the L2 suite green.
-if (false) {
+// ── REG_FILE (write, then read back) ─────────────────────────
+// regCount must be set explicitly: the engine defaults to 8 even when
+// addrBits=2, while the translator emits `regs[0:(1<<addrBits)-1]`.
+// Stimulus also masks rdAddr to 2 bits — the Verilog port naturally
+// truncates wider values, the engine doesn't.
 console.log('REG_FILE (4 regs × 4-bit, write + read)');
 check('write addr i with data i across cycles', runL2Sequential({
   nodes: [
@@ -134,7 +130,7 @@ check('write addr i with data i across cycles', runL2Sequential({
     { id: 'wrData', type: 'INPUT', label: 'wrData', bitWidth: 4 },
     { id: 'we',     type: 'INPUT', label: 'we' },
     { id: 'clk',    type: 'CLOCK', label: 'clk' },
-    { id: 'rf',     type: 'REG_FILE', addrBits: 2, dataBits: 4, label: 'rf' },
+    { id: 'rf',     type: 'REG_FILE', addrBits: 2, dataBits: 4, regCount: 4, label: 'rf' },
     { id: 'q',      type: 'OUTPUT', label: 'q', bitWidth: 4 },
   ],
   wires: [
@@ -149,16 +145,16 @@ check('write addr i with data i across cycles', runL2Sequential({
 }, {
   topName: 'rf_test',
   // Cycles 0..3: write reg[i] = i*3+1. Cycles 4..7: read reg[i].
+  // Mask both addrs to 2 bits explicitly to match the Verilog port
+  // truncation that the engine doesn't perform.
   stimulus: (i) => i < 4
-    ? { wrAddr: i, wrData: (i * 3 + 1) & 0xF, we: 1, rdAddr: 0 }
-    : { we: 0, wrAddr: 0, wrData: 0, rdAddr: i - 4 },
+    ? { wrAddr: i & 3, wrData: (i * 3 + 1) & 0xF, we: 1, rdAddr: 0 }
+    : { we: 0, wrAddr: 0, wrData: 0, rdAddr: (i - 4) & 3 },
   cycles: 12,
-  stabilityCycles: 4,
+  stabilityCycles: 5,
 }));
-} // end if(false) for REG_FILE
 
-// ── RAM — same divergence pattern as REG_FILE (TODO follow-up) ─
-if (false) {
+// ── RAM (sync write, async read) ─────────────────────────────
 console.log('RAM (16×8, write-then-read)');
 check('write addr 0..3, then read back', runL2Sequential({
   nodes: [
@@ -181,19 +177,24 @@ check('write addr 0..3, then read back', runL2Sequential({
   ],
 }, {
   topName: 'ram_test',
+  // addr masks to 4 bits via Verilog port; mirror that here for
+  // engine consistency. Read phase keeps RE=1 throughout.
+  // Cycles capped at 8 to read only addresses we actually wrote —
+  // beyond that, native sees 0 (zeroed array) while iverilog sees
+  // 'x' (uninitialised reg array). The translator could emit an
+  // `initial` zeroing block to fix that, but for now the L2 test
+  // stays in the deterministic region.
   stimulus: (i) => i < 4
-    ? { addr: i, data: 0x10 + i, we: 1, re: 0 }
-    : { addr: i - 4, data: 0, we: 0, re: 1 },
-  cycles: 12,
+    ? { addr: i & 0xF, data: (0x10 + i) & 0xFF, we: 1, re: 0 }
+    : { addr: (i - 4) & 0xF, data: 0, we: 0, re: 1 },
+  cycles: 8,
   stabilityCycles: 5,
 }));
-} // end if(false) for RAM
 
-// ── STACK — Q peek-vs-pop semantics divergence (TODO follow-up) ─
-// Engine sets ms.q to the current top after every push (peek). The
-// translator only assigns Q on pop. Both are defensible; need to
-// pick one and align both sides. Skipped pending that decision.
-if (false) {
+// ── STACK ────────────────────────────────────────────────────
+// The translator was patched to set Q on push too (mirrors the engine's
+// peek-of-top semantics). Without that change, the diff caught Q
+// staying at its old value across each push.
 console.log('STACK (4 deep × 8-bit)');
 check('push 3 values, pop them back', runL2Sequential({
   nodes: [
@@ -232,7 +233,6 @@ check('push 3 values, pop them back', runL2Sequential({
   cycles: 12,
   stabilityCycles: 2,
 }));
-} // end if(false) for STACK
 
 console.log(`\n${failed === 0 ? 'ALL PASS' : failed + ' FAILED'}${skipped ? ` (${skipped} skipped)` : ''}`);
 process.exit(failed === 0 ? 0 : 1);
