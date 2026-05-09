@@ -718,7 +718,12 @@ export class DFTPanel {
   // Idempotent — safe to call after every _render().
   _applyCollapsibleSections() {
     if (!this._body) return;
-    const headers = this._body.querySelectorAll('[class$="-header"]');
+    // Match the canonical section header class only — `[class$="-header"]`
+    // would also catch nested per-block headers (e.g. .dft-chain-header
+    // from the scan-chain flow diagrams) and silently turn each chain
+    // into a collapsible region. Sticking to .dft-section-header keeps
+    // the toggle scoped to the four top-level sections.
+    const headers = this._body.querySelectorAll('.dft-section-header');
     headers.forEach(h => {
       // Skip if already wrapped.
       if (h.parentElement?.classList.contains('dft-section')) return;
