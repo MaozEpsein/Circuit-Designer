@@ -216,7 +216,17 @@ function _evalCU(node, op, z, c) {
 export function evaluate(nodes, wires, ffStates, stepCount) {
   const _clkNode = nodes.find(n => n.type === 'CLOCK');
   if (_DEBUG && _clkNode && _clkNode.value === 1) console.log(`[EVAL] CLOCK=1 step=${stepCount}`);
-  ffStates = ffStates || new Map();
+  // Guard against ffStates arriving as a plain object — happens when a
+  // sub-circuit's `_subFfStates` was JSON-serialised through a project
+  // save/load (Maps survive in-memory but stringify to `{}`). Without
+  // the coercion, the very first .get() / .has() throws.
+  if (!ffStates || typeof ffStates.get !== 'function') {
+    const incoming = ffStates;
+    ffStates = new Map();
+    if (incoming && typeof incoming === 'object') {
+      for (const k of Object.keys(incoming)) ffStates.set(k, incoming[k]);
+    }
+  }
 
   const nodeMap    = new Map(nodes.map(n => [n.id, n]));
   const nodeValues = new Map();
@@ -864,7 +874,16 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       const sc = node.subCircuit;
       if (sc && sc.nodes && sc.wires) {
         const subInputDefs = node.subInputs || [];
-        if (!node._subFfStates) node._subFfStates = new Map();
+        // Coerce serialised state back into a Map. After a save/load
+        // cycle, `_subFfStates` shows up as a plain object and the
+        // recursive evaluate() would otherwise throw on .get().
+        if (!node._subFfStates || typeof node._subFfStates.get !== 'function') {
+          const incoming = node._subFfStates;
+          node._subFfStates = new Map();
+          if (incoming && typeof incoming === 'object') {
+            for (const k of Object.keys(incoming)) node._subFfStates.set(k, incoming[k]);
+          }
+        }
 
         // Inject external values into internal INPUT nodes
         const setInputs = (overrides) => {
