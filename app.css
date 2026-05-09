@@ -3395,6 +3395,22 @@
 .dft-lfsr-sink-scan small { color: #6ac08a; }
 .dft-lfsr-sink small { color: #876; }
 
+/* Inline-edit inputs in the LFSR pattern-generator block. Subtle
+   bottom-border styling so the cells still read as data, not as a
+   chrome-heavy form. Focus brings out the amber accent. */
+.dft-lfsr-input {
+  background: transparent; color: #ffd0a0;
+  border: none; border-bottom: 1px dashed #4a3018;
+  padding: 1px 4px; margin: 0;
+  font: 11px 'JetBrains Mono', monospace;
+  width: 60px;
+  outline: none;
+}
+.dft-lfsr-input.dft-lfsr-input-wide { width: 110px; }
+.dft-lfsr-input:hover  { border-bottom-color: #6a4a2a; background: rgba(255,160,40,0.04); }
+.dft-lfsr-input:focus  { border-bottom-color: #aa6a2a; background: rgba(255,160,40,0.08); color: #ffe6c4; }
+.dft-lfsr-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
 /* Empty-state hint shown when no DFT components exist in the scene. */
 .dft-empty {
   padding: 1.5em 1.2em;

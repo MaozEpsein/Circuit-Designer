@@ -234,6 +234,25 @@ export class DFTPanel {
           if (this._visible) this._render();
         }
       });
+      // Inline-edit handler for the LFSR pattern-generator fields.
+      // Inputs carry data-lfsr-id (which node to mutate) and
+      // data-field (which property: seed / taps / bitWidth). We
+      // commit on `change` (blur or Enter) — `input` would re-render
+      // mid-typing and steal focus.
+      this._body.addEventListener('change', (e) => {
+        const inp = e.target.closest('input[data-lfsr-id]');
+        if (!inp) return;
+        this._commitLfsrEdit(inp);
+      });
+      // Enter on an LFSR field commits + blurs (so the user gets
+      // visual confirmation the value was accepted).
+      this._body.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const inp = e.target.closest('input[data-lfsr-id]');
+        if (!inp) return;
+        e.preventDefault();
+        inp.blur();
+      });
     }
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._el?.classList.contains('dft-fullscreen')) {
@@ -678,6 +697,58 @@ export class DFTPanel {
     `;
   }
 
+  // Commit a single edited LFSR field. Validates the value, mutates
+  // the scene node in place, drops cached engine state for that
+  // node so the new seed/taps take effect on the next tick, and
+  // re-renders the panel. On invalid input the field reverts and
+  // no mutation happens.
+  _commitLfsrEdit(input) {
+    const id    = input.dataset.lfsrId;
+    const field = input.dataset.field;
+    const node  = this._scene?.nodes?.find(n => n.id === id);
+    if (!node || node.type !== 'LFSR') return;
+
+    const raw = (input.value || '').trim();
+    let next;
+    if (field === 'bitWidth') {
+      const v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 1 || v > 24) { input.value = node.bitWidth; return; }
+      next = v;
+    } else if (field === 'seed') {
+      // Accept decimal, 0x… hex, or 0b… binary.
+      let v;
+      if (/^0[xX][0-9a-fA-F]+$/.test(raw))      v = parseInt(raw.slice(2), 16);
+      else if (/^0[bB][01]+$/.test(raw))        v = parseInt(raw.slice(2), 2);
+      else if (/^[0-9]+$/.test(raw))            v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 0) {
+        input.value = '0x' + ((node.seed ?? 0) >>> 0).toString(16); return;
+      }
+      const w = node.bitWidth | 0;
+      next = v & ((1 << w) - 1);     // truncate silently to the LFSR's width
+    } else if (field === 'taps') {
+      // Comma-separated integers, dedup + sort.
+      const parts = raw.split(/[,\s]+/).filter(Boolean).map(s => parseInt(s, 10));
+      if (parts.some(n => !Number.isFinite(n) || n < 0)) {
+        input.value = (node.taps || []).join(','); return;
+      }
+      const w = node.bitWidth | 0;
+      const valid = [...new Set(parts.filter(n => n < w))].sort((a, b) => a - b);
+      if (valid.length === 0) { input.value = (node.taps || []).join(','); return; }
+      next = valid;
+    } else {
+      return;
+    }
+
+    node[field] = next;
+    // Engine caches LFSR run state in the FF state map keyed by node id.
+    // Drop it so the next tick re-seeds from the new value.
+    const ffStates = window.state?.ffStates;
+    if (ffStates?.delete) ffStates.delete(node.id);
+    // Notify the rest of the app (canvas redraws, telemetry, etc.).
+    bus.emit('node:edited', { node, field });
+    if (this._visible) this._render();
+  }
+
   // ── PATTERN GENERATORS (LFSRs) ─────────────────────────────
   // Layer-4 surface in the DFT panel. Lists every LFSR in the scene,
   // computes its true period, names its polynomial, and flags whether
@@ -726,10 +797,29 @@ export class DFTPanel {
             <span class="dft-chain-status ${cls}">${label}</span>
           </div>
           <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">width</span>
+            <span class="dft-lfsr-v">
+              <input class="dft-lfsr-input" type="number" min="1" max="24" step="1"
+                     data-lfsr-id="${lfsr.id}" data-field="bitWidth"
+                     value="${width}">
+              <small>bits (1–24)</small>
+            </span>
             <span class="dft-lfsr-k">seed</span>
-            <span class="dft-lfsr-v"><code>${seed.toString(2).padStart(width, '0')}</code> <small>(0x${seed.toString(16)})</small></span>
-            <span class="dft-lfsr-k">shape</span>
-            <span class="dft-lfsr-v"><code>${lfsrPolynomial(width, taps)}</code> <small>(Fibonacci, shift-left)</small></span>
+            <span class="dft-lfsr-v">
+              <input class="dft-lfsr-input dft-lfsr-input-wide" type="text"
+                     data-lfsr-id="${lfsr.id}" data-field="seed"
+                     value="0x${seed.toString(16)}"
+                     title="Decimal (15) or hex (0xF) or binary (0b1111)">
+              <small><code>${seed.toString(2).padStart(width, '0')}</code></small>
+            </span>
+            <span class="dft-lfsr-k">taps</span>
+            <span class="dft-lfsr-v">
+              <input class="dft-lfsr-input dft-lfsr-input-wide" type="text"
+                     data-lfsr-id="${lfsr.id}" data-field="taps"
+                     value="${taps.join(',')}"
+                     title="Comma-separated bit positions (0=LSB)">
+              <small>${lfsrPolynomial(width, taps)}</small>
+            </span>
             <span class="dft-lfsr-k">period</span>
             <span class="dft-lfsr-v">
               <code>${period.period}</code>
