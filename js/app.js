@@ -4621,8 +4621,8 @@ const EXAMPLES = [
   },
   {
     id: 'dft-lfsr-prng',
-    title: '4. DFT — LFSR (two polynomials, same seed)',
-    desc: 'Two 4-bit Fibonacci LFSRs in parallel, sharing CLOCK + seed (0001) but with different feedback polynomials. LFSR_A uses x⁴+x+1 (taps [3,0]) — a primitive polynomial that cycles through all 15 non-zero values before repeating. LFSR_B uses x⁴+x³+1 (taps [3,2]) — non-primitive in Fibonacci/shift-left form, so it falls into a short orbit. Step the clock and watch both registers diverge from the same starting point. Lesson: the polynomial choice is the difference between meaningful BIST coverage (max-length) and a useless short-cycling test.',
+    title: '4. DFT — LFSR zoo (4 widths, 4 polynomial qualities)',
+    desc: 'Four LFSRs that cover every status the DFT panel\'s PATTERN GENERATORS section knows how to render. LFSR_3 (3-bit, taps [2,0]) — primitive but Q is wired to nothing → amber "unused". LFSR_4 (4-bit, taps [3,0]) — primitive AND drives a SCAN_FF\'s TI → green "BIST source". LFSR_6 (6-bit, taps [5,3]) — non-primitive polynomial, period 14 of 63 → amber "sub-max". LFSR_8 (8-bit, taps [7,5,4,3], CRC-8 lineage) — primitive, period 255, drives a scan-in → green "BIST source". Open the DFT panel, scroll to PATTERN GENERATORS, and click the ✎ next to any field to edit. Try changing LFSR_6\'s taps to [5,4] and watch the period jump from 14 to 63 — that\'s why primitive-polynomial tables exist.',
     tags: ['dft', 'lfsr', 'prng', 'bist', 'polynomial'],
     file: 'examples/circuits/dft-lfsr-prng.json',
   },

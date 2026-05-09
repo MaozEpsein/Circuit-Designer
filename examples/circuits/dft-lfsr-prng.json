@@ -1,21 +1,46 @@
 {
   "_dft": {
-    "_doc": "Two 4-bit Fibonacci LFSRs running in parallel from a shared CLOCK and the same seed (0001), but with different feedback polynomials:\n  • LFSR_A: x⁴ + x + 1, taps [3, 0]  — primitive, max-length period 15.\n  • LFSR_B: x⁴ + x³ + 1, taps [3, 2] — non-primitive in this Fibonacci/shift-left form, locks into a short orbit.\n\nPress Play (or step the clock). Watch both registers from the same starting state diverge into completely different sequences. The orange highlights on each register's bits mark its tap positions. Lesson: the polynomial determines whether you get a max-length sequence (LFSR_A) or a degenerate short cycle (LFSR_B). In a real BIST, choosing a primitive polynomial is the difference between meaningful coverage and a useless test."
+    "_doc": "Four LFSRs at four widths and four polynomial qualities, lighting up every status the DFT panel's PATTERN GENERATORS section knows how to render:\n\n  • LFSR_3   — 3-bit, taps [2,0] (x³+x+1).  Primitive, period = 7 = 2³-1, but Q is wired to nothing → amber 'unused'.\n  • LFSR_4   — 4-bit, taps [3,0] (x⁴+x+1).  Primitive, period = 15. Q drives SFF_4.TI → green 'BIST source'. The canonical small-design BIST pattern source.\n  • LFSR_6   — 6-bit, taps [5,3].          Non-primitive (the polynomial factors), period = 14 of a possible 63 → amber 'sub-max'. Same Fibonacci shape as the others but the orbit is short — the kind of mistake a fresh designer makes when picking taps from intuition instead of a primitive-polynomial table.\n  • LFSR_8   — 8-bit, taps [7,5,4,3].      Primitive (CRC-8 lineage, x⁸+x⁶+x⁵+x⁴+1), period = 255. Q drives SFF_8.TI → green 'BIST source'. Wider state, much richer test pattern.\n\nOpen the DFT panel (T) and scroll to PATTERN GENERATORS. Each LFSR is its own collapsible card. Click the ✎ next to any field (width, seed, shape) to edit. Try changing LFSR_6's taps to [5,4] and watch the period jump from 14 to 63 — that's why primitive polynomial tables exist."
   },
   "nodes": [
-    { "type": "CLOCK",  "x": -300,    "y": 0, "value": 0, "id": "clk" },
+    { "type": "CLOCK", "x": -360, "y": -200, "value": 0, "label": "clk", "id": "clk" },
+    { "type": "INPUT", "x": -360, "y": -160, "fixedValue": 1, "label": "TE", "id": "te" },
+    { "type": "INPUT", "x": -360, "y": -120, "fixedValue": 0, "label": "scan_in_4", "id": "scan_in_4" },
+    { "type": "INPUT", "x": -360, "y":  -80, "fixedValue": 0, "label": "scan_in_8", "id": "scan_in_8" },
 
-    { "type": "LFSR",   "x":   20, "y": -100, "bitWidth": 4, "taps": [3, 0], "seed": 1, "label": "LFSR_A  x⁴+x+1",   "id": "lfsr_a" },
-    { "type": "OUTPUT", "x":  240, "y": -100, "targetValue": 0, "sandbox": true, "label": "OUT_A", "id": "out_a" },
+    { "type": "LFSR",   "x":   0, "y": -240, "bitWidth": 3, "taps": [2, 0],       "seed": 1, "label": "LFSR_3 (period 7)",        "id": "lfsr_3" },
+    { "type": "OUTPUT", "x": 200, "y": -240, "targetValue": 0, "sandbox": true,                "label": "OUT_3", "id": "out_3" },
 
-    { "type": "LFSR",   "x":   20,  "y": 100, "bitWidth": 4, "taps": [3, 2], "seed": 1, "label": "LFSR_B  x⁴+x³+1",  "id": "lfsr_b" },
-    { "type": "OUTPUT", "x":  240,  "y": 100, "targetValue": 0, "sandbox": true, "label": "OUT_B", "id": "out_b" }
+    { "type": "LFSR",   "x":   0, "y": -160, "bitWidth": 4, "taps": [3, 0],       "seed": 1, "label": "LFSR_4 (BIST source)",    "id": "lfsr_4" },
+    { "type": "SCAN_FF","x": 200, "y": -160, "label": "SFF_4", "id": "sff_4" },
+    { "type": "OUTPUT", "x": 360, "y": -160, "targetValue": 0, "sandbox": true,                "label": "Q_4", "id": "q_4" },
+
+    { "type": "LFSR",   "x":   0, "y":  -80, "bitWidth": 6, "taps": [5, 3],       "seed": 1, "label": "LFSR_6 (sub-max)",        "id": "lfsr_6" },
+    { "type": "OUTPUT", "x": 200, "y":  -80, "targetValue": 0, "sandbox": true,                "label": "OUT_6", "id": "out_6" },
+
+    { "type": "LFSR",   "x":   0, "y":    0, "bitWidth": 8, "taps": [7, 5, 4, 3], "seed": 1, "label": "LFSR_8 (CRC-8 poly)",     "id": "lfsr_8" },
+    { "type": "SCAN_FF","x": 200, "y":    0, "label": "SFF_8", "id": "sff_8" },
+    { "type": "OUTPUT", "x": 360, "y":    0, "targetValue": 0, "sandbox": true,                "label": "Q_8", "id": "q_8" }
   ],
   "wires": [
-    { "sourceId": "clk",    "targetId": "lfsr_a", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_clk_a", "isClockWire": true },
-    { "sourceId": "lfsr_a", "targetId": "out_a",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_qa" },
+    { "id": "w_lfsr3_clk", "sourceId": "clk", "targetId": "lfsr_3", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "w_lfsr3_q",   "sourceId": "lfsr_3", "sourceOutputIndex": 0, "targetId": "out_3", "targetInputIndex": 0 },
 
-    { "sourceId": "clk",    "targetId": "lfsr_b", "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_clk_b", "isClockWire": true },
-    { "sourceId": "lfsr_b", "targetId": "out_b",  "targetInputIndex": 0, "sourceOutputIndex": 0, "id": "w_qb" }
+    { "id": "w_lfsr4_clk", "sourceId": "clk", "targetId": "lfsr_4", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "w_lfsr4_ti",  "sourceId": "lfsr_4", "sourceOutputIndex": 0, "targetId": "sff_4", "targetInputIndex": 1 },
+    { "id": "w_sff4_d",    "sourceId": "scan_in_4", "targetId": "sff_4", "targetInputIndex": 0 },
+    { "id": "w_sff4_te",   "sourceId": "te", "targetId": "sff_4", "targetInputIndex": 2 },
+    { "id": "w_sff4_clk",  "sourceId": "clk", "targetId": "sff_4", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "w_sff4_q",    "sourceId": "sff_4", "sourceOutputIndex": 0, "targetId": "q_4", "targetInputIndex": 0 },
+
+    { "id": "w_lfsr6_clk", "sourceId": "clk", "targetId": "lfsr_6", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "w_lfsr6_q",   "sourceId": "lfsr_6", "sourceOutputIndex": 0, "targetId": "out_6", "targetInputIndex": 0 },
+
+    { "id": "w_lfsr8_clk", "sourceId": "clk", "targetId": "lfsr_8", "targetInputIndex": 0, "isClockWire": true },
+    { "id": "w_lfsr8_ti",  "sourceId": "lfsr_8", "sourceOutputIndex": 0, "targetId": "sff_8", "targetInputIndex": 1 },
+    { "id": "w_sff8_d",    "sourceId": "scan_in_8", "targetId": "sff_8", "targetInputIndex": 0 },
+    { "id": "w_sff8_te",   "sourceId": "te", "targetId": "sff_8", "targetInputIndex": 2 },
+    { "id": "w_sff8_clk",  "sourceId": "clk", "targetId": "sff_8", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "w_sff8_q",    "sourceId": "sff_8", "sourceOutputIndex": 0, "targetId": "q_8", "targetInputIndex": 0 }
   ]
 }
