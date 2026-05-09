@@ -161,7 +161,7 @@ const PICKABLE_TYPES = new Set([
   'RAM', 'ROM', 'CACHE', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
-  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR',
+  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR', 'MISR',
 ]);
 
 const TYPE_TO_SIG_TYPE = {
@@ -170,7 +170,7 @@ const TYPE_TO_SIG_TYPE = {
   RAM: 'memory', ROM: 'memory', CACHE: 'memory', REG_FILE: 'memory', REG_FILE_DP: 'memory',
   FIFO: 'memory', STACK: 'memory', PIPE_REG: 'memory',
   ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
-  GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff', LFSR: 'memory',
+  GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff', LFSR: 'memory', MISR: 'memory',
 };
 
 // ── Output pins (mirror SimulationEngine __out indices) ──

@@ -141,6 +141,7 @@ export class CommandPalette {
       { id: 'place-jkff', label: 'Place JK Flip-Flop', category: 'Flip-Flop', action: () => bus.emit('palette:tool', 'place-jkff') },
       { id: 'place-scanff', label: 'Place SCAN Flip-Flop (DFT)', category: 'Test', action: () => bus.emit('palette:tool', 'place-scanff') },
       { id: 'place-lfsr',   label: 'Place LFSR (DFT pattern generator)', category: 'Test', action: () => bus.emit('palette:tool', 'place-lfsr') },
+      { id: 'place-misr',   label: 'Place MISR (DFT signature compactor)', category: 'Test', action: () => bus.emit('palette:tool', 'place-misr') },
     ];
 
     // Actions

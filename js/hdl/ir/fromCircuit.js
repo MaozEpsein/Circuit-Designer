@@ -17,6 +17,7 @@ function nodeBitWidth(node, outIdx = 0) {
   // different widths. Listed before the generic bitWidth fallback.
   if (node?.type === 'COUNTER' && outIdx === 1) return 1;        // TC is 1-bit
   if (node?.type === 'LFSR')                     return 1;        // serial Q is 1-bit (MSB)
+  if (node?.type === 'MISR')                     return Math.max(1, (node.bitWidth || 4) | 0);  // Q = full signature
   // CU control outputs: out0 = ALU_OP (3-bit op selector), all others
   // are single-bit control signals.
   if (node?.type === 'CU') return outIdx === 0 ? 3 : 1;

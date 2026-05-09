@@ -49,6 +49,7 @@ export const COMPONENT_TYPES = {
   // DFT components
   SCAN_FF:      'SCAN_FF',
   LFSR:         'LFSR',
+  MISR:         'MISR',
 };
 
 /**
@@ -84,7 +85,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR', 'MISR'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -118,6 +119,17 @@ export function createComponent(type, x, y) {
       // are bit positions (0-indexed from LSB) XORed to form the new
       // bit. Default: 4-bit, taps [3, 0] → x^4+x+1, period 15.
       return { ...base, bitWidth: 4, taps: [3, 0], seed: 1, label: 'LFSR' };
+    case COMPONENT_TYPES.MISR:
+      // Multiple Input Signature Register — a Fibonacci LFSR with N
+      // additional data inputs (one per bit) that XOR into the chain
+      // each clock. Used at the end of a scan chain to compress test
+      // responses into a compact "signature" that's compared against a
+      // golden value to detect faults. Pin layout:
+      //   D[0]..D[N-1] (N data inputs, 1-bit each), CLK
+      // Output: SIG (the full N-bit signature register).
+      return { ...base, bitWidth: 4, taps: [3, 0], seed: 0,
+        goldenSig: null,         // optional reference signature; null = not set
+        label: 'MISR' };
     case COMPONENT_TYPES.LATCH_SLOT:
       return { ...base, latchType: null, initialQ: 0, label: 'LATCH' };
     case COMPONENT_TYPES.CLOCK:

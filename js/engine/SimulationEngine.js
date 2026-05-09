@@ -680,6 +680,11 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           ms.full = 0;
           ms.empty = 1;
         }
+        if (node.type === 'MISR') {
+          const sz = node.bitWidth || 4;
+          ms.reg = (node.seed ?? 0) & _mask(sz);
+          ms.q   = ms.reg;
+        }
         ffStates.set(id, ms);
       }
       value = ms.q ?? 0;
@@ -1259,6 +1264,14 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         ms.reg = (node.seed ?? 1) & m;
         ms.q   = (ms.reg >> (sz - 1)) & 1;     // serial out = MSB
       }
+      if (node.type === 'MISR') {
+        // Same shape as LFSR — initial signature from `seed`. Q is the
+        // full register (not a serial bit), so we expose it directly.
+        const sz = node.bitWidth || 4;
+        const m  = _mask(sz);
+        ms.reg = (node.seed ?? 0) & m;
+        ms.q   = ms.reg;
+      }
       ffStates.set(node.id, ms);
     }
 
@@ -1387,6 +1400,37 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         for (const t of taps) xor ^= ((ms.reg >> t) & 1);
         ms.q   = (ms.reg >> (sz - 1)) & 1;     // emit MSB before shift
         ms.reg = ((ms.reg << 1) | xor) & m;
+
+      } else if (node.type === 'MISR') {
+        // Multiple Input Signature Register. Same Fibonacci shift as
+        // an LFSR, but each cell ALSO XORs in its corresponding data
+        // input each clock — so N test responses are compressed into
+        // one N-bit signature in N cycles. Pin layout:
+        //   D[0]..D[N-1] (one bit each), CLK
+        // After-the-clock state per bit i:
+        //   bit_0 = (XOR of reg[taps]) XOR D[0]
+        //   bit_i = reg[i-1]            XOR D[i]    (i >= 1)
+        const sz   = node.bitWidth || 4;
+        const m    = _mask(sz);
+        const taps = Array.isArray(node.taps) ? node.taps : [sz - 1, 0];
+        if (typeof ms.reg !== 'number') ms.reg = (node.seed ?? 0) & m;
+        let tapXor = 0;
+        for (const t of taps) tapXor ^= ((ms.reg >> t) & 1);
+        let next = 0;
+        for (let i = 0; i < sz; i++) {
+          const din = (_w(dataSlots[i]) || 0) & 1;
+          const sourceBit = (i === 0) ? tapXor : ((ms.reg >> (i - 1)) & 1);
+          next |= ((sourceBit ^ din) & 1) << i;
+        }
+        ms.reg = next & m;
+        ms.q   = ms.reg;          // expose the full signature on Q
+        // Mismatch flag for the panel — set once we go past the
+        // expected fill cycle so the UI can light a green/red dot.
+        if (typeof node.goldenSig === 'number') {
+          ms.sigMatch = ((ms.reg & m) === ((node.goldenSig | 0) & m)) ? 1 : 0;
+        } else {
+          ms.sigMatch = null;
+        }
 
       } else if (node.type === 'STACK') {
         // Inputs: DATA(0), PUSH(1), POP(2), CLR(3), CLK

@@ -221,6 +221,10 @@ export class DFTPanel {
     // 'patterns') currently expanded. Each section can stash a small
     // explanatory block under its header via the ⓘ button.
     this._infoOpen = new Set();
+    // Radix preference for the MISR signature compactor section.
+    // 'bin' | 'dec' | 'hex'. Persists across renders. Decimal default
+    // because that's what new users naturally read.
+    this._misrRadix = 'dec';
     // Layer 2.5 — toggled when the user clicks the [source] tag in the
     // FAULT COVERAGE row. Expands an inline table of every test vector
     // and per-vector output, so the user can see exactly what stimulus
@@ -236,6 +240,20 @@ export class DFTPanel {
     // toggle widgets like the [source ▸/▾] tag in the FAULT COVERAGE
     // row that expands the vectors table.
     if (this._body) {
+      // Bind on mousedown specifically for actions whose target is
+      // re-rendered every simulation tick — radix toggle, pencil
+      // edit on a tick-rendered card, etc. Click never fires when
+      // mouseup lands on a different DOM node than mousedown.
+      this._body.addEventListener('mousedown', (e) => {
+        const trg = e.target.closest('[data-action="misr-radix"]');
+        if (!trg) return;
+        e.preventDefault();
+        const r = trg.dataset.radix;
+        if (r === 'bin' || r === 'dec' || r === 'hex') {
+          this._misrRadix = r;
+          if (this._visible) this._render();
+        }
+      });
       this._body.addEventListener('click', (e) => {
         const trg = e.target.closest('[data-action]');
         if (!trg) return;
@@ -268,17 +286,17 @@ export class DFTPanel {
           this._editingFields.delete(`${lfsrId}:${field}`);
           if (this._visible) this._render();
         }
+        if (trg.dataset.action === 'misr-radix') {
+          // Handled in the mousedown listener above — `click` doesn't
+          // fire reliably here because the panel re-renders mid-touch.
+          return;
+        }
         if (trg.dataset.action === 'toggle-info') {
-          // The button sits inside .dft-section-header, whose click
-          // handler collapses the whole section. Stop propagation so
-          // clicking ⓘ shows the info popover without folding the
-          // section under it.
           e.stopPropagation();
           const section = trg.dataset.section;
           if (!section) return;
-          if (this._infoOpen.has(section)) this._infoOpen.delete(section);
-          else                              this._infoOpen.add(section);
-          if (this._visible) this._render();
+          if (this._infoOpen.has(section)) this._closeInfoPopovers();
+          else                              this._openInfoPopover(section);
         }
       });
       // Keyboard shortcuts inside the LFSR edit input — Enter saves,
@@ -405,6 +423,7 @@ export class DFTPanel {
       this._renderFaultCoverage() +
       this._renderScanChains() +
       this._renderPatternGenerators() +
+      this._renderSignatureCompactors() +
       this._renderFaultList(wires);
 
     this._applyCollapsibleSections();
@@ -469,9 +488,16 @@ export class DFTPanel {
 
   // ── FAULT COVERAGE ──────────────────────────────────────────
   _renderFaultCoverage() {
+    const cvHeader = `<span class="dft-section-title">FAULT COVERAGE` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="coverage" title="What does this section show?">i</button>` +
+      `</span>`;
+    const cvInfo = this._infoOpen.has('coverage') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Fraction of the scene's possible faults that the active test vectors actually flag — the headline metric of any DFT flow. The bar is coloured by industry tiers: &lt;70 % red, 70–90 % amber, ≥90 % green.</div>
+      </div>` : '';
     if (!this._lastSim) {
       return `
-        <div class="dft-coverage-header dft-section-header">FAULT COVERAGE</div>
+        <div class="dft-coverage-header dft-section-header">${cvHeader}</div>${cvInfo}
         <div class="dft-empty">Click <b style="color:#ffb878">RUN FAULT SIM</b> in the header to score the test vectors against every wire fault. Coverage and per-fault detection rows will populate the table below.</div>
       `;
     }
@@ -493,7 +519,7 @@ export class DFTPanel {
     // Test-compaction talking point: zero-code UI hint that production
     // ATPG output (50K+ vectors) is compressed before tester delivery.
     return `
-      <div class="dft-coverage-header dft-section-header">FAULT COVERAGE</div>
+      <div class="dft-coverage-header dft-section-header">${cvHeader}</div>${cvInfo}
       <div class="dft-perf-row" style="grid-template-columns: 1fr">
         <div style="display:flex;align-items:center;gap:1em;flex-wrap:wrap">
           <div style="flex:1;min-width:200px;background:#1a1208;border:1px solid #401a00;border-radius:3px;height:18px;position:relative;overflow:hidden">
@@ -580,8 +606,15 @@ export class DFTPanel {
     const ffCnt     = (this._scene?.nodes || []).filter(
       n => /FF|FLIPFLOP|REGISTER|LATCH/.test(n.type || '')
     ).length;
+    const ovHeader = `<span class="dft-section-title">TESTABILITY OVERVIEW` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="overview" title="What does this section show?">i</button>` +
+      `</span>`;
+    const ovInfo = this._infoOpen.has('overview') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Top-line counts for the scene: how many wires (each is two potential stuck-at sites), how many flip-flops, and how many faults you've manually injected via the wire context menu.</div>
+      </div>` : '';
     return `
-      <div class="dft-overview-header dft-section-header">TESTABILITY OVERVIEW</div>
+      <div class="dft-overview-header dft-section-header">${ovHeader}</div>${ovInfo}
       <div class="dft-perf-row">
         <span class="k">Nodes / Wires</span><span class="v">${nodeCnt} / ${wireCnt}</span>
         <span class="k">FFs (state-holding)</span><span class="v">${ffCnt}</span>
@@ -606,9 +639,38 @@ export class DFTPanel {
     const totalFFs = allNodes.filter(
       n => /FF|FLIPFLOP|REGISTER|LATCH/.test(n.type || '')
     ).length;
+
+    // Reusable header (title + ⓘ button) + the popover panel for the
+    // chain-status legend. Same shape and styling as the Pattern
+    // Generators help, just different content.
+    const chainHeaderHtml = `<span class="dft-section-title">SCAN CHAINS` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="chains" title="What do the chain status pills mean?">i</button>` +
+      `</span>`;
+    const chainInfoPanel = this._infoOpen.has('chains') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Scan chains shift test vectors serially through every flip-flop, replacing the design's normal datapath during test mode. Status flags wiring completeness.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">healthy</span>
+          <span class="dft-info-text">scan-in + scan-out wired AND a single TE source feeds every cell.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">warn</span>
+          <span class="dft-info-text">One end unwired, or each cell uses a different TE driver.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">broken</span>
+          <span class="dft-info-text">Both scan-in AND scan-out unwired — chain can't be tested.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">orphan</span>
+          <span class="dft-info-text">Lone SCAN_FF with nothing wired to its TI — not part of any chain.</span>
+        </div>
+      </div>
+    ` : '';
+
     if (scanFFs.length === 0) {
       return `
-        <div class="dft-scan-header dft-section-header">SCAN CHAINS</div>
+        <div class="dft-scan-header dft-section-header">${chainHeaderHtml}</div>${chainInfoPanel}
         <div class="dft-empty">No SCAN-FF in scene — drop a SCAN-FF chip (LOGIC tab) to enable scan-based testing.</div>
       `;
     }
@@ -731,7 +793,7 @@ export class DFTPanel {
     const orphanCount = chains.filter(isOrphan).length;
 
     return `
-      <div class="dft-scan-header dft-section-header">SCAN CHAINS</div>
+      <div class="dft-scan-header dft-section-header">${chainHeaderHtml}</div>${chainInfoPanel}
       <div class="dft-perf-row">
         <span class="k">Scan FFs</span><span class="v">${scanInserted} of ${totalFFs} (${scanability}% scanability)</span>
         <span class="k">Chains</span><span class="v">${chains.length} (${cellsInChains} cells, ${chainedPct}% in chain)</span>
@@ -750,13 +812,30 @@ export class DFTPanel {
     const id    = input.dataset.lfsrId;
     const field = input.dataset.field;
     const node  = this._scene?.nodes?.find(n => n.id === id);
-    if (!node || node.type !== 'LFSR') return;
+    if (!node) return;
+    if (node.type !== 'LFSR' && node.type !== 'MISR') return;
 
     const raw = (input.value || '').trim();
     let next;
+    if (field === 'goldenSig') {
+      // Special: blank input clears the golden signature back to null.
+      if (raw === '') { node.goldenSig = null; bus.emit('node:edited', { node, field }); if (this._visible) this._render(); return; }
+      let v;
+      if (/^0[xX][0-9a-fA-F]+$/.test(raw))      v = parseInt(raw.slice(2), 16);
+      else if (/^0[bB][01]+$/.test(raw))        v = parseInt(raw.slice(2), 2);
+      else if (/^[0-9]+$/.test(raw))            v = parseInt(raw, 10);
+      if (!Number.isFinite(v) || v < 0) {
+        input.value = (typeof node.goldenSig === 'number') ? '0x' + (node.goldenSig >>> 0).toString(16) : '';
+        return;
+      }
+      node.goldenSig = v & ((1 << (node.bitWidth || 4)) - 1);
+      bus.emit('node:edited', { node, field });
+      if (this._visible) this._render();
+      return;
+    }
     if (field === 'bitWidth') {
       const v = parseInt(raw, 10);
-      if (!Number.isFinite(v) || v < 1 || v > 24) { input.value = node.bitWidth; return; }
+      if (!Number.isFinite(v) || v < 1 || v > 32) { input.value = node.bitWidth; return; }
       next = v;
     } else if (field === 'seed') {
       // Accept decimal, 0x… hex, or 0b… binary.
@@ -790,6 +869,19 @@ export class DFTPanel {
     if (ffStates?.delete) ffStates.delete(node.id);
     // Notify the rest of the app (canvas redraws, telemetry, etc.).
     bus.emit('node:edited', { node, field });
+    if (this._visible) this._render();
+  }
+
+  // Open one section's info panel. The panel renders inline below
+  // the section header, so no click-outside trap is needed — the
+  // user closes it by clicking the i button again.
+  _openInfoPopover(section) {
+    this._infoOpen.add(section);
+    if (this._visible) this._render();
+  }
+  _closeInfoPopovers() {
+    if (this._infoOpen.size === 0) return;
+    this._infoOpen.clear();
     if (this._visible) this._render();
   }
 
@@ -835,34 +927,38 @@ export class DFTPanel {
     const allNodes = this._scene?.nodes || [];
     const wires    = this._scene?.wires || [];
     const lfsrs    = allNodes.filter(n => n.type === 'LFSR');
-    const infoBtn = `<button class="dft-info-btn" data-action="toggle-info" data-section="patterns" title="What do the status pills mean?">ⓘ</button>`;
-    const infoPanel = this._infoOpen.has('patterns') ? `
+    const open = this._infoOpen.has('patterns');
+    const infoPanel = open ? `
       <div class="dft-info-panel">
-        <div class="dft-info-title">LFSR status meanings</div>
+        <div class="dft-info-lead">LFSRs as test-pattern sources for BIST. Status combines polynomial quality with whether the LFSR is actually wired into a scan path.</div>
         <div class="dft-info-row">
           <span class="dft-chain-status ok">BIST source</span>
-          <span class="dft-info-text">Polynomial is primitive (period = 2<sup>N</sup>−1, every non-zero state visited exactly once) <em>and</em> the LFSR's Q output is wired to a SCAN_FF's TI pin. The LFSR is acting as a real BIST pattern generator. Nothing to fix.</span>
+          <span class="dft-info-text">Primitive polynomial AND Q wired to scan-in. All good.</span>
         </div>
         <div class="dft-info-row">
           <span class="dft-chain-status warn">unused</span>
-          <span class="dft-info-text">Polynomial is primitive (max-length sequence) but Q is not wired into any scan chain. The pattern source is good, but it isn't driving anything that participates in a test. <strong>Fix:</strong> route Q to a SCAN_FF's TI input, or to whatever input you want to stimulate during BIST mode.</span>
+          <span class="dft-info-text">Primitive but Q drives nothing testable — wire it to a SCAN_FF.TI.</span>
         </div>
         <div class="dft-info-row">
           <span class="dft-chain-status warn">sub-max</span>
-          <span class="dft-info-text">The Fibonacci polynomial defined by these taps is reducible — its true period is shorter than 2<sup>N</sup>−1, so the LFSR loops through fewer distinct states than its width allows. BIST coverage will be poor: the same patterns repeat on a short cycle. <strong>Fix:</strong> pick taps from a primitive-polynomial table (e.g. for 6 bits use [5,4] instead of [5,3]).</span>
+          <span class="dft-info-text">Reducible polynomial — short orbit. Pick taps from a primitive table.</span>
         </div>
         <div class="dft-info-row">
           <span class="dft-chain-status bad">seed=0</span>
-          <span class="dft-info-text">Initial state is all zeros. A Fibonacci LFSR seeded with 0 stays at 0 forever — every tap reads 0, so the XOR feedback is 0, so the next state is 0 again. The LFSR will never generate any pattern. <strong>Fix:</strong> set the seed to any non-zero value.</span>
+          <span class="dft-info-text">Zero is a fixed point — set seed to any non-zero value.</span>
         </div>
-        <div class="dft-info-foot">Status combines two judgments: <em>polynomial quality</em> (primitive vs. reducible) and <em>actual usage</em> (Q wired to a scan input or not).</div>
       </div>
     ` : '';
+    // Wrap title + info button in one flex item so the parent's
+    // justify-content: space-between keeps the toggle on the right
+    // without throwing the info button into the middle.
+    const headerHtml = `<span class="dft-section-title">PATTERN GENERATORS` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="patterns" title="What do the status pills mean?">i</button>` +
+      `</span>`;
 
     if (lfsrs.length === 0) {
       return `
-        <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS ${infoBtn}</div>
-        ${infoPanel}
+        <div class="dft-patterns-header dft-section-header">${headerHtml}</div>${infoPanel}
         <div class="dft-empty">No LFSR in scene — drop one (LOGIC tab) to enable BIST-style pseudo-random testing.</div>
       `;
     }
@@ -902,7 +998,7 @@ export class DFTPanel {
             <span class="dft-lfsr-k">width</span>
             ${this._renderLfsrField(lfsr.id, 'bitWidth',
               `<code>${width}</code> <small>bits</small>`,
-              { current: width, hint: 'integer 1–24', inputType: 'number', minMax: 'min="1" max="24"' })}
+              { current: width, hint: 'integer 1–24', inputType: 'number', minMax: 'min="1" max="24"' })}    /* LFSR — period sim caps at 24 */
             <span class="dft-lfsr-k">seed</span>
             ${this._renderLfsrField(lfsr.id, 'seed',
               `<code>${seed.toString(2).padStart(width, '0')}</code> <small>(0x${seed.toString(16)})</small>`,
@@ -930,8 +1026,7 @@ export class DFTPanel {
     }).length;
 
     return `
-      <div class="dft-patterns-header dft-section-header">PATTERN GENERATORS ${infoBtn}</div>
-      ${infoPanel}
+      <div class="dft-patterns-header dft-section-header">${headerHtml}</div>${infoPanel}
       <div class="dft-perf-row">
         <span class="k">LFSRs</span><span class="v">${lfsrs.length}</span>
         <span class="k">Max-length polynomials</span><span class="v">${goodCount} of ${lfsrs.length}</span>
@@ -940,11 +1035,212 @@ export class DFTPanel {
     `;
   }
 
+  // ── SIGNATURE COMPACTORS (MISR) ─────────────────────────────
+  // Mirror of PATTERN GENERATORS but for the BIST response side. Each
+  // MISR shows its current live signature (ms.reg from the engine),
+  // an editable goldenSig, and a match / mismatch / no-golden status.
+  _renderSignatureCompactors() {
+    const allNodes = this._scene?.nodes || [];
+    const wires    = this._scene?.wires || [];
+    const misrs    = allNodes.filter(n => n.type === 'MISR');
+
+    const headerHtml = `<span class="dft-section-title">SIGNATURE COMPACTORS` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="misrs" title="What does this section show?">i</button>` +
+      `</span>`;
+    const infoPanel = this._infoOpen.has('misrs') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">MISRs sit at the END of a scan chain and compress the test responses into a compact signature. Comparing it against the pre-computed "golden" value tells you instantly if any fault corrupted the response.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">match</span>
+          <span class="dft-info-text">Current signature equals the golden value — no detected fault.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">mismatch</span>
+          <span class="dft-info-text">Signatures differ — at least one bit of the response was wrong; a fault is present.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">no golden</span>
+          <span class="dft-info-text">No reference signature set yet — capture the current one as the golden value once you trust the design.</span>
+        </div>
+      </div>` : '';
+
+    // Radix selector — three small toggle pills that let the user
+    // flip the value displays (seed / live sig / golden) between
+    // binary, decimal, and hex. Editing inputs continue to accept all
+    // three formats regardless.
+    const radix = this._misrRadix;
+    const radixBtn = (r, label) =>
+      `<button class="dft-misr-radix-btn${radix === r ? ' active' : ''}"
+               data-action="misr-radix" data-radix="${r}"
+               title="Display values in ${label}">${label}</button>`;
+    const radixSelector = `<span class="dft-misr-radix">` +
+      radixBtn('bin', 'BIN') + radixBtn('dec', 'DEC') + radixBtn('hex', 'HEX') +
+      `</span>`;
+
+    // Number → display string for the chosen radix. Width arg only
+    // matters for binary (zero-padding to N bits).
+    const fmtVal = (v, W) => {
+      if (radix === 'dec') return String(v >>> 0);
+      if (radix === 'hex') return '0x' + (v >>> 0).toString(16);
+      return (v >>> 0).toString(2).padStart(W, '0');
+    };
+
+    if (misrs.length === 0) {
+      return `
+        <div class="dft-misrs-header dft-section-header">${headerHtml}</div>${infoPanel}
+        <div class="dft-empty">No MISR in scene — drop one (TEST tab) to compress scan-chain responses into a signature.</div>
+      `;
+    }
+
+    // Engine-side state — ms.reg holds the live signature, populated
+    // each tick by the SimulationEngine. Read from the global state
+    // bucket the app maintains so the panel doesn't need its own
+    // simulation pass.
+    const ffStates = window.state?.ffStates;
+
+    const blocks = misrs.map(misr => {
+      const W    = Math.max(1, (misr.bitWidth || 4) | 0);
+      const mask = (1 << W) - 1;
+      const ms   = ffStates?.get?.(misr.id);
+      const sig  = (typeof ms?.reg === 'number') ? (ms.reg & mask) : 0;
+      const golden = (typeof misr.goldenSig === 'number') ? (misr.goldenSig & mask) : null;
+
+      // Status classifier.
+      let cls, label;
+      if (golden === null)        { cls = 'warn'; label = 'no golden'; }
+      else if (sig === golden)    { cls = 'ok';   label = 'match'; }
+      else                        { cls = 'bad';  label = 'mismatch'; }
+
+      // Count wired data inputs — a MISR with no inputs wired is just a
+      // standalone LFSR-shaped circuit; flag it.
+      let wiredIns = 0;
+      for (let i = 0; i < W; i++) {
+        if (wires.find(w => w.targetId === misr.id && (w.targetInputIndex || 0) === i)) wiredIns++;
+      }
+
+      const blockId = `misr_${misr.id}`;
+      const collapsed = this._collapsedBlocks.has(blockId);
+      const goldenText = golden === null
+        ? `<span class="dft-chain-end-empty">(not set)</span>`
+        : `<code>${fmtVal(golden, W)}</code>`;
+      return `
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${blockId}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
+            <span class="dft-chain-title">${misr.label || misr.id}</span>
+            <span class="dft-chain-len">${W}-bit</span>
+            <span class="dft-chain-status ${cls}">${label}</span>
+          </div>
+          <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">width</span>
+            ${this._renderMisrField(misr.id, 'bitWidth',
+              `<code>${W}</code> <small>bits</small>`,
+              { current: W, inputType: 'number', minMax: 'min="1" max="32"',
+                hint: 'integer 1–32' })}
+            <span class="dft-lfsr-k">seed</span>
+            ${this._renderMisrField(misr.id, 'seed',
+              `<code>${fmtVal((misr.seed ?? 0) & mask, W)}</code>`,
+              { current: '0x' + ((misr.seed ?? 0) & mask).toString(16),
+                hint: 'dec, 0xHEX, or 0bBIN — initial state at sim start' })}
+            <span class="dft-lfsr-k">taps</span>
+            ${this._renderMisrField(misr.id, 'taps',
+              `<code>${(misr.taps || []).join(',')}</code> <small>(Fibonacci feedback into bit 0)</small>`,
+              { current: (misr.taps || []).join(','),
+                hint: 'comma-separated bit positions (0 = LSB)' })}
+            <span class="dft-lfsr-k">live sig</span>
+            <span class="dft-lfsr-v">
+              <code>${fmtVal(sig, W)}</code>
+            </span>
+            <span class="dft-lfsr-k">golden</span>
+            ${this._renderMisrField(misr.id, 'goldenSig',
+              goldenText,
+              { current: golden === null ? '' : '0x' + golden.toString(16),
+                hint: 'dec, 0xHEX, or 0bBIN — leave blank to clear' })}
+            <span class="dft-lfsr-k">inputs</span>
+            <span class="dft-lfsr-v">
+              <code>${wiredIns}</code> <small>of ${W} data pins wired</small>
+            </span>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="dft-misrs-header dft-section-header">${headerHtml}</div>${infoPanel}
+      <div class="dft-misr-toolbar">
+        <span class="dft-misr-toolbar-label">display</span>
+        ${radixSelector}
+      </div>
+      <div class="dft-perf-row">
+        <span class="k">MISRs</span><span class="v">${misrs.length}</span>
+      </div>
+      ${blocks}
+    `;
+  }
+
+  // Like _renderLfsrField but shared by the MISR pane. Same edit
+  // lifecycle (✎ → input + 💾 + ✕) and the same `data-action` keys —
+  // the click delegation handles both because we route by data-field.
+  _renderMisrField(misrId, field, viewHtml, opts = {}) {
+    const key = `${misrId}:${field}`;
+    const editing = this._editingFields.has(key);
+    if (!editing) {
+      return `
+        <span class="dft-lfsr-v">
+          ${viewHtml}
+          <button class="dft-lfsr-edit" data-lfsr-id="${misrId}" data-field="${field}"
+                  data-action="lfsr-edit" title="Edit ${field}">✎</button>
+        </span>`;
+    }
+    const inputType = opts.inputType || 'text';
+    const minMax    = opts.minMax || '';
+    return `
+      <span class="dft-lfsr-v">
+        <input class="dft-lfsr-input" type="${inputType}" ${minMax}
+               data-lfsr-id="${misrId}" data-field="${field}"
+               value="${opts.current ?? ''}"
+               title="${opts.hint || ''}"
+               autofocus>
+        <button class="dft-lfsr-save"   data-lfsr-id="${misrId}" data-field="${field}"
+                data-action="lfsr-save"   title="Save (Enter)">💾</button>
+        <button class="dft-lfsr-cancel" data-lfsr-id="${misrId}" data-field="${field}"
+                data-action="lfsr-cancel" title="Cancel (Esc)">✕</button>
+        <small class="dft-lfsr-hint">${opts.hint || ''}</small>
+      </span>`;
+  }
+
   // ── FAULT LIST ──────────────────────────────────────────────
   _renderFaultList(wires) {
+    // Section header + ⓘ legend for the fault model abbreviations.
+    // Same shape as Pattern Generators / Scan Chains; reuses the
+    // shared .dft-info-panel styling.
+    const flHeader = `<span class="dft-section-title">FAULT LIST` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="faultlist" title="What do the column names mean?">i</button>` +
+      `</span>`;
+    const flInfoPanel = this._infoOpen.has('faultlist') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Every wire is a potential fault site. The four columns are the fault models the simulator can inject; "injected" shows which are currently active.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">s-a-0 / s-a-1</span>
+          <span class="dft-info-text">Stuck-at fault — the wire is forced to 0 (or 1) regardless of its driver.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">open</span>
+          <span class="dft-info-text">Wire severed; downstream sees null / undefined.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">bridge</span>
+          <span class="dft-info-text">Wire shorted to another; both nets converge to one (typically AND-style).</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">injected</span>
+          <span class="dft-info-text">✓ when a fault is currently active on this wire (you toggled it on).</span>
+        </div>
+      </div>
+    ` : '';
+
     if (!wires.length) {
       return `
-        <div class="dft-faultlist-header dft-section-header">FAULT LIST</div>
+        <div class="dft-faultlist-header dft-section-header">${flHeader}</div>${flInfoPanel}
         <div class="dft-empty">no wires in scene — drop components and connect them to enumerate fault sites.</div>
       `;
     }
@@ -1025,7 +1321,7 @@ export class DFTPanel {
       </tr>`;
     }).join('');
     return `
-      <div class="dft-faultlist-header dft-section-header">FAULT LIST</div>
+      <div class="dft-faultlist-header dft-section-header">${flHeader}</div>${flInfoPanel}
       <div style="padding:0 1.2em;overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:0.92em">
           <thead>

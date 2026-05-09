@@ -105,6 +105,11 @@ export class PipelinePanel {
 
     document.getElementById('btn-pipeline-toggle')?.addEventListener('click', () => this.toggle());
     document.getElementById('btn-pipeline-close')?.addEventListener('click', () => this.hide());
+
+    // Per-section info popovers (HAZARDS / PERF / PRED / CDC / LIP).
+    // Toggled via the ⓘ button rendered in each section's header. Set
+    // holds open section keys so the popover survives re-renders.
+    this._infoOpen = new Set();
     this._wireExportMenu();
     this._buildPresetBar();
 
@@ -499,7 +504,7 @@ export class PipelinePanel {
           <span class="pvi-missing">missing ${v.missing} PIPE</span>
         </div>`).join('');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-violations-header">VIOLATIONS (${r.violations.length})</div>${items}`);
+        `<div class="pipe-violations-header">VIOLATIONS (${r.violations.length})${this._infoChip('violations')}</div>${this._infoPanel('violations')}${items}`);
 
       this._body.querySelectorAll('.pipe-violation-row').forEach(row => {
         row.addEventListener('click', () => {
@@ -530,7 +535,7 @@ export class PipelinePanel {
           <div class="pipe-hazard-fix">\u2937 ${_esc(h.suggestion)}</div>`;
       }).join('');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-hazards-header">HAZARDS (${r.hazards.length})</div>${items}`);
+        `<div class="pipe-hazards-header">HAZARDS (${r.hazards.length})${this._infoChip('hazards')}</div>${this._infoPanel('hazards')}${items}`);
 
       this._body.querySelectorAll('.pipe-hazard-row').forEach(row => {
         row.addEventListener('click', () => {
@@ -588,10 +593,10 @@ export class PipelinePanel {
             ? ` <span class="pipe-prog-resolved-note">${resolvedCount} ✓ resolved</span>`
             : '');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-prog-header">PROGRAM HAZARDS (${r.programHazards.length} \u2014 ${_progTypeSummary(r.programHazards)})${hiddenNote}</div>${items}`);
+        `<div class="pipe-prog-header">PROGRAM HAZARDS (${r.programHazards.length} \u2014 ${_progTypeSummary(r.programHazards)})${hiddenNote}${this._infoChip('prog')}</div>${this._infoPanel('prog')}${items}`);
     } else if (r.hasProgram) {
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-prog-header">PROGRAM HAZARDS (0)</div><div class="pipe-prog-clean">No inter-instruction hazards detected over ${r.instructions.length} instruction${r.instructions.length===1?'':'s'}.</div>`);
+        `<div class="pipe-prog-header">PROGRAM HAZARDS (0)${this._infoChip('prog')}</div>${this._infoPanel('prog')}<div class="pipe-prog-clean">No inter-instruction hazards detected over ${r.instructions.length} instruction${r.instructions.length===1?'':'s'}.</div>`);
     }
 
     // Performance metrics — aggregate CPI/IPC/throughput.
@@ -627,7 +632,7 @@ export class PipelinePanel {
         }
       }
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-perf-header">PERFORMANCE</div>
+        `<div class="pipe-perf-header">PERFORMANCE${this._infoChip('perf')}</div>${this._infoPanel('perf')}
          <div class="pipe-perf-grid">
            <div class="pipe-perf-row"><span class="k">Instructions</span><span class="v">${m.instructionCount}</span></div>
            <div class="pipe-perf-row"><span class="k">Cycles</span><span class="v">${m.actualCycles} (ideal ${m.idealCycles} + ${m.stallBubbles} stall)</span></div>
@@ -643,7 +648,7 @@ export class PipelinePanel {
     // show this. Always renders so the user can find it before the
     // first branch fires.
     this._body.insertAdjacentHTML('beforeend',
-      `<div class="pipe-runtime-header">BRANCH FLUSHES (LIVE)</div>
+      `<div class="pipe-runtime-header">BRANCH FLUSHES (LIVE)${this._infoChip('runtime')}</div>${this._infoPanel('runtime')}
        <div class="pipe-perf-grid">
          ${this._renderLiveBranchFlushes()}
        </div>`);
@@ -652,7 +657,7 @@ export class PipelinePanel {
     // rendered so the section appears even before the first access
     // (with an explanatory placeholder).
     this._body.insertAdjacentHTML('beforeend',
-      `<div class="pipe-runtime-header">CACHE (LIVE)</div>
+      `<div class="pipe-runtime-header">CACHE (LIVE)${this._infoChip('runtime')}</div>${this._infoPanel('runtime')}
        <div class="pipe-perf-grid">
          ${this._renderLiveCacheStats()}
        </div>`);
@@ -669,7 +674,7 @@ export class PipelinePanel {
       const pcHex = (pc) => '0x' + pc.toString(16).toUpperCase().padStart(2, '0');
 
       const header = [
-        `<div class="pipe-diag-header">PIPELINE DIAGRAM (${rows.length} instr · ${cycles} cycles${sc.truncated ? ' · truncated' : ''})</div>`,
+        `<div class="pipe-diag-header">PIPELINE DIAGRAM (${rows.length} instr · ${cycles} cycles${sc.truncated ? ' · truncated' : ''})${this._infoChip('diag')}</div>${this._infoPanel('diag')}`,
         `<div class="pipe-diag-legend">`,
         `  <span class="pdl-cell pdc-IF">IF</span>`,
         `  <span class="pdl-cell pdc-ID">ID</span>`,
@@ -777,7 +782,7 @@ export class PipelinePanel {
         </div>`;
       }).join('');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-loops-header">LOOPS (${r.loops.length})</div>${items}`);
+        `<div class="pipe-loops-header">LOOPS (${r.loops.length})${this._infoChip('loops')}</div>${this._infoPanel('loops')}${items}`);
     }
 
     // Forwarding Paths section (Phase 14c) — one row per detected bypass.
@@ -793,7 +798,7 @@ export class PipelinePanel {
           <span class="pipe-forward-names">${_esc(labelOf(p.srcNodeId))} → ${_esc(labelOf(p.muxId))} → ${_esc(labelOf(p.aluNodeId))}</span>
         </div>`).join('');
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-forwards-header">FORWARDING PATHS (${r.forwardingPaths.length})</div>${items}`);
+        `<div class="pipe-forwards-header">FORWARDING PATHS (${r.forwardingPaths.length})${this._infoChip('forwards')}</div>${this._infoPanel('forwards')}${items}`);
 
       // Coverage summary (Tier 14d-lite): which of the canonical EX-targeted
       // bypass paths are present. Informational — detector labels are coarse.
@@ -835,7 +840,7 @@ export class PipelinePanel {
         : '<div class="pred-empty">No branches in program.</div>';
       const hitPct = p.totalBranches > 0 ? (p.hitRate * 100).toFixed(1) + '%' : '—';
       this._body.insertAdjacentHTML('beforeend',
-        `<div class="pipe-pred-header">BRANCH PREDICTOR<button id="pipe-predictor-save" class="pred-save-btn hidden" title="Save predictor change to the CU">SAVE</button></div>
+        `<div class="pipe-pred-header">BRANCH PREDICTOR${this._infoChip('pred')}<button id="pipe-predictor-save" class="pred-save-btn hidden" title="Save predictor change to the CU">SAVE</button></div>${this._infoPanel('pred')}
          <div class="pred-controls">
            <label class="pred-label">Predictor:</label>
            <select id="pipe-predictor-select" class="pred-select">${opts}</select>
@@ -907,10 +912,10 @@ export class PipelinePanel {
           </div>`;
         }).join('');
         this._body.insertAdjacentHTML('beforeend',
-          `<div class="pipe-cdc-header">CDC CROSSINGS (${crossings.length}) · ${clkCount} clock domains</div>${items}`);
+          `<div class="pipe-cdc-header">CDC CROSSINGS (${crossings.length}) · ${clkCount} clock domains${this._infoChip('cdc')}</div>${this._infoPanel('cdc')}${items}`);
       } else {
         this._body.insertAdjacentHTML('beforeend',
-          `<div class="pipe-cdc-header">CDC CROSSINGS (0) · ${clkCount} clock domains</div>`);
+          `<div class="pipe-cdc-header">CDC CROSSINGS (0) · ${clkCount} clock domains${this._infoChip('cdc')}</div>${this._infoPanel('cdc')}`);
       }
     }
 
@@ -930,10 +935,10 @@ export class PipelinePanel {
           </div>`;
         }).join('');
         this._body.insertAdjacentHTML('beforeend',
-          `<div class="pipe-lip-header">LIP VIOLATIONS (${r.lip.violations.length}) · ${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'}</div>${items}`);
+          `<div class="pipe-lip-header">LIP VIOLATIONS (${r.lip.violations.length}) · ${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'}${this._infoChip('lip')}</div>${this._infoPanel('lip')}${items}`);
       } else {
         this._body.insertAdjacentHTML('beforeend',
-          `<div class="pipe-lip-header">LIP ✓ (${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'} · all clean)</div>`);
+          `<div class="pipe-lip-header">LIP ✓ (${r.lip.handshakeCount} HANDSHAKE${r.lip.handshakeCount===1?'':'s'} · all clean)${this._infoChip('lip')}</div>${this._infoPanel('lip')}`);
       }
     }
 
@@ -960,6 +965,108 @@ export class PipelinePanel {
     // from localStorage. Done as a post-render walk so individual section
     // renderers above don't have to know about it.
     this._applyCollapsibleSections();
+  }
+
+  // Per-section info popovers — section key → { lead, rows: [[label, text], ...] }.
+  // Reuses the DFT panel's .dft-info-* CSS so the visual matches the
+  // help popovers in the DFT panel (kept the dft- prefix to avoid a
+  // CSS rename across two UIs that share the same theme).
+  static _INFO = {
+    violations: {
+      lead: 'Structural pipeline violations the analyzer found in the wiring — cross-stage signals without a PIPE register, missing reset paths, etc. Each item points at the offending wire.',
+      rows: [],
+    },
+    prog: {
+      lead: 'Inter-instruction data hazards extracted from the active program. Each row pairs the producing instruction with the consuming one and labels the dependency type (RAW / WAR / WAW).',
+      rows: [],
+    },
+    runtime: {
+      lead: 'Live counters from the running engine — branch flushes and cache hit/miss snapshots. Updates only while AUTO CLK is on; static otherwise.',
+      rows: [],
+    },
+    diag: {
+      lead: 'Time × instruction diagram of the program executing on the pipeline. Each row is one instruction, each column one cycle; coloured cells mark which stage that instruction is in.',
+      rows: [],
+    },
+    loops: {
+      lead: 'Loops detected in the schedule — back-edges in the program flow that branch to an earlier PC. Useful for sizing branch-predictor budgets.',
+      rows: [],
+    },
+    forwards: {
+      lead: 'Forwarding paths the engine inserts to resolve RAW hazards without stalling — a producer\'s result is bypassed directly to the consumer one or more stages downstream.',
+      rows: [],
+    },
+    hazards: {
+      lead: 'Pipeline data + control hazards detected by the analyzer. Each one stalls the pipeline unless forwarding or reordering can resolve it.',
+      rows: [
+        ['warn', 'RAW',        'Read-After-Write — a stage reads a register a later stage hasn\'t written yet. The classic data dependency.'],
+        ['warn', 'WAR',        'Write-After-Read — anti-dependency; matters in out-of-order designs, free in strict in-order pipes.'],
+        ['warn', 'WAW',        'Write-After-Write — output dependency; the later write must commit second.'],
+        ['warn', 'structural', 'Two stages contend for the same physical resource (memory port, shared ALU, etc.) on the same cycle.'],
+        ['bad',  'control',    'Branch direction known too late — the wrong instructions entered the pipeline and must be flushed.'],
+      ],
+    },
+    perf: {
+      lead: 'Steady-state throughput metrics for the running design. Lower CPI / higher IPC means more useful work per cycle.',
+      rows: [
+        ['ok',   'CPI',          'Cycles Per Instruction. Ideal in-order pipe = 1.0; stalls and flushes push it higher.'],
+        ['ok',   'IPC',          '1 / CPI — instructions retired per cycle. Higher is better; the headline throughput metric.'],
+        ['warn', 'mispredict %', 'Fraction of branches whose predicted direction was wrong. Each misprediction flushes the pipeline.'],
+        ['warn', 'stall cycles', 'Cycles a stage held its previous value because the next stage couldn\'t accept new work.'],
+        ['ok',   'forwarding %', 'Share of RAW hazards resolved by forwarding rather than stalls — the higher, the better.'],
+      ],
+    },
+    pred: {
+      lead: 'Branch predictor model + live accuracy. The CU\'s currently-active predictor is highlighted; SAVE persists a different choice.',
+      rows: [
+        ['ok',   'static BTFN',         'Backward Taken / Forward Not-taken. Heuristic: loop branches usually go back.'],
+        ['ok',   '1-bit',               'Predicts whatever happened last time at this PC. Simplest dynamic predictor.'],
+        ['ok',   '2-bit saturating',    'Hysteresis state machine — needs two wrong predictions in a row before changing direction.'],
+        ['warn', 'BTB',                 'Branch Target Buffer — caches the target address so the next-PC is ready before the branch resolves.'],
+        ['warn', 'gshare',              'XORs the global branch history with the PC to index a 2-bit table. Captures correlated branches.'],
+      ],
+    },
+    cdc: {
+      lead: 'Crossings between different CLOCK domains. Without a synchronizer the receiving register can go metastable — its output undefined for arbitrary time.',
+      rows: [
+        ['warn', 'crossing',     'A wire whose source and destination are clocked by different CLOCK nodes.'],
+        ['ok',   'safe',         'The crossing already passes through a 2-FF synchronizer (one of the fix patterns the analyzer recognises).'],
+        ['bad',  'unsafe',       'No synchronizer detected — a real-silicon design here would intermittently latch garbage.'],
+        ['warn', 'fix: 2-FF',    'Insert two flip-flops in the destination clock domain back-to-back; lets metastability resolve.'],
+        ['warn', 'fix: handshake', 'Use a HANDSHAKE pair (req/ack) for slow control signals; safer than relying on synchronizer probability.'],
+      ],
+    },
+    lip: {
+      lead: 'Latency-Insensitive Protocol checks on HANDSHAKE pairs (valid + ready). Violations mean the producer and consumer can deadlock or lose data.',
+      rows: [
+        ['warn', 'unregistered valid', 'The valid signal is combinational — a glitch can falsely declare data ready. Should be a reg.'],
+        ['warn', 'unregistered ready', 'Same on the consumer side; ready glitches can cause false accept.'],
+        ['bad',  'dangling stall',     'Stall reaches a producer that has nowhere to propagate it — back-pressure leaks.'],
+        ['bad',  'valid→ready loop',   'Combinational cycle through valid → … → ready → … → valid. Locks up.'],
+        ['bad',  'disconnected',       'One side of the handshake pair has no driver at all.'],
+      ],
+    },
+  };
+  // Build just the ⓘ button — pasted INSIDE the section header.
+  _infoChip(sectionKey) {
+    if (!PipelinePanel._INFO[sectionKey]) return '';
+    return `<button class="dft-info-btn" data-action="toggle-info" data-section="${sectionKey}" title="What do these mean?">i</button>`;
+  }
+  // Build the popover panel HTML — pasted as a SIBLING of the header
+  // (so it sits in the section body band, not inside the title row).
+  _infoPanel(sectionKey) {
+    const info = PipelinePanel._INFO[sectionKey];
+    if (!info || !this._infoOpen.has(sectionKey)) return '';
+    const rowsHtml = (info.rows || []).map(([cls, label, text]) =>
+      `<div class="dft-info-row">
+         <span class="dft-chain-status ${cls}">${label}</span>
+         <span class="dft-info-text">${text}</span>
+       </div>`).join('');
+    return `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">${info.lead}</div>
+        ${rowsHtml}
+      </div>`;
   }
 
   _applyCollapsibleSections() {
@@ -1012,12 +1119,44 @@ export class PipelinePanel {
       for (const node of g.body) bodyWrap.appendChild(node);
       section.appendChild(bodyWrap);
 
-      g.header.addEventListener('click', () => {
+      g.header.addEventListener('click', (e) => {
+        // Skip when the click landed on a sub-control inside the
+        // header (e.g. the ⓘ info button or the predictor SAVE
+        // button). Those have their own handlers; the section
+        // shouldn't fold as a side effect.
+        if (e.target.closest('button, [data-action]')) return;
         section.classList.toggle('pipe-section-collapsed');
         const state = this._loadCollapsedState();
         state[g.id] = section.classList.contains('pipe-section-collapsed');
         try { localStorage.setItem('pipe-panel-collapsed', JSON.stringify(state)); } catch {}
       });
+
+      // Direct-bind the ⓘ info button inside this section's header.
+      // (Body-level event delegation was unreliable — some other handler
+      // appears to swallow the click before bubbling reaches the body.)
+      const infoBtn = g.header.querySelector('.dft-info-btn[data-action="toggle-info"]');
+      if (infoBtn) {
+        const sectionKey = infoBtn.dataset.section;
+        // We bind `mousedown`, not `click`. The panel re-renders on
+        // every simulation tick, which means the button is replaced
+        // between the user's mousedown and mouseup → the browser
+        // never fires a `click` event (target mismatch). mousedown
+        // alone fires reliably on first touch.
+        infoBtn.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const opening = !this._infoOpen.has(sectionKey);
+          if (opening) this._infoOpen.add(sectionKey);
+          else         this._infoOpen.delete(sectionKey);
+          if (opening && section.classList.contains('pipe-section-collapsed')) {
+            section.classList.remove('pipe-section-collapsed');
+            const state = this._loadCollapsedState();
+            state[g.id] = false;
+            try { localStorage.setItem('pipe-panel-collapsed', JSON.stringify(state)); } catch {}
+          }
+          if (this._visible) this._render(this._analyzer.analyze());
+        });
+      }
     }
 
     this._applySectionOrderAndDrag();

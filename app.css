@@ -3395,6 +3395,51 @@
 .dft-lfsr-sink-scan small { color: #6ac08a; }
 .dft-lfsr-sink small { color: #876; }
 
+/* MISR section toolbar — sits right under the section header, right-
+   aligned so it reads as a quiet sub-control instead of competing
+   with the perf-row data. */
+.dft-misr-toolbar {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 1.4em 0;
+}
+.dft-misr-toolbar-label {
+  color: #6a5a4a;
+  font: 8px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+/* Segmented control: three pills (BIN/DEC/HEX) joined into one
+   capsule. Active pill highlighted amber; idle pills sit quietly. */
+.dft-misr-radix {
+  display: inline-flex;
+  background: #0a0e14;
+  border: 1px solid #3a2818;
+  border-radius: 999px;
+  overflow: hidden;
+  padding: 1px;
+}
+.dft-misr-radix-btn {
+  background: transparent;
+  border: none;
+  padding: 1px 7px;
+  font: 600 8px/1 'JetBrains Mono', monospace;
+  color: #6a5a4a;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  border-radius: 999px;
+  transition: background 0.12s, color 0.12s;
+}
+.dft-misr-radix-btn:hover { color: #c8b89a; background: rgba(255,160,40,0.06); }
+.dft-misr-radix-btn.active {
+  color: #1a1208;
+  background: linear-gradient(180deg, #ffc890, #cc7a30);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4),
+              0 0 4px rgba(255,160,40,0.4);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+  font-weight: 700;
+}
+
 /* Inline-edit inputs (only visible while a field is in edit mode). */
 .dft-lfsr-input {
   background: #1a1208; color: #ffd0a0;
@@ -3433,65 +3478,72 @@
   color: #6a5a4a; font-size: 9px; font-style: italic;
 }
 
-/* Section info button — small ⓘ in the section header that toggles
-   an explanatory popover below. Sized to fit the header line, with
-   a hover ring so it reads as clickable. */
+/* Wraps the section title text + the ⓘ button into a single flex
+   item so the parent header's `space-between` keeps the toggle on
+   the right and the title group on the left. */
+.dft-section-title { display: inline-flex; align-items: center; gap: 6px; }
+/* Tiny info button — circular, hugs the title text. text-transform
+   override is essential because the section header is uppercase
+   styled and would otherwise capitalise the lowercase `i`. */
 .dft-info-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px;
-  margin-left: 8px; padding: 0;
+  width: 18px; height: 18px;
+  margin-left: 10px; padding: 0;
   background: transparent;
-  border: 1px solid #4a3018;
+  border: 1.5px solid #4a6a8a;
   border-radius: 50%;
-  color: #876;
+  color: #80c0ff;
   cursor: pointer;
-  font-size: 10px; font-style: italic; font-family: serif;
+  font: 600 11px/1 'JetBrains Mono', monospace;
+  text-transform: none;          /* keep `i` lowercase */
+  letter-spacing: 0;
   vertical-align: middle;
-  transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
 .dft-info-btn:hover {
-  color: #ffb878; border-color: #aa6a2a; background: rgba(255,160,40,0.10);
+  color: #c0e0ff; border-color: #80b0d0; background: rgba(80,160,255,0.18);
 }
-/* The popover itself — sits inline under the section header so the
-   user doesn't lose context. Same amber accent palette as the rest
-   of the DFT panel. */
+/* Inline info panel — sits under the section header, same band as
+   the LFSR cards. Compact: 4 short rows + a left amber accent. */
 .dft-info-panel {
-  margin: 6px 1.2em 12px;
-  padding: 12px 14px;
+  margin: 6px 1.2em 10px;
+  padding: 10px 14px;
   background: #0e1218;
   border: 1px solid #3a2818;
-  border-left: 3px solid #6a4a2a;
+  border-left: 3px solid #aa6a2a;
   border-radius: 4px;
-  font: 11px/1.45 'JetBrains Mono', monospace;
-  color: #d8c8a0;
-}
-.dft-info-title {
-  color: #ffb878; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.7px; font-size: 10px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #2a1a08;
+  font: 12px/1.55 'JetBrains Mono', monospace;
+  color: #d0d8e4;
+  text-transform: none; letter-spacing: 0;
 }
 .dft-info-row {
   display: grid;
   grid-template-columns: 110px 1fr;
   column-gap: 12px;
-  margin-bottom: 6px;
-  align-items: start;
+  margin: 6px 0;
+  align-items: center;
 }
 .dft-info-row .dft-chain-status {
-  margin-left: 0;        /* override the auto-pushed status pill */
+  margin-left: 0;
   justify-self: start;
+  font-size: 10px;
+  padding: 2px 8px;
 }
-.dft-info-text { color: #d0d8e4; }
-.dft-info-text strong { color: #ffd0a0; }
-.dft-info-text em      { color: #c8b89a; font-style: italic; }
-.dft-info-text sup     { font-size: 9px; }
-.dft-info-foot {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px dashed #2a1a08;
-  color: #876; font-size: 10px; font-style: italic;
+.dft-info-text { color: #c8d0dc; }
+/* Lead-in line at the top of every info popover — short context
+   sentence before the legend rows. Italic + dimmer than the rows
+   so the eye lands on the legend, but reads it on the way down. */
+.dft-info-lead {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #2a1a08;
+  color: #c8b89a;
+  font-style: italic;
+  line-height: 1.55;
+}
+/* No rows under the lead → drop the separator so the popover doesn't
+   show a dangling line. */
+.dft-info-lead:last-child {
+  margin-bottom: 0; padding-bottom: 0; border-bottom: none;
 }
 
 /* Empty-state hint shown when no DFT components exist in the scene. */

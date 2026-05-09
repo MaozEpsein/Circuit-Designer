@@ -101,6 +101,7 @@
         <div class="palette-panel" data-panel="test">
           <span class="palette-chip palette-ff" data-tool="place-scanff" draggable="true" title="DFT scan flip-flop — D + TI inputs, TE select. Chains via TI ← previous Q for scan-based testing.">SCAN-FF</span>
           <span class="palette-chip palette-block" data-tool="place-lfsr" draggable="true" title="Linear-Feedback Shift Register — pseudo-random pattern generator for BIST. Default: 4-bit, x^4+x+1, period 15.">LFSR</span>
+          <span class="palette-chip palette-block" data-tool="place-misr" draggable="true" title="Multiple Input Signature Register — compresses N-bit test responses into a compact signature. Default: 4-bit, x^4+x+1.">MISR</span>
         </div>
         <div class="palette-panel" data-panel="cpu">
           <span class="palette-chip palette-block" data-tool="place-alu" draggable="true">ALU</span>
@@ -211,6 +212,10 @@
       <div class="design-prop-row" id="prop-lfsr-taps-row" style="display:none" title="Bit positions (0-indexed from LSB) XORed to form the new bit. Comma-separated. Primitive polynomials give max-length sequences; non-primitive give shorter cycles.">
         <span>Taps</span>
         <input id="prop-lfsr-taps-input" type="text" maxlength="32" placeholder="3, 0" style="width:84px" />
+      </div>
+      <div class="design-prop-row" id="prop-misr-golden-row" style="display:none" title="Golden signature — the expected MISR value after a clean test run. Leave blank to clear. Compared against live SIG to detect faults.">
+        <span>Golden</span>
+        <input id="prop-misr-golden-input" type="text" maxlength="12" placeholder="blank, 0x0F, 15, 0b1111" style="width:84px" />
       </div>
       <div class="design-prop-row" id="prop-memaddr-row" style="display:none">
         <span>Addr Bits</span>

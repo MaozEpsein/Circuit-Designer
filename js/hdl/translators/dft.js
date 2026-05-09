@@ -133,3 +133,84 @@ registerTranslator(COMPONENT_TYPES.LFSR, (node, ctx) => {
     }],
   };
 });
+
+// ── MISR (Multiple Input Signature Register) ────────────────
+// A Fibonacci LFSR with N additional 1-bit data inputs that XOR into
+// the chain each cycle. Pin layout (mirroring SimulationEngine):
+//   D[0]..D[N-1] (one bit each), CLK
+// Output: Q = the full N-bit signature register.
+//
+// Per-bit next-state on the rising edge:
+//   state[0] <= (XOR over taps) ^ D[0]
+//   state[i] <= state[i-1]      ^ D[i]   (i >= 1)
+//
+// Synth-friendly: emits one `reg [W-1:0]` and a single posedge always
+// block whose RHS is a Concat of per-bit XOR expressions.
+registerTranslator(COMPONENT_TYPES.MISR, (node, ctx) => {
+  const sr   = SourceRef.fromNode(node.id);
+  const W    = node.bitWidth || 4;
+  const taps = Array.isArray(node.taps) ? node.taps : [W - 1, 0];
+  const seed = (node.seed ?? 0) & ((1 << W) - 1);
+
+  const clkNet = ctx.inputNet(node.id, W);     // CLK is at index N (after D[0..N-1])
+  const qNet   = _outNet(ctx, node.id, 0);
+  if (!clkNet || !qNet) return {};
+
+  const stateName = `${qNet.name}_state`;
+  const stateNet  = makeNet({
+    name: stateName, width: W, kind: NET_KIND.REG, sourceRef: sr,
+  });
+
+  // XOR chain over taps for the LSB feedback bit.
+  let tapXor = makeSlice(stateName, taps[0], taps[0], sr);
+  for (let i = 1; i < taps.length; i++) {
+    tapXor = makeBinaryOp('^', tapXor,
+      makeSlice(stateName, taps[i], taps[i], sr), 1, sr);
+  }
+
+  // Build the per-bit next-state, MSB-first so makeConcat orders bits
+  // as Verilog expects ({MSB..LSB}).
+  const dRef = (i) => {
+    const dNet = ctx.inputNet(node.id, i);
+    return dNet ? makeRef(dNet.name, 1) : makeLiteral(0, 1, sr);
+  };
+  const bits = [];
+  for (let i = W - 1; i >= 1; i--) {
+    bits.push(makeBinaryOp('^',
+      makeSlice(stateName, i - 1, i - 1, sr),
+      dRef(i), 1, sr));
+  }
+  bits.push(makeBinaryOp('^', tapXor, dRef(0), 1, sr));    // bit 0
+
+  return {
+    nets: [stateNet],
+    alwaysBlocks: [
+      // initial state = SEED;
+      {
+        kind: 'Always', sourceRef: sr, attributes: [],
+        sensitivity: { initial: true },
+        body: [{
+          kind: 'BlockingAssign',
+          lhs: makeRef(stateName, W),
+          rhs: makeLiteral(seed, W, sr),
+        }],
+      },
+      // posedge clk: state <= { bit_(W-1), …, bit_0 }.
+      {
+        kind: 'Always', sourceRef: sr, attributes: [],
+        sensitivity: { triggers: [{ edge: 'posedge', signal: clkNet.name }] },
+        body: [{
+          kind: 'NonBlockingAssign',
+          lhs: makeRef(stateName, W),
+          rhs: makeConcat(bits, sr),
+        }],
+      },
+    ],
+    assigns: [{
+      // Q exposes the full signature.
+      kind: 'Assign', sourceRef: sr, attributes: [],
+      lhs: makeRef(qNet.name, W),
+      rhs: makeRef(stateName, W),
+    }],
+  };
+});

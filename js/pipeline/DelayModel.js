@@ -35,6 +35,7 @@ export const DEFAULT_DELAY_PS = {
   FF_SLOT:     0,
   SCAN_FF:     0,
   LFSR:        0,
+  MISR:        0,    // clocked, no combinational delay through it
   LATCH_SLOT:  0,
   INPUT:       0,
   OUTPUT:      0,

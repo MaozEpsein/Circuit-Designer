@@ -332,6 +332,47 @@ console.log('DFT (SCAN_FF + LFSR)');
   }
 }
 
+// MISR — N-bit signature register, N data inputs + CLK
+{
+  const v = exportCircuit({
+    nodes: [
+      { id: 'd0', type: 'INPUT', label: 'd0' },
+      { id: 'd1', type: 'INPUT', label: 'd1' },
+      { id: 'd2', type: 'INPUT', label: 'd2' },
+      { id: 'd3', type: 'INPUT', label: 'd3' },
+      { id: 'clk', type: 'CLOCK', label: 'clk' },
+      { id: 'mr', type: 'MISR', bitWidth: 4, taps: [3, 0], seed: 0, label: 'mr' },
+      { id: 'sig', type: 'OUTPUT', bitWidth: 4, label: 'sig' },
+    ],
+    wires: [
+      { id: 'w0', sourceId: 'd0', targetId: 'mr', targetInputIndex: 0 },
+      { id: 'w1', sourceId: 'd1', targetId: 'mr', targetInputIndex: 1 },
+      { id: 'w2', sourceId: 'd2', targetId: 'mr', targetInputIndex: 2 },
+      { id: 'w3', sourceId: 'd3', targetId: 'mr', targetInputIndex: 3 },
+      { id: 'wc', sourceId: 'clk', targetId: 'mr', targetInputIndex: 4, isClockWire: true },
+      { id: 'wq', sourceId: 'mr', sourceOutputIndex: 0, targetId: 'sig', targetInputIndex: 0 },
+    ],
+  }, { topName: 'misr_test', header: false });
+  check('MISR: declares N-bit reg state',
+    /reg\s+\[3:0\]\s+net_mr_0_state/.test(v));
+  check('MISR: initial block seeds the state',
+    /initial\s+begin[\s\S]*net_mr_0_state\s*=\s*4'h0/.test(v));
+  check('MISR: Q exposes the full signature',
+    /assign\s+net_mr_0\s*=\s*net_mr_0_state\b/.test(v));
+  check('MISR: bit 0 = (XOR of taps) ^ D0',
+    /\(\(net_mr_0_state\[3\]\s*\^\s*net_mr_0_state\[0\]\)\s*\^\s*d0\)/.test(v));
+  check('MISR: bit i = state[i-1] ^ Di for i>=1',
+    /\(net_mr_0_state\[2\]\s*\^\s*d3\)/.test(v) &&
+    /\(net_mr_0_state\[1\]\s*\^\s*d2\)/.test(v) &&
+    /\(net_mr_0_state\[0\]\s*\^\s*d1\)/.test(v));
+  check('MISR: Q net is 4-bit',
+    /wire\s+\[3:0\]\s+net_mr_0\b/.test(v));
+  if (isIverilogAvailable()) {
+    const r = parseCheck(v);
+    check('MISR: iverilog parses', r.ok, r.stderr);
+  }
+}
+
 // ── PIPE_REG (pipeline register with stall/flush) ───────────
 console.log('PIPE_REG');
 {

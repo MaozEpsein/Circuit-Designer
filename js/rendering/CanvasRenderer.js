@@ -3887,6 +3887,7 @@ function _getNodeInputCount(node) {
   }
   if (node.type === 'SCAN_FF') return 4;     // D, TI, TE, CLK
   if (node.type === 'LFSR')    return 1;     // CLK only
+  if (node.type === 'MISR')    return (node.bitWidth || 4) + 1;   // D[0..N-1] + CLK
   if (node.type === 'MUX') {
     const n = node.inputCount || 2;
     return n + Math.ceil(Math.log2(n)); // data + select
@@ -4002,6 +4003,9 @@ export function getInputAnchors(node) {
       label = ['D', 'TI', 'TE', 'CLK'][i] || '';
     } else if (node.type === 'LFSR') {
       label = 'CLK';
+    } else if (node.type === 'MISR') {
+      const w = node.bitWidth || 4;
+      label = i < w ? ('D' + i) : 'CLK';
     } else if (node.type === 'ALU') {
       label = ['A', 'B', 'OP'][i] || '';
     } else if (node.type === 'HANDSHAKE') {

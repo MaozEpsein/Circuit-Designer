@@ -45,6 +45,12 @@ const scene    = new SceneGraph();
 const subRegistry = new SubCircuitRegistry();
 const shortcuts = new ShortcutManager();
 const state    = new StateManager();
+// Expose `state` on window so the DFT panel (and other UI modules
+// that aren't in the import graph from app.js) can read engine state
+// like ffStates without an explicit pass-through. Read-only contract:
+// nothing should *mutate* state via window — that path stays through
+// commands.execute() / bus events.
+if (typeof window !== 'undefined') window.state = state;
 const commands = new CommandManager(100);
 const simCtrl  = new SimulationController();
 const pipelineAnalyzer = new PipelineAnalyzer(scene);
@@ -720,6 +726,13 @@ function tick() {
     : [];
   bus.emit('runtime:cache-stats', cacheArr);
 
+  // Per-tick poke for the DFT panel — its SIGNATURE COMPACTORS section
+  // reads MISR state straight off ffStates, but the panel only
+  // re-renders on scene mutations. Emitting this every tick lets the
+  // live signature track the simulation in real time. The payload is
+  // empty because the panel reads ffStates directly.
+  bus.emit('runtime:dft-data', null);
+
   // Lower clock after evaluation
   if (state.clockHigh) {
     state.clockHigh = false;
@@ -932,19 +945,31 @@ function _updatePropsPanel() {
     propMembitRow.style.display = 'none';
     propMemaddrRow.style.display = 'none';
   }
-  // LFSR-specific rows: seed + taps. Visible only when an LFSR is selected.
+  // LFSR / MISR rows: seed + taps. Both share the same fields.
+  // MISR also gets an extra GOLDEN row below.
   const lfsrSeedRow  = document.getElementById('prop-lfsr-seed-row');
   const lfsrSeedInp  = document.getElementById('prop-lfsr-seed-input');
   const lfsrTapsRow  = document.getElementById('prop-lfsr-taps-row');
   const lfsrTapsInp  = document.getElementById('prop-lfsr-taps-input');
-  if (node.type === 'LFSR') {
+  const misrGoldRow  = document.getElementById('prop-misr-golden-row');
+  const misrGoldInp  = document.getElementById('prop-misr-golden-input');
+  if (node.type === 'LFSR' || node.type === 'MISR') {
     if (lfsrSeedRow) lfsrSeedRow.style.display = '';
     if (lfsrTapsRow) lfsrTapsRow.style.display = '';
-    if (lfsrSeedInp) lfsrSeedInp.value = String(node.seed ?? 1);
+    if (lfsrSeedInp) lfsrSeedInp.value = String(node.seed ?? (node.type === 'MISR' ? 0 : 1));
     if (lfsrTapsInp) lfsrTapsInp.value = (node.taps || []).join(', ');
   } else {
     if (lfsrSeedRow) lfsrSeedRow.style.display = 'none';
     if (lfsrTapsRow) lfsrTapsRow.style.display = 'none';
+  }
+  if (node.type === 'MISR') {
+    if (misrGoldRow) misrGoldRow.style.display = '';
+    if (misrGoldInp) {
+      misrGoldInp.value = (typeof node.goldenSig === 'number')
+        ? '0x' + (node.goldenSig >>> 0).toString(16) : '';
+    }
+  } else {
+    if (misrGoldRow) misrGoldRow.style.display = 'none';
   }
   if (node.type !== 'CACHE') {
     const linesRow = document.getElementById('prop-cache-lines-row');
@@ -1130,7 +1155,7 @@ document.getElementById('prop-memaddr-select')?.addEventListener('change', () =>
 // Resets the running register so the new seed takes effect immediately.
 document.getElementById('prop-lfsr-seed-input')?.addEventListener('change', (e) => {
   const node = _getSelectedNode();
-  if (!node || node.type !== 'LFSR') return;
+  if (!node || (node.type !== 'LFSR' && node.type !== 'MISR')) return;
   const raw = String(e.target.value || '').trim();
   let val = NaN;
   if (raw.startsWith('0x') || raw.startsWith('0X')) val = parseInt(raw.slice(2), 16);
@@ -1141,11 +1166,10 @@ document.getElementById('prop-lfsr-seed-input')?.addEventListener('change', (e) 
   state.ffStates.delete(node.id);
 });
 
-// LFSR taps input — comma- or space-separated bit indices, e.g. "3, 0".
-// Filters to non-negative integers within the register width.
+// LFSR / MISR taps input — comma- or space-separated bit indices.
 document.getElementById('prop-lfsr-taps-input')?.addEventListener('change', (e) => {
   const node = _getSelectedNode();
-  if (!node || node.type !== 'LFSR') return;
+  if (!node || (node.type !== 'LFSR' && node.type !== 'MISR')) return;
   const sz = node.bitWidth || 4;
   const taps = String(e.target.value || '')
     .split(/[\s,]+/)
@@ -1154,6 +1178,24 @@ document.getElementById('prop-lfsr-taps-input')?.addEventListener('change', (e) 
   if (taps.length === 0) return;
   commands.execute(new SetNodePropsCommand(scene, node.id, { taps }));
   state.ffStates.delete(node.id);
+});
+
+// MISR golden signature — accepts dec / 0xHEX / 0bBIN. Blank clears.
+document.getElementById('prop-misr-golden-input')?.addEventListener('change', (e) => {
+  const node = _getSelectedNode();
+  if (!node || node.type !== 'MISR') return;
+  const raw = String(e.target.value || '').trim();
+  if (raw === '') {
+    commands.execute(new SetNodePropsCommand(scene, node.id, { goldenSig: null }));
+    return;
+  }
+  let val = NaN;
+  if (raw.startsWith('0x') || raw.startsWith('0X')) val = parseInt(raw.slice(2), 16);
+  else if (raw.startsWith('0b') || raw.startsWith('0B')) val = parseInt(raw.slice(2), 2);
+  else val = parseInt(raw, 10);
+  if (!Number.isFinite(val) || val < 0) return;
+  const masked = val & ((1 << (node.bitWidth || 4)) - 1);
+  commands.execute(new SetNodePropsCommand(scene, node.id, { goldenSig: masked }));
 });
 
 let _lastPropsNodeId = null;
@@ -2281,7 +2323,7 @@ function _refreshMemInspector() {
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
     n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
     n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG' ||
-    n.type === 'LFSR'
+    n.type === 'LFSR' || n.type === 'MISR'
   );
 
   if (memNodes.length === 0) {
@@ -2289,7 +2331,7 @@ function _refreshMemInspector() {
     return;
   }
 
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR', MISR: 'MISR' };
   let html = '';
 
   for (const node of memNodes) {
@@ -4611,6 +4653,13 @@ const EXAMPLES = [
     desc: 'Three SCAN-FFs chained for scan-based testing. Each has D, TI (test input), TE (test enable), CLK. With TE=0, each behaves like a normal D flip-flop fed from its own D input. With TE=1, each loads from TI = the previous SCAN-FF\'s Q — so a value injected at SCAN_IN shifts through the chain on every clock edge and emerges at SCAN_OUT after 3 cycles. Open the DFT panel (T) to see the SCAN CHAINS section auto-detect the chain: ff_a → ff_b → ff_c. Toggle TE in the input panel and step the clock to watch the shift in action.',
     tags: ['dft', 'scan', 'scan-ff', 'sequential'],
     file: 'examples/circuits/dft-scan-chain-3.json',
+  },
+  {
+    id: 'dft-misr-signature',
+    title: '6. DFT — MISR zoo (5 cases, widths 4 → 32)',
+    desc: 'Five MISRs in one canvas, covering every state of the SIGNATURE COMPACTORS panel and every interesting width. MISR_match (4-bit, all pins to GND, golden=0x0) → permanent green "match". MISR_mismatch (4-bit, same wiring, golden=0xF) → permanent red "mismatch". MISR_unconfig (4-bit, manual D0..D3, no golden) → amber "no golden" for live experimentation. MISR_wide (8-bit, manual wd0..wd7) → aliasing 1/256 instead of 1/16. MISR_xl (32-bit, taps [31,21,1,0] = CRC-32 reciprocal polynomial, 32 manual inputs xd0..xd31) → production-grade scale, aliasing ≈ 1 in 4 billion. All five share one CLOCK; STEP advances every signature together. Switch the DISPLAY pill to HEX or DEC for easier reading of MISR_xl.',
+    tags: ['dft', 'misr', 'bist', 'signature'],
+    file: 'examples/circuits/dft-misr-signature.json',
   },
   {
     id: 'dft-complex-showcase',
