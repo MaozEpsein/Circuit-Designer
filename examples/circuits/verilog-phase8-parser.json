@@ -1,0 +1,24 @@
+{
+  "_doc": "Phase 8 demo — the hand-written Verilog parser in action.\n\nThis circuit is a small 2:1 MUX with a registered output. The corresponding hand-written Verilog source lives at `examples/hdl-corpus/phase8-mux2-handwritten.v`. To compare:\n  • Click VERILOG in the bottom toolbar → see what our exporter produces from THIS scene.\n  • Open the sidecar `.v` (Phase 8 import path) — same 2:1 MUX written by hand, exercising parameter, attribute, case, async-reset always, and $display.\n  • The parser tests (`test-hdl-parser*.mjs`) round-trip both: the exporter's output and the hand-written sidecar. Either text → AST → re-print → AST is structurally identical.\n\nWhat Phase 8 ships:\n  • Lexer: identifiers, sized & unsized numbers (`8'hFF`, `4'b10x1`), operators, keywords, line/block comments, `(* attribute *)` blocks with line/col tracking. System identifiers (`$display`, `$readmemh`).\n  • AST: 27 node kinds covering modules, ports, nets, memories, assigns, always/initial, primitive + module instances, all expression forms (literal, ref, slice, index, binary/unary/ternary, concat, replicate, paren, system call, string literal), parameters.\n  • Parser: recursive-descent + Pratt precedence climber. Error recovery at statement boundaries — collects multiple errors in one pass instead of stopping on the first. Resource limits (max recursion depth, max tokens, parse deadline) protect against adversarial input.\n  • L1 gate: every Phase-1..7 demo's exported `.v` parses cleanly AND round-trips through AST → re-print → AST with structural equality.",
+  "nodes": [
+    { "type": "CLOCK", "x": -360, "y": -200, "value": 0, "label": "clk", "id": "clk" },
+    { "type": "INPUT", "x": -360, "y": -160, "fixedValue": 0, "label": "rst", "id": "rst" },
+    { "type": "INPUT", "x": -360, "y": -120, "fixedValue": 0, "label": "sel", "id": "sel" },
+    { "type": "INPUT", "x": -360, "y":  -60, "fixedValue": 5, "bitWidth": 4, "label": "d0", "id": "d0" },
+    { "type": "INPUT", "x": -360, "y":  -20, "fixedValue": 10, "bitWidth": 4, "label": "d1", "id": "d1" },
+
+    { "type": "MUX", "x": -120, "y": -40, "inputCount": 2, "bitWidth": 4, "label": "mux", "id": "mux" },
+
+    { "type": "REGISTER", "x": 100, "y": -40, "bitWidth": 4, "initialQ": 0, "label": "q_reg", "id": "q_reg" },
+    { "type": "OUTPUT", "x": 320, "y": -40, "targetValue": 0, "sandbox": true, "bitWidth": 4, "label": "q", "id": "q_out" }
+  ],
+  "wires": [
+    { "id": "wd0", "sourceId": "d0",  "targetId": "mux", "targetInputIndex": 0 },
+    { "id": "wd1", "sourceId": "d1",  "targetId": "mux", "targetInputIndex": 1 },
+    { "id": "wsl", "sourceId": "sel", "targetId": "mux", "targetInputIndex": 2 },
+    { "id": "wmq", "sourceId": "mux", "targetId": "q_reg", "targetInputIndex": 0 },
+    { "id": "wre", "sourceId": "rst", "targetId": "q_reg", "targetInputIndex": 2 },
+    { "id": "wck", "sourceId": "clk", "targetId": "q_reg", "targetInputIndex": 3, "isClockWire": true },
+    { "id": "wqo", "sourceId": "q_reg", "targetId": "q_out", "targetInputIndex": 0 }
+  ]
+}

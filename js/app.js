@@ -4866,6 +4866,20 @@ const EXAMPLES = [
     file: 'examples/circuits/verilog-phase6-hierarchy.json',
   },
   {
+    id: 'verilog-phase9-elaborate',
+    title: '9. VERILOG — elaboration & widths',
+    desc: 'Phase-9 demo: a tiny 8-bit register that exercises the AST → IR lowering. Click VERILOG to see the exported text. Behind the scenes the same text now feeds the Phase-8 parser → Phase-9 elaborator round-trip: every demo (Phases 1-8, 21 files) is exported, parsed, elaborated, and the resulting IR matches the original IR for ports, nets, memories, and instance types. Run `node examples/tests/test-hdl-elaborate.mjs` (30 unit checks) or `node examples/tests/test-hdl-elaborate-l1-gate.mjs` (21/21 end-to-end) to see proof.',
+    tags: ['verilog', 'phase9', 'elaborate', 'ir', 'widths'],
+    file: 'examples/circuits/verilog-phase9-elaborate.json',
+  },
+  {
+    id: 'verilog-phase8-parser',
+    title: '8. VERILOG — hand-written parser exercise',
+    desc: 'Phase-8 demo: a small 2:1 MUX with a registered output. The companion file at `examples/hdl-corpus/phase8-mux2-handwritten.v` is the SAME design written by hand in Verilog — exercising parameter, `(* keep *)` attribute, case statement, async-reset always block, and `$display`. Both texts (this scene\'s exporter output AND the hand-written sidecar) round-trip cleanly through the parser → AST → re-print → AST with structural equality. Run `node examples/tests/test-hdl-parser-l1-gate.mjs` to see all 20 Phase 1-7 demos pass the same gate.',
+    tags: ['verilog', 'phase8', 'parser', 'lexer', 'ast'],
+    file: 'examples/circuits/verilog-phase8-parser.json',
+  },
+  {
     id: 'verilog-phase7-export-ux',
     title: '7. VERILOG — export UX showcase',
     desc: 'Phase-7 demo: small mixed circuit (counter → XOR-mask → register → adder) tagged with `stage` attributes so the export shows the new `// ─── Stage N ───` dividers. Use it to exercise the full export modal: line-numbered syntax-highlit preview, live top-name editing, stats bar, header toggle, error-surface warnings panel, TESTBENCH download (clock + VCD dump skeleton), PROJECT .ZIP bundle (.v + _tb.v + README, ready for `iverilog -g2005`), and right-click → Copy as Verilog on any block to grab a single-component snippet.',

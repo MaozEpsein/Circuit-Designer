@@ -1,0 +1,17 @@
+{
+  "_doc": "Phase 9 demo — elaboration: AST → IR with width inference + parameter resolution.\n\nPhase 8 turned text into an AST; Phase 9 lowers the AST into the same IR the exporter produces from a circuit. The two pipelines now meet in the middle:\n\n  circuit.json ─ exportCircuit ─→ Verilog text ─ parseVerilog ─→ AST ─ elaborate ─→ IR\n         \\                                                                       /\n          ╰─ fromCircuit ────────────────────────────→ IR (same shape)  ←──────╯\n\nThis scene exercises every elaboration responsibility:\n  • Parameter resolution — a parameter governs the bit-width of d/q/mem.\n  • Width inference — every IR Ref / Slice / Concat carries an explicit width derived from the symbol table.\n  • Always blocks — sensitivity lists and statement bodies (if/case/blocking/non-blocking) all lower 1:1.\n  • Memory pattern — `reg [W-1:0] mem [0:DEPTH-1]` becomes IR.memories.\n  • (* attribute *) blocks — strings carried through to IR.attributes as { key: 'verilog-attr', value }.\n  • Submodule instantiation — child module goes under IR.submodules.\n\nRun `node examples/tests/test-hdl-elaborate.mjs` for the unit suite (30 checks) or `node examples/tests/test-hdl-elaborate-l1-gate.mjs` for the end-to-end round-trip on every Phase 1-8 demo (21/21 pass: ports, nets, memories, instance counts all match the exporter's IR).",
+  "nodes": [
+    { "type": "CLOCK", "x": -360, "y": -200, "value": 0, "label": "clk", "id": "clk" },
+    { "type": "INPUT", "x": -360, "y": -160, "fixedValue": 0, "label": "rst", "id": "rst" },
+    { "type": "INPUT", "x": -360, "y": -100, "fixedValue": 0, "bitWidth": 8, "label": "d", "id": "d" },
+
+    { "type": "REGISTER", "x":  -80, "y": -100, "bitWidth": 8, "initialQ": 0, "label": "q", "id": "q" },
+    { "type": "OUTPUT",   "x":  220, "y": -100, "targetValue": 0, "sandbox": true, "bitWidth": 8, "label": "q_out", "id": "q_out" }
+  ],
+  "wires": [
+    { "id": "w0", "sourceId": "d",   "targetId": "q",     "targetInputIndex": 0 },
+    { "id": "w1", "sourceId": "rst", "targetId": "q",     "targetInputIndex": 2 },
+    { "id": "w2", "sourceId": "clk", "targetId": "q",     "targetInputIndex": 3, "isClockWire": true },
+    { "id": "w3", "sourceId": "q",   "targetId": "q_out", "targetInputIndex": 0 }
+  ]
+}

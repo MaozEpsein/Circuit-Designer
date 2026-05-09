@@ -44,12 +44,24 @@ export function exportCircuit(circuitJSON, options = {}) {
     throw first;
   }
 
-  const ir = fromCircuit(circuitJSON);
+  const ir = fromCircuit(circuitJSON, { synthesisSafe: opts.synthesisSafe });
   ir.name = opts.topName;
 
+  // Build the header so it can include a tri-state preservation warning
+  // when the user opted out of synthesisSafe.
+  let extraHeader = '';
+  if (opts.synthesisSafe === false && Array.isArray(ir._lowerTriStateDiagnostics)) {
+    const warn = ir._lowerTriStateDiagnostics.find(d => d.kind === 'tristate-preserved');
+    if (warn) extraHeader = `\nWARNING: ${warn.message}`;
+  }
+  const headerText = buildHeaderText(opts);
+  const finalHeader = headerText && extraHeader
+    ? headerText + extraHeader
+    : (headerText || (extraHeader ? extraHeader.trim() : null));
+
   return toVerilog(ir, {
-    header: !!opts.header,
-    headerText: buildHeaderText(opts),
+    header: !!opts.header || !!extraHeader,
+    headerText: finalHeader,
   });
 }
 

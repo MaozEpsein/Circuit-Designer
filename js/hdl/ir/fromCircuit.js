@@ -11,6 +11,7 @@ import {
   makeModule, makePort, makeNet, makeInstance, makeRef,
   PORT_DIR, NET_KIND,
 } from './types.js';
+import { lowerTriState as _lowerTriState } from './lowerTriState.js';
 
 function nodeBitWidth(node, outIdx = 0) {
   // Per-output overrides for multi-output components whose pins have
@@ -330,11 +331,13 @@ export function fromCircuit(circuitJSON, opts = {}) {
 
   for (const node of (circuit.nodes || [])) {
     if (!node.type) continue;
-    // Port nodes (INPUT / OUTPUT / CLOCK / DISPLAY_7SEG) have already
-    // been turned into module ports by collectPorts. The OUTPUT-port
-    // wiring pass below routes their drivers; no translator needed.
+    // Port nodes (INPUT / OUTPUT / CLOCK) have already been turned
+    // into module ports by collectPorts. The OUTPUT-port wiring pass
+    // below routes their drivers; no translator needed for those.
+    // DISPLAY_7SEG is also port-allocated by collectPorts but its
+    // segment-packing assign is emitted by the translator below.
     if (node.type === 'INPUT' || node.type === 'OUTPUT' ||
-        node.type === 'CLOCK' || node.type === 'DISPLAY_7SEG') continue;
+        node.type === 'CLOCK') continue;
     if (!hasTranslator(node.type)) {
       unmapped.push({ type: node.type, nodeId: node.id });
       continue;
@@ -415,37 +418,9 @@ export function fromCircuit(circuitJSON, opts = {}) {
         lhs: makeRef(port.name, port.width),
         rhs: makeRef(srcNet.name, srcNet.width || port.width),
       });
-    } else if (node.type === 'DISPLAY_7SEG') {
-      // Pack the seven segment-input wires into a single 7-bit Concat
-      // and assign to the DISPLAY_7SEG's output port. Verilog concat
-      // is MSB-first, so segment 6 sits at bit 6 (leftmost) and
-      // segment 0 at bit 0 (rightmost). Missing wires fall through
-      // as 1'b0 placeholders so the port stays correctly widthed.
-      const port = portByNodeId.get(node.id);
-      if (!port) continue;
-      const parts = [];
-      for (let i = 6; i >= 0; i--) {
-        const wire = (circuit.wires || []).find(
-          w => w.targetId === node.id && (w.targetInputIndex || 0) === i,
-        );
-        if (wire) {
-          const key = `${wire.sourceId}:${wire.sourceOutputIndex || 0}`;
-          const src = netByEndpoint.get(key);
-          parts.push(src
-            ? makeRef(src.name, 1)
-            : { kind: 'Literal', sourceRef: SourceRef.unknown(), attributes: [], value: 0, width: 1 });
-        } else {
-          parts.push({ kind: 'Literal', sourceRef: SourceRef.unknown(), attributes: [], value: 0, width: 1 });
-        }
-      }
-      assigns.push({
-        kind: 'Assign',
-        sourceRef: SourceRef.fromNode(node.id),
-        attributes: [],
-        lhs: makeRef(port.name, 7),
-        rhs: { kind: 'Concat', sourceRef: SourceRef.fromNode(node.id), attributes: [], parts, width: 7 },
-      });
     }
+    // DISPLAY_7SEG used to live here too — it's now a regular
+    // translator in js/hdl/translators/display.js (Phase 3 cleanup).
   }
 
   const ir = makeModule({
@@ -464,6 +439,13 @@ export function fromCircuit(circuitJSON, opts = {}) {
   });
   // Non-IR metadata used by the pretty printer to render // TODO markers.
   ir._unmapped = unmapped;
+  // Run lowerTriState as the final IR-shaping pass — coalesces internal
+  // multi-driver tri-state patterns into a single priority MUX so the
+  // emitted Verilog is synthesis-safe (Yosys / Vivado / Quartus reject
+  // internal `1'bz`). `synthesisSafe: false` keeps the raw form for
+  // simulation-only users.
+  const ts = _lowerTriState(ir, { synthesisSafe: opts.synthesisSafe !== false });
+  ir._lowerTriStateDiagnostics = ts.diagnostics;
   return ir;
 }
 

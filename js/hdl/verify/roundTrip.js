@@ -1,29 +1,38 @@
-// Round-trip harness: IRModule → Verilog → (parser) → IRModule, then equals.
+// Round-trip harness: IRModule → Verilog → (parser → elaborate) → IRModule,
+// then equals.
 //
-// ⚠  IMPORTANT LIMITATION (Phase 2 through Phase 7):
-//     The default parser here is a STUB. It returns the original IR
-//     verbatim without ever reading the Verilog string. This means every
-//     round-trip check via roundTripIR() with the stub is *vacuous* with
-//     respect to Verilog fidelity — it only exercises the harness API and
-//     the `equals` function. Real round-trip coverage begins at Phase 8
-//     when the Verilog parser lands and the caller passes it in as
-//     `parser`. Tests that rely on this harness between Phases 2 and 7
-//     are foundation checks, not fidelity checks. Do not mistake a green
-//     stub-round-trip for a proof that exported Verilog is re-importable.
+// Phase 9: the default parser is now the real Phase-8 parser + elaborator.
+// `roundTripIR(ir)` therefore exercises the FULL fidelity pipeline:
+//   1. ir → Verilog text via toVerilog
+//   2. text → AST  via parseVerilog
+//   3. AST → IR   via elaborate
+//   4. equals(original, round-tripped)
+// Callers that want to test only the harness can pass in `parser:
+// stubParser` to fall back to the pre-Phase-8 behaviour.
 
 import { toVerilog } from '../ir/toVerilog.js';
 import { equals } from '../ir/equals.js';
+import { parseVerilog } from '../parser/parser.js';
+import { elaborate } from '../parser/elaborate.js';
 
-export function roundTripIR(ir, { parser = stubParser } = {}) {
+export function roundTripIR(ir, { parser = realParser } = {}) {
   const verilog = toVerilog(ir);
   const parsed = parser(verilog, ir);   // ir passed as sidecar for the stub
   const ok = equals(ir, parsed);
   return { ok, verilog, parsed };
 }
 
-// Stub parser — returns the sidecar IR verbatim. This is sufficient to
-// exercise the harness and `equals` while the real parser is unimplemented.
-function stubParser(_verilog, sidecarIR) {
+// Real parser path — text → AST → IR.
+function realParser(verilog, _sidecarIR) {
+  const { ast } = parseVerilog(verilog);
+  const { ir }  = elaborate(ast);
+  return ir;
+}
+
+// Stub parser — returns the sidecar IR verbatim. Available for callers
+// that want to verify the harness independent of the parser/elaborator
+// (mostly historical; new tests should use the real parser).
+export function stubParser(_verilog, sidecarIR) {
   return sidecarIR;
 }
 
