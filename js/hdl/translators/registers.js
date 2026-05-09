@@ -257,8 +257,11 @@ registerTranslator(COMPONENT_TYPES.PIPE_REG, (node, ctx) => {
 });
 
 // ── SHIFT_REG ────────────────────────────────────────────────
-// Bidirectional shift register. DIR=1 → left (DIN enters at LSB),
-// DIR=0 → right (DIN enters at MSB). Matches the engine semantics.
+// Bidirectional shift register. DIR=0 → left (DIN enters at LSB),
+// DIR=1 → right (DIN enters at MSB). Matches the engine semantics
+// in SimulationEngine — and yes, an earlier version of this comment
+// claimed the opposite, with the if/else sense flipped, which the
+// Phase-B L2 harness flagged on first run.
 registerTranslator(COMPONENT_TYPES.SHIFT_REG, (node, ctx) => {
   const sr = SourceRef.fromNode(node.id);
   const W  = node.bitWidth || 4;
@@ -290,10 +293,11 @@ registerTranslator(COMPONENT_TYPES.SHIFT_REG, (node, ctx) => {
     ? [{
         kind: 'IfStmt', sourceRef: sr,
         cond: makeRef(dirNet.name, 1),
-        then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: left }],
-        else: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: right }],
+        // dir=1 → shift right; dir=0 → shift left (matches engine).
+        then: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: right }],
+        else: [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: left  }],
       }]
-    // No DIR pin → default to left-shift (MSB-first).
+    // No DIR pin → default to left-shift (LSB receives DIN).
     : [{ kind: 'NonBlockingAssign', lhs: qRef, rhs: left }];
 
   const guards = [];

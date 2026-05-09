@@ -210,3 +210,165 @@ export function runL2(circuit, { stimulus = null, stepNs = 10, topName = 'top' }
   }
   return { ok: true };
 }
+
+// ── Phase B — sequential L2 ─────────────────────────────────
+// Same shape as runL2 but with a clock domain. Each cycle is `period`
+// time units long: inputs change at t = i*period, the clock rises at
+// t = i*period + period/2, and the diff samples outputs after the
+// rising edge (when registers have latched the new state).
+//
+// `stabilityCycles` skips the diff over the first N cycles. iverilog
+// boots regs to `x` while our engine boots them to `0`; without the
+// skip, every register design would diverge on cycle 0.
+export function runL2Sequential(circuit, opts = {}) {
+  const { stimulus, cycles = 16, period = 10, stabilityCycles = 2,
+          topName = 'top' } = opts;
+  if (!isIverilogAvailable()) {
+    return { ok: true, skipped: true, reason: 'iverilog not on PATH' };
+  }
+
+  const clkNode = circuit.nodes.find(n => n.type === 'CLOCK');
+  if (!clkNode) return { ok: false, reason: 'sequential harness needs a CLOCK node' };
+  const dataInputs = circuit.nodes.filter(n => n.type === 'INPUT');
+  const outputs    = circuit.nodes.filter(n => n.type === 'OUTPUT');
+  if (outputs.length === 0) {
+    return { ok: true, skipped: true, reason: 'no OUTPUT nodes' };
+  }
+
+  // Build per-cycle stimulus. Caller can pass `stimulus` as either a
+  // function (cycleIdx) → vec or an array of vecs. Default zeroes.
+  const samples = [];
+  for (let i = 0; i < cycles; i++) {
+    let vec;
+    if (typeof stimulus === 'function')      vec = stimulus(i) || {};
+    else if (Array.isArray(stimulus))        vec = stimulus[i] || {};
+    else                                     vec = {};
+    samples.push(vec);
+  }
+
+  // ── Native run + VCD ────────────────────────────────────────
+  // For each cycle: set inputs, drop CLK to 0 + evaluate (settle),
+  // then raise CLK to 1 + evaluate (rising edge — FFs latch). We
+  // capture output values after the rising edge and emit them at
+  // t = i*period + period/2 so the timeline matches iverilog.
+  let idChar = 33;
+  const idOf = new Map();
+  const vcdLines = [];
+  vcdLines.push('$timescale 1ns/1ns $end');
+  vcdLines.push('$scope module top $end');
+  for (const n of outputs) {
+    const name = sanitizeIdentifier(n.label || n.id, 'out');
+    const width = Math.max(1, (n.bitWidth || 1) | 0);
+    const id = String.fromCharCode(idChar++);
+    idOf.set(n.id, { id, name, width });
+    vcdLines.push(`$var wire ${width} ${id} ${name} $end`);
+  }
+  vcdLines.push('$upscope $end');
+  vcdLines.push('$enddefinitions $end');
+  const fmt = (v, width) => width === 1
+    ? String((v | 0) & 1)
+    : 'b' + ((v | 0) >>> 0).toString(2).padStart(width, '0').slice(-width) + ' ';
+
+  const ffStates = new Map();
+  const halfPeriod = period >> 1;
+  for (let i = 0; i < cycles; i++) {
+    const vec = samples[i];
+    for (const n of dataInputs) {
+      if (vec[n.id] !== undefined) n.fixedValue = vec[n.id];
+    }
+    // Low phase
+    clkNode.value = 0;
+    evaluate(circuit.nodes, circuit.wires, ffStates, i * 2);
+    // Rising edge
+    clkNode.value = 1;
+    const r = evaluate(circuit.nodes, circuit.wires, ffStates, i * 2 + 1);
+    vcdLines.push(`#${i * period + halfPeriod}`);
+    for (const n of outputs) {
+      const meta = idOf.get(n.id);
+      const v = r.nodeValues.get(n.id) ?? 0;
+      vcdLines.push(meta.width === 1
+        ? fmt(v, 1) + meta.id
+        : fmt(v, meta.width) + meta.id);
+    }
+  }
+  const expectedVCD = vcdLines.join('\n') + '\n';
+
+  // ── Verilog export + sequential TB ─────────────────────────
+  const v = exportCircuit(circuit, { topName, header: false });
+  // Pull port table from the exported header for the TB.
+  const tbPorts = [];
+  const re = /^\s*(input|output|inout)\s+(?:\[(\d+):(\d+)\]\s+)?([A-Za-z_][A-Za-z0-9_$]*)/gm;
+  let mm;
+  while ((mm = re.exec(v))) {
+    tbPorts.push({ dir: mm[1], width: mm[2] ? Math.abs(+mm[2] - +mm[3]) + 1 : 1, name: mm[4] });
+  }
+  const inputsTb  = tbPorts.filter(p => p.dir === 'input');
+  const outputsTb = tbPorts.filter(p => p.dir !== 'input');
+  const clkName   = sanitizeIdentifier(clkNode.label || clkNode.id, 'in');
+
+  // Map sample's engine node IDs to TB port names.
+  for (const s of samples) {
+    s.__byPortName = {};
+    for (const inp of dataInputs) {
+      const pn = sanitizeIdentifier(inp.label || inp.id, 'in');
+      s.__byPortName[pn] = s[inp.id] ?? 0;
+    }
+  }
+  const tbLines = [];
+  tbLines.push('`timescale 1ns/1ns');
+  tbLines.push(`module ${topName}_tb;`);
+  for (const p of inputsTb)  tbLines.push(`  reg ${p.width > 1 ? `[${p.width-1}:0] ` : ''}${p.name};`);
+  for (const p of outputsTb) tbLines.push(`  wire ${p.width > 1 ? `[${p.width-1}:0] ` : ''}${p.name};`);
+  tbLines.push('');
+  tbLines.push(`  ${topName} dut (`);
+  tbLines.push(tbPorts.map(p => `    .${p.name}(${p.name})`).join(',\n'));
+  tbLines.push('  );');
+  tbLines.push('');
+  tbLines.push(`  initial ${clkName} = 0;`);
+  tbLines.push(`  always #${halfPeriod} ${clkName} = ~${clkName};`);
+  tbLines.push('');
+  tbLines.push('  initial begin');
+  tbLines.push(`    $dumpfile("dump.vcd");`);
+  tbLines.push(`    $dumpvars(0, ${topName}_tb.dut);`);
+  // Initialise data inputs to 0.
+  for (const p of inputsTb) {
+    if (p.name === clkName) continue;
+    tbLines.push(`    ${p.name} = ${p.width}'h0;`);
+  }
+  for (let i = 0; i < cycles; i++) {
+    const vec = samples[i].__byPortName;
+    const assigns = [];
+    for (const p of inputsTb) {
+      if (p.name === clkName) continue;
+      const val = vec[p.name];
+      if (val !== undefined) {
+        assigns.push(`${p.name} = ${p.width}'h${(val >>> 0).toString(16)};`);
+      }
+    }
+    if (i === 0) {
+      // Apply cycle-0 inputs at t=0 BEFORE the first rising edge at
+      // t=halfPeriod. The "always" toggling above will produce that
+      // edge at the right time.
+      if (assigns.length) tbLines.push(`    ${assigns.join(' ')}`);
+    } else {
+      // Subsequent cycles: change inputs at t = i*period (low phase
+      // again), giving the design time before the next rising edge
+      // at t = i*period + halfPeriod.
+      tbLines.push(`    #${period} ${assigns.join(' ')}`);
+    }
+  }
+  tbLines.push(`    #${period} $finish;`);
+  tbLines.push('  end');
+  tbLines.push('endmodule');
+  const tb = tbLines.join('\n') + '\n';
+
+  const r = simulate(v + '\n' + tb, { standard: '2005', vcdName: 'dump.vcd' });
+  if (!r.ok)   return { ok: false, reason: 'iverilog failure', stderr: r.stderr };
+  if (!r.vcd)  return { ok: false, reason: 'iverilog produced no VCD' };
+
+  const outNames = outputs.map(n => sanitizeIdentifier(n.label || n.id, 'out'));
+  const startTime = stabilityCycles * period + halfPeriod;
+  const diff = vcdDiff(expectedVCD, r.vcd, { signals: outNames, startTime });
+  if (!diff.ok) return { ok: false, divergence: diff.firstDivergence };
+  return { ok: true };
+}

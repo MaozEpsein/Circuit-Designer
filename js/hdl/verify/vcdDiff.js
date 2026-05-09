@@ -37,7 +37,18 @@ function parseVCD(text) {
         const val = raw.slice(1, sp);
         const id = raw.slice(sp + 1);
         const sig = signals.get(id);
-        if (sig) current.changes.set(sig.name, val);
+        // Normalise to fixed width so iverilog's terse "b11" and our
+        // padded "b0011" compare equal for the same numeric value.
+        // Mixed x/z vectors keep their non-numeric chars; we only
+        // pad with leading 0 (the convention iverilog itself defines
+        // for unspecified high bits of pure-binary vectors).
+        if (sig) {
+          let v = val;
+          if (/^[01]+$/.test(v) && v.length < sig.width) {
+            v = v.padStart(sig.width, '0');
+          }
+          current.changes.set(sig.name, v);
+        }
       } else if (raw.length >= 2) {
         const val = raw[0];
         const id = raw.slice(1);
@@ -52,7 +63,16 @@ function parseVCD(text) {
 
 // Compare two VCDs signal-for-signal at each time step. Returns
 // { ok, firstDivergence?: { time, signal, expected, actual } }.
-export function vcdDiff(expectedText, actualText, { signals = null } = {}) {
+//
+// Options:
+//   signals     — restrict the diff to these names only (others are
+//                 ignored). Without it, every signal that appears on
+//                 either side participates.
+//   startTime   — skip every comparison step strictly before this
+//                 time. Used by sequential L2 to ignore the
+//                 stability window where iverilog regs are still 'x'
+//                 and the native simulator already has them at 0.
+export function vcdDiff(expectedText, actualText, { signals = null, startTime = 0 } = {}) {
   const a = parseVCD(expectedText);
   const b = parseVCD(actualText);
 
@@ -80,6 +100,7 @@ export function vcdDiff(expectedText, actualText, { signals = null } = {}) {
       }
       ib++;
     }
+    if (t < startTime) continue;     // honour the stability window
     for (const [name, s] of state) {
       if (s.expected !== s.actual) {
         return { ok: false, firstDivergence: { time: t, signal: name, expected: s.expected, actual: s.actual } };
