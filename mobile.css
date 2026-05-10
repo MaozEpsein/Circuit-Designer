@@ -1,0 +1,121 @@
+/*
+ * mobile.css — Scope A Mobile Viewer Mode
+ *
+ * Every rule is scoped to `body.mobile-viewer`. Without that class, this file
+ * contributes ZERO to the desktop layout. Loaded after style.css and app.css
+ * so it can refine without !important (except where JS sets inline display).
+ */
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Phase 2 — Layout reflow (always-on within mobile-viewer mode)
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Hide editing-only chrome: left toolbox sidebar, right debug panel, palette
+   tabs (the toolbox lives there), and the debug toggle button. */
+body.mobile-viewer #design-toolbar,
+body.mobile-viewer #debug-panel,
+body.mobile-viewer #btn-debug-toggle,
+body.mobile-viewer #hud-right,
+body.mobile-viewer #palette-search {
+  display: none !important;
+}
+
+/* Suppress browser pinch/zoom on canvas so our gestures own it. */
+body.mobile-viewer #game-canvas {
+  touch-action: none;
+}
+
+/* HUD: let it wrap onto multiple rows on narrow screens, drop padding. */
+body.mobile-viewer #hud {
+  flex-wrap: wrap;
+  min-height: 0;
+  padding: 4px 6px;
+  gap: 4px;
+}
+body.mobile-viewer #hud-center {
+  flex: 1 1 100%;
+  width: 100%;
+}
+body.mobile-viewer #clock-controls-row {
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-start;
+}
+body.mobile-viewer #sim-controls-row {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Touch-friendly targets on key HUD buttons (Apple HIG: 44×44). */
+body.mobile-viewer #clock-controls-row > button,
+body.mobile-viewer #hud-right-top > button {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+/* Bottom panels: full width on phones, leave room above for canvas. */
+body.mobile-viewer #mem-inspector,
+body.mobile-viewer #pipeline-panel,
+body.mobile-viewer #dft-panel {
+  width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+  max-width: 100vw !important;
+  height: 60vh !important;
+  max-height: 60vh !important;
+  min-width: 0 !important;
+}
+
+/* Waveform panel already spans full-width; just cap its mobile height. */
+body.mobile-viewer #waveform-panel {
+  height: 45vh !important;
+  min-height: 200px;
+}
+
+/* Hide resize grips on panels — no-op on touch and visually distracting. */
+body.mobile-viewer #mem-resize-grip,
+body.mobile-viewer .design-props-grip,
+body.mobile-viewer .waveform-grip-bar {
+  display: none !important;
+}
+
+/* Smoother scrolling inside long panels on iOS. */
+body.mobile-viewer #pipeline-panel-body,
+body.mobile-viewer #dft-panel-body,
+body.mobile-viewer #mem-inspector {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Phase 3 — Hide editing UI inside ANALYSIS / DFT / MEM panels
+ * Read-only views remain fully visible.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* ANALYSIS (pipeline) panel — editing controls */
+body.mobile-viewer .pipe-preset-bar,
+body.mobile-viewer #pipe-predictor-select,
+body.mobile-viewer #pipe-predictor-save,
+body.mobile-viewer #pipe-predictor-compare,
+body.mobile-viewer .pipe-section-drag-handle,
+body.mobile-viewer #btn-pipeline-fullscreen,
+
+/* DFT panel — editing controls + fullscreen-only buttons */
+body.mobile-viewer .dft-lfsr-edit,
+body.mobile-viewer .dft-lfsr-input,
+body.mobile-viewer [data-action="lfsr-save"],
+body.mobile-viewer [data-action="lfsr-cancel"],
+body.mobile-viewer #btn-dft-gen-random,
+body.mobile-viewer #btn-dft-run,
+body.mobile-viewer .dft-fs-only,
+body.mobile-viewer #btn-dft-fullscreen,
+body.mobile-viewer #btn-dft-edit-all,
+
+/* MEM panel — editing controls (resize-grip already hidden in Phase 2) */
+body.mobile-viewer .mem-row-edit,
+body.mobile-viewer .mem-bit-cell,
+body.mobile-viewer #btn-mem-format {
+  display: none !important;
+}

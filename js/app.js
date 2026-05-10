@@ -28,6 +28,7 @@ import { MiniMap } from './ui/MiniMap.js';
 import { SelectionManager } from './ui/SelectionManager.js';
 import { AnnotationLayer } from './ui/AnnotationLayer.js';
 import { ProjectStorage } from './ui/ProjectStorage.js';
+import * as MobileMode from './mobile/MobileMode.js';
 import { exportCircuit as exportVerilog } from './hdl/VerilogExporter.js';
 import { PipelineAnalyzer } from './pipeline/PipelineAnalyzer.js';
 import { evaluate as evaluatePipeline } from './pipeline/StageEvaluator.js';
@@ -5487,6 +5488,9 @@ function start() {
     telemetry: () => PipelineTelemetry.snapshot(),
     resetTelemetry: () => PipelineTelemetry.reset(),
   };
+
+  // Activate mobile viewer mode if applicable (no-op on desktop).
+  MobileMode.init();
 
   console.log('[Circuit Designer Pro] initialized');
 }
