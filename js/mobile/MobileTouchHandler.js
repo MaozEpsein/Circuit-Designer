@@ -26,6 +26,7 @@ export class MobileTouchHandler {
     this._touches = new Map();
     this._lastPinchDist = 0;
     this._panStarted = false;
+    this._multiTouchSeen = false;
 
     this._onStart  = this._onStart.bind(this);
     this._onMove   = this._onMove.bind(this);
@@ -69,8 +70,9 @@ export class MobileTouchHandler {
         startTime: performance.now(),
       });
     }
-    if (this._touches.size === 2) {
-      this._lastPinchDist = this._currentPinchDist();
+    if (this._touches.size >= 2) {
+      this._multiTouchSeen = true;
+      if (this._touches.size === 2) this._lastPinchDist = this._currentPinchDist();
     }
     this._panStarted = false;
   }
@@ -118,18 +120,25 @@ export class MobileTouchHandler {
       const moved = Math.hypot(rec.x - rec.startX, rec.y - rec.startY);
       this._touches.delete(t.identifier);
 
-      if (wasSingle && !this._panStarted && dt < TAP_MAX_MS && moved < TAP_MAX_MOVE_PX) {
+      if (wasSingle && !this._panStarted && !this._multiTouchSeen
+          && dt < TAP_MAX_MS && moved < TAP_MAX_MOVE_PX) {
         this._dispatchSyntheticClick(rec.clientX, rec.clientY);
       }
     }
     if (this._touches.size < 2) this._lastPinchDist = 0;
-    if (this._touches.size === 0) this._panStarted = false;
+    if (this._touches.size === 0) {
+      this._panStarted = false;
+      this._multiTouchSeen = false;
+    }
   }
 
   _onCancel(e) {
     for (const t of e.changedTouches) this._touches.delete(t.identifier);
     if (this._touches.size < 2) this._lastPinchDist = 0;
-    if (this._touches.size === 0) this._panStarted = false;
+    if (this._touches.size === 0) {
+      this._panStarted = false;
+      this._multiTouchSeen = false;
+    }
   }
 
   _currentPinchDist() {
