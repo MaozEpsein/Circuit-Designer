@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="2" y="2" width="60" height="60" rx="8" fill="#0a1520"/>
+  <rect x="14" y="14" width="36" height="36" rx="3" fill="#0a1520" stroke="#00d4ff" stroke-width="2.5"/>
+  <g stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round">
+    <line x1="6"  y1="22" x2="14" y2="22"/>
+    <line x1="6"  y1="32" x2="14" y2="32"/>
+    <line x1="6"  y1="42" x2="14" y2="42"/>
+    <line x1="50" y1="22" x2="58" y2="22"/>
+    <line x1="50" y1="32" x2="58" y2="32"/>
+    <line x1="50" y1="42" x2="58" y2="42"/>
+    <line x1="22" y1="6"  x2="22" y2="14"/>
+    <line x1="32" y1="6"  x2="32" y2="14"/>
+    <line x1="42" y1="6"  x2="42" y2="14"/>
+    <line x1="22" y1="50" x2="22" y2="58"/>
+    <line x1="32" y1="50" x2="32" y2="58"/>
+    <line x1="42" y1="50" x2="42" y2="58"/>
+  </g>
+  <text x="32" y="40" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-weight="800" font-size="18" fill="#00d4ff">CD</text>
+</svg>
