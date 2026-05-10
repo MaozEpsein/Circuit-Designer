@@ -25,6 +25,18 @@ body.mobile-viewer #game-canvas {
   touch-action: none;
 }
 
+/* Cancel the global desktop trick `body { zoom: 0.8 }` (style.css:157),
+   which shrinks the layout to 80% — on a narrow phone in portrait that
+   leaves ~20% empty on each side. Reset to natural 1:1 mapping, and
+   neutralize the counter-zooms applied to specific panels. */
+body.mobile-viewer {
+  zoom: 1;
+}
+body.mobile-viewer #dft-panel,
+body.mobile-viewer #vimport-overlay {
+  zoom: 1;
+}
+
 /* HUD: let it wrap onto multiple rows on narrow screens, drop padding. */
 body.mobile-viewer #hud {
   flex-wrap: wrap;
