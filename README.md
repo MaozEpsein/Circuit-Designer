@@ -5,8 +5,8 @@ A browser-based digital design and verification environment: schematic capture, 
 [![Launch App](https://img.shields.io/badge/%F0%9F%9A%80_Launch_Circuit_Designer_Pro-Click_Here-blue?style=for-the-badge&logoColor=white)](https://maozepstein.github.io/Circuit-Designer/app.html)
 
 <p align="center">
-  <img src="snepshot/Simple%20-%20CPU.png"        alt="Simple CPU — full single-cycle datapath"  width="49%" />
-  <img src="snepshot/PIPLINE%20%2B%20CACHE.png"   alt="Pipelined CPU with cache"                 width="49%" />
+  <img src="screenshots/Simple%20-%20CPU.png"        alt="Simple CPU — full single-cycle datapath"  width="49%" />
+  <img src="screenshots/PIPLINE%20%2B%20CACHE.png"   alt="Pipelined CPU with cache"                 width="49%" />
 </p>
 
 ---
@@ -75,21 +75,21 @@ Built-in via the **EXAMPLES** button: 4-bit counter, ALU calculator, register/RA
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="snepshot/ANALYSIS.png" alt="Pipeline Analysis panel — stages, hazards, performance, branch predictor" /><br/>
+      <img src="screenshots/ANALYSIS.png" alt="Pipeline Analysis panel — stages, hazards, performance, branch predictor" /><br/>
       <sub><b>ANALYSIS</b> — pipeline stages, hazards, f<sub>max</sub>, branch predictor</sub>
     </td>
     <td width="50%" align="center">
-      <img src="snepshot/DFT.png" alt="DFT panel — scan chains, BIST, JTAG, fault list" /><br/>
+      <img src="screenshots/DFT.png" alt="DFT panel — scan chains, BIST, JTAG, fault list" /><br/>
       <sub><b>DFT</b> — scan chains, LFSR/MISR, BIST, JTAG, fault coverage</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="snepshot/WAVEFORM.png" alt="Waveform Pro — VCD-class viewer with cursor and signal picker" /><br/>
+      <img src="screenshots/WAVEFORM.png" alt="Waveform Pro — VCD-class viewer with cursor and signal picker" /><br/>
       <sub><b>WAVEFORM</b> — GTKWave-class viewer (VCD import/export, search, triggers)</sub>
     </td>
     <td width="50%" align="center">
-      <img src="snepshot/VERILOG.png" alt="Verilog export — synthesizable RTL with stage dividers" /><br/>
+      <img src="screenshots/VERILOG.png" alt="Verilog export — synthesizable RTL with stage dividers" /><br/>
       <sub><b>VERILOG</b> — synthesizable RTL export with stage dividers</sub>
     </td>
   </tr>
