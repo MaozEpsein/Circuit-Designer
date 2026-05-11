@@ -65,6 +65,21 @@ bus.on('pipeline:set-cu-prop', ({ nodeId, props }) => {
   commands.execute(new SetNodePropsCommand(scene, nodeId, props));
 });
 
+/**
+ * True when the keystroke is being typed into a text-input surface —
+ * `<input>`, `<textarea>`, or any contenteditable element (CodeMirror's
+ * editable area, e.g.). Global shortcut handlers use this to skip
+ * themselves so the user isn't fighting "Z" / "?" / "Ctrl+D" while
+ * writing code or interview answers.
+ */
+function _isTypingTarget(t) {
+  if (!t) return false;
+  if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+  if (t.isContentEditable) return true;
+  if (t.closest && t.closest('[contenteditable="true"], .cm-editor')) return true;
+  return false;
+}
+
 function _toggleStageView() {
   stageOverlay.toggle();
   const on = stageOverlay.isEnabled();
@@ -640,7 +655,7 @@ shortcutsOverlay?.addEventListener('click', (e) => { if (e.target === shortcutsO
 
 // Also open with ? key
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (_isTypingTarget(e.target)) return;
   if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
     e.preventDefault();
     if (shortcutsOverlay?.classList.contains('hidden')) _showShortcuts();
@@ -2205,6 +2220,7 @@ document.getElementById('btn-waveform-export')?.addEventListener('click', () => 
 
 // Keyboard shortcut: Ctrl+D toggles debug panel
 window.addEventListener('keydown', (e) => {
+  if (_isTypingTarget(e.target)) return;
   if (shortcuts.matches(e, 'sys-debug')) {
     e.preventDefault();
     _toggleDebugPanel();
@@ -2738,8 +2754,7 @@ bus.on('palette:tool', (tool) => {
 
 // Copy/paste keyboard shortcuts
 window.addEventListener('keydown', (e) => {
-  const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
-  if (isTyping) return;
+  if (_isTypingTarget(e.target)) return;
 
   const match = shortcuts.findMatch(e);
 

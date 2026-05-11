@@ -176,6 +176,7 @@ export class ShortcutManager {
    * Check if a keyboard event matches a shortcut ID.
    */
   matches(e, id) {
+    if (ShortcutManager.isTypingTarget(e?.target)) return false;
     const sc = this._shortcuts[id];
     if (!sc) return false;
     return ShortcutManager.eventToKeyStr(e) === sc.key;
@@ -183,13 +184,29 @@ export class ShortcutManager {
 
   /**
    * Find which shortcut ID matches a keyboard event.
-   * Returns the ID or null.
+   * Returns the ID or null. Returns null when the event originated in
+   * an editable surface so shortcuts don't fire mid-typing.
    */
   findMatch(e) {
+    if (ShortcutManager.isTypingTarget(e?.target)) return null;
     const keyStr = ShortcutManager.eventToKeyStr(e);
     for (const [id, sc] of Object.entries(this._shortcuts)) {
       if (sc.key === keyStr) return id;
     }
     return null;
+  }
+
+  /**
+   * True when the event target is an editable surface (`<input>`,
+   * `<textarea>`, contenteditable, or anything inside a CodeMirror
+   * editor). Centralised here so every keydown handler that goes
+   * through `matches` / `findMatch` is guarded automatically.
+   */
+  static isTypingTarget(t) {
+    if (!t) return false;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    if (t.closest && t.closest('[contenteditable="true"], .cm-editor')) return true;
+    return false;
   }
 }

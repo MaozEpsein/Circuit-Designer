@@ -79,8 +79,102 @@ export class InterviewPanel {
     if (act === 'next-part')          { this.engine.nextPart(); return; }
     if (act === 'toggle-mastered')    { this.engine.toggleMastered(); return; }
     if (act === 'check-answer')       { this._handleCheckAnswer(); return; }
+    if (act === 'paste-code')         { this._handlePasteCode();   return; }
+    if (act === 'clear-code')         { this._handleClearCode();   return; }
+    if (act === 'load-skeleton')      { this._handleLoadSkeleton(); return; }
     if (act === 'load-circuit')       { this.engine.loadCircuit();    return; }
     if (act === 'restore-circuit')    { this.engine.restoreCircuit(); return; }
+  }
+
+  async _handlePasteCode() {
+    if (!this._cmEditor) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      this._cmEditor.setValue(text);
+      this._typedAnswer = text;
+      this._cmEditor.focus();
+    } catch (err) {
+      // Most often: clipboard permission denied (Firefox without user
+      // gesture, Safari, insecure context). Tell the user to use Ctrl+V.
+      console.warn('[interview] clipboard.readText failed:', err);
+      alert('הדפדפן חוסם קריאה מהלוח. השתמש ב-Ctrl+V בתוך העורך.');
+    }
+  }
+
+  _handleClearCode() {
+    if (!this._cmEditor) return;
+    this._cmEditor.setValue('');
+    this._typedAnswer = '';
+    this._cmPersist('');
+    this._cmEditor.focus();
+  }
+
+  _handleLoadSkeleton() {
+    if (!this._cmEditor) return;
+    const part = this.engine.currentPart();
+    const skeleton = part?.starterCode || _genericVerilogSkeleton();
+    this._cmEditor.setValue(skeleton);
+    this._typedAnswer = skeleton;
+    this._cmPersist(skeleton);
+    this._cmEditor.focus();
+  }
+
+  // ── per-question Verilog persistence (LS key: topic::question:part) ──
+  _cmStorageKey() {
+    if (!this.engine.active) return null;
+    return `circuit_designer_pro__iv_verilog__${this.engine.topicId}::${this.engine.questionId}:${this.engine.partIndex}`;
+  }
+  _cmLoad() {
+    const k = this._cmStorageKey();
+    if (!k) return '';
+    try { return localStorage.getItem(k) || ''; } catch (_) { return ''; }
+  }
+  _cmPersist(value) {
+    const k = this._cmStorageKey();
+    if (!k) return;
+    try {
+      if (value === '' || value == null) localStorage.removeItem(k);
+      else                                localStorage.setItem(k, value);
+    } catch (_) { /* quota / disabled — silent */ }
+  }
+
+  // ── editor height (LS-persisted across sessions) ──
+  _cmSavedHeight() {
+    try {
+      const v = parseInt(localStorage.getItem('circuit_designer_pro__iv_verilog_h') || '', 10);
+      if (Number.isFinite(v) && v >= 160 && v <= 800) return v;
+    } catch (_) {}
+    return 320;
+  }
+  _cmSaveHeight(px) {
+    try { localStorage.setItem('circuit_designer_pro__iv_verilog_h', String(px)); } catch (_) {}
+  }
+  _wireCmResizeGrip(body) {
+    const grip = body.querySelector('.iv-code-resize-grip');
+    const host = body.querySelector('#iv-cm-host');
+    if (!grip || !host) return;
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      const startY = e.clientY;
+      const startH = parseFloat(getComputedStyle(host).getPropertyValue('--cm-h')) || 320;
+      const onMove = (ev) => {
+        const dy = ev.clientY - startY;
+        const next = Math.max(160, Math.min(800, startH + dy));
+        host.style.setProperty('--cm-h', `${next}px`);
+      };
+      const onUp = () => {
+        grip.removeEventListener('pointermove', onMove);
+        grip.removeEventListener('pointerup', onUp);
+        grip.removeEventListener('pointercancel', onUp);
+        const final = parseFloat(getComputedStyle(host).getPropertyValue('--cm-h')) || 320;
+        this._cmSaveHeight(Math.round(final));
+      };
+      grip.addEventListener('pointermove', onMove);
+      grip.addEventListener('pointerup', onUp);
+      grip.addEventListener('pointercancel', onUp);
+    });
   }
 
   _handleCheckAnswer() {
@@ -184,6 +278,7 @@ export class InterviewPanel {
     // Re-attach / mount / dispose the CodeMirror editor depending on
     // whether the new markup has a host and whether the part changed.
     this._syncCmEditor(body, detachedCm);
+    this._wireCmResizeGrip(body);
   }
 
   /**
@@ -218,22 +313,35 @@ export class InterviewPanel {
       return;
     }
 
+    // A mount is already in flight for this part — let it complete and
+    // append into whichever host is in DOM at completion time.
+    if (this._cmMountPending === partKey) return;
+
     // Different part (or first time): tear down old, mount new.
     if (this._cmEditor) {
       this._cmEditor.destroy();
       this._cmEditor = null;
     }
-    this._cmKey = partKey;
-    const wantKey = partKey;
-    const starterDoc = this._typedAnswer || '';
+    this._cmKey         = partKey;
+    this._cmMountPending = partKey;
+    const wantKey   = partKey;
+    // Initial doc preference: in-memory typed answer (current session) →
+    // localStorage (previous session) → empty. Saves the user from
+    // losing work when the panel collapses or the page reloads.
+    const starterDoc = this._typedAnswer || this._cmLoad() || '';
+    if (starterDoc) this._typedAnswer = starterDoc;
 
     import('./codeEditor.js')
       .then(({ createVerilogEditor }) => createVerilogEditor({
         container: host,
         initialDoc: starterDoc,
-        onChange: (val) => { this._typedAnswer = val; },
+        onChange: (val) => {
+          this._typedAnswer = val;
+          this._cmPersist(val);
+        },
       }))
       .then((editor) => {
+        this._cmMountPending = null;
         // If the user navigated away while CodeMirror was loading,
         // throw the half-mounted editor away.
         const nowKey = this.engine.active
@@ -244,8 +352,16 @@ export class InterviewPanel {
           return;
         }
         this._cmEditor = editor;
+        // The host the editor mounted into may have been swapped out by
+        // a render that ran during the async load. Re-home into the
+        // current live host so events / focus work.
+        const liveHost = this.root?.querySelector('#iv-cm-host');
+        if (liveHost && editor.dom.parentNode !== liveHost) {
+          liveHost.appendChild(editor.dom);
+        }
       })
       .catch((err) => {
+        this._cmMountPending = null;
         console.error('[interview] CodeMirror failed to load:', err);
         host.innerHTML = '<div class="iv-empty" dir="rtl">לא הצלחנו לטעון את עורך הקוד.</div>';
       });
@@ -331,15 +447,21 @@ export class InterviewPanel {
     if (part?.editor === 'verilog') {
       // Render an empty host; the actual CodeMirror view is mounted by
       // render() after the innerHTML swap and is preserved across renders.
+      const savedHeight = this._cmSavedHeight();
+      const hostStyle = `--cm-h:${savedHeight}px`;
       return `
-        <div class="iv-check-wrap iv-check-wrap-code" dir="rtl">
+        <div class="iv-check-wrap-code" dir="rtl">
           <div class="iv-code-header">
             <span class="iv-code-label">Verilog</span>
             <span class="iv-code-hint">כתוב את המודול בעורך למטה ולחץ "בדוק"</span>
           </div>
-          <div class="iv-code-host" id="iv-cm-host" dir="ltr"></div>
+          <div class="iv-code-host" id="iv-cm-host" dir="ltr" style="${hostStyle}"></div>
+          <div class="iv-code-resize-grip" title="גרור לשינוי גובה העורך"></div>
           ${resultHtml}
           <div class="iv-code-actions">
+            ${part.starterCode || _hasGenericStarter() ? '<button class="iv-btn" data-act="load-skeleton" title="טען תבנית מודול ריקה לעורך">🧩 שלב מודול - רמז!</button>' : ''}
+            <button class="iv-btn" data-act="paste-code" title="ייבא את התוכן של הלוח לתוך העורך (Ctrl+V עובד גם בעורך עצמו)">📋 הדבק מהלוח</button>
+            <button class="iv-btn" data-act="clear-code" title="נקה את כל התוכן בעורך">🗑 נקה</button>
             <button class="iv-btn iv-btn-primary iv-btn-check" data-act="check-answer">✓ בדוק את הקוד</button>
           </div>
         </div>`;
@@ -467,6 +589,32 @@ export class InterviewPanel {
 }
 
 // ── helpers ───────────────────────────────────────────────────
+
+function _hasGenericStarter() { return true; }
+
+function _genericVerilogSkeleton() {
+  return `module top (
+    input  wire clk,
+    input  wire rst_n,
+    // TODO: declare inputs
+    // TODO: declare outputs
+);
+
+    // TODO: declare internal regs / wires
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // TODO: reset state
+        end else begin
+            // TODO: clocked behaviour
+        end
+    end
+
+    // TODO: combinational assigns
+
+endmodule
+`;
+}
 
 function _esc(s) {
   return String(s ?? '')

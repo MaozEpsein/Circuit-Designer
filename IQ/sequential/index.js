@@ -115,6 +115,25 @@ export const QUESTIONS = [
       {
         label: 'ב',
         editor: 'verilog',
+        starterCode:
+`module falling_edge_detector (
+    input  wire clk,
+    input  wire rst_n,    // async reset, active-low
+    input  wire d_in,
+    output wire pulse
+);
+
+    // TODO: declare the two register stages
+
+    // TODO: clocked block for the FF chain
+    always @(posedge clk or negedge rst_n) begin
+
+    end
+
+    // TODO: combinational pulse assignment
+
+endmodule
+`,
         question: `איך תיישם את המעגל מסעיף א (גרסת שני ה-FFים) ב-Verilog?
 כתוב מודול סינכרוני עם reset אסינכרוני אקטיבי-נמוך.`,
         hints: [

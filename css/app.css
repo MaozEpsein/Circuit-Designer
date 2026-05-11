@@ -3787,16 +3787,39 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
   color: #8090b0;
 }
 .iv-code-host {
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid #2a8a4a;
   border-radius: 5px;
   overflow: hidden;
   background: #181c24;
   box-shadow: 0 0 0 1px rgba(57, 255, 128, 0.08) inset, 0 2px 8px rgba(0, 0, 0, 0.3);
 }
-.iv-code-host .cm-editor { height: 320px; }
+.iv-code-host .cm-editor { width: 100%; height: var(--cm-h, 320px); }
 .iv-code-host .cm-editor,
 .iv-code-host .cm-editor.cm-focused { outline: none; }
 .iv-code-host .cm-content { padding: 8px 4px; }
+.iv-code-host .cm-scroller { direction: ltr; }
+.iv-code-resize-grip {
+  height: 8px;
+  margin-top: -4px;
+  cursor: ns-resize;
+  background: linear-gradient(180deg, transparent 0%, rgba(57, 255, 128, 0.12) 50%, transparent 100%);
+  border-radius: 3px;
+  position: relative;
+}
+.iv-code-resize-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 2px;
+  background: #2a8a4a;
+  border-radius: 1px;
+}
+.iv-code-resize-grip:hover::after { background: #80f0a0; }
 .iv-code-actions {
   display: flex;
   gap: 8px;

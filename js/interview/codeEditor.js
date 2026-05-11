@@ -17,10 +17,12 @@ let _libPromise = null;
 function _loadLib() {
   if (_libPromise) return _libPromise;
   _libPromise = (async () => {
-    const [cmMod, stateMod, langMod, vlogMod, themeMod] = await Promise.all([
+    const [cmMod, stateMod, viewMod, langMod, cmdMod, vlogMod, themeMod] = await Promise.all([
       import(`${ESM}/codemirror@6.0.1`),
       import(`${ESM}/@codemirror/state@6`),
+      import(`${ESM}/@codemirror/view@6`),
       import(`${ESM}/@codemirror/language@6`),
+      import(`${ESM}/@codemirror/commands@6`),
       import(`${ESM}/@codemirror/legacy-modes@6/mode/verilog`),
       import(`${ESM}/@codemirror/theme-one-dark@6`),
     ]);
@@ -28,7 +30,9 @@ function _loadLib() {
       EditorView:    cmMod.EditorView,
       basicSetup:    cmMod.basicSetup,
       EditorState:   stateMod.EditorState,
+      keymap:        viewMod.keymap,
       StreamLanguage: langMod.StreamLanguage,
+      indentWithTab: cmdMod.indentWithTab,
       verilog:       vlogMod.verilog,
       oneDark:       themeMod.oneDark,
     };
@@ -74,13 +78,35 @@ export async function createVerilogEditor({ container, initialDoc = '', onChange
     doc: initialDoc,
     parent: container,
     extensions: [
+      // `keymap.of([indentWithTab])` makes Tab insert indentation and
+      // Shift+Tab outdent — overriding CM6's default a11y behaviour
+      // (Tab moves focus). Listed BEFORE basicSetup so its bindings
+      // take precedence.
+      lib.keymap.of([lib.indentWithTab]),
       lib.basicSetup,
       lib.StreamLanguage.define(lib.verilog),
+      // Soft-wrap long lines so the user doesn't get horizontal scroll
+      // inside the narrow interview panel.
+      lib.EditorView.lineWrapping,
       lib.oneDark,
       themeExt,
       updateExt,
     ],
   });
+
+  // Stop key events from bubbling up to global shortcut handlers
+  // (window-level Ctrl+D, Z, S, ⟂ "?" overlay, etc.) — they fire on
+  // bubble and would otherwise trigger while the user is typing code.
+  // CodeMirror's own keymap handles its keys in capture phase, so by
+  // the time we cancel propagation, undo/redo/indent already worked.
+  // We let Escape through so users can still close the panel.
+  const _swallow = (e) => {
+    if (e.key === 'Escape') return;
+    e.stopPropagation();
+  };
+  view.dom.addEventListener('keydown', _swallow);
+  view.dom.addEventListener('keyup',   _swallow);
+  view.dom.addEventListener('keypress', _swallow);
 
   return {
     getValue: () => view.state.doc.toString(),
