@@ -11,12 +11,14 @@
  * ────────────────────────────────────────────────────────────────────── */
 
 /* Hide editing-only chrome: left toolbox sidebar, right debug panel, palette
-   tabs (the toolbox lives there), and the debug toggle button. */
+   tabs (the toolbox lives there), the debug toggle button, and the
+   INTERVIEW prep button (a desktop-only learning aid). */
 body.mobile-viewer #design-toolbar,
 body.mobile-viewer #debug-panel,
 body.mobile-viewer #btn-debug-toggle,
 body.mobile-viewer #hud-right,
-body.mobile-viewer #palette-search {
+body.mobile-viewer #palette-search,
+body.mobile-viewer #btn-interview {
   display: none !important;
 }
 
@@ -99,6 +101,29 @@ body.mobile-viewer #dft-panel-body,
 body.mobile-viewer #mem-inspector {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+
+/* Project / export bar (#project-bar) — on phones, the row of 8 buttons
+   (SAVE, LOAD, MY PROJECTS, PNG, SVG, JSON, VERILOG, IMPORT, FIT) is
+   wider than the viewport. The bar is `position:fixed; left:50%;
+   transform:translateX(-50%)`, so overflow gets cropped on both edges.
+   Let it wrap to multiple rows and cap its width to the viewport. */
+body.mobile-viewer #project-bar {
+  flex-wrap: wrap !important;
+  max-width: 100vw;
+  justify-content: center;
+  row-gap: 4px;
+}
+/* Hide editing-only entries; keep view + export buttons reachable. */
+body.mobile-viewer #btn-project-save,
+body.mobile-viewer #btn-import-verilog {
+  display: none !important;
+}
+
+/* MiniMap — small canvas in the bottom-right; not useful with a finger
+   on a phone (target ~120×80 px). Hide it. */
+body.mobile-viewer #minimap-container {
+  display: none !important;
 }
 
 /* ────────────────────────────────────────────────────────────────────────

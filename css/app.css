@@ -3574,3 +3574,722 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 }
 #dft-panel.dft-fullscreen #dft-resize-grip { display: none; }
 
+
+/* ── Interview Prep panel — green, mirrors #tutorial-panel palette ──── */
+#interview-panel {
+  position: fixed;
+  top: 200px;                    /* clear the HUD + clock-controls row,
+                                    with a small gap below them. */
+  right: 16px;
+  bottom: 24px;                  /* anchor both vertical edges → default
+                                    spans almost top-to-bottom; resize-grip
+                                    at the top-left modifies `top` + `width`. */
+  width: 540px;
+  min-width: 360px;
+  max-width: 95vw;
+  background: #0d1320;
+  border: 1px solid #2a8a4a;
+  border-radius: 8px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  font-family: 'JetBrains Mono', monospace;
+  color: #c8d8f0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+#interview-panel.hidden { display: none; }
+
+/* Custom resize grip in the top-left corner. Dragging it moves the
+   panel's top edge (smaller `top`) and grows its width (`width`).
+   Bottom + right edges stay anchored so the panel always reaches them. */
+.iv-resize-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 2;
+  /* Two diagonal lines drawn with linear-gradients for a subtle ⤡ glyph. */
+  background:
+    linear-gradient(135deg, transparent 5px, #80f0a0 5px, #80f0a0 6px, transparent 6px) no-repeat,
+    linear-gradient(135deg, transparent 9px, #80f0a0 9px, #80f0a0 10px, transparent 10px) no-repeat;
+  background-size: 16px 16px;
+  opacity: 0.5;
+  transition: opacity 0.1s;
+  border-top-left-radius: 8px;
+}
+.iv-resize-grip:hover { opacity: 1; }
+.iv-resize-grip:active { opacity: 1; }
+
+#interview-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #102a1a;
+  border-bottom: 1px solid #2a8a4a;
+  color: #80f0a0;
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+#interview-panel-header .iv-x {
+  background: #2a1010;
+  border: 1px solid #4a2020;
+  color: #ff6666;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 5px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#interview-panel-header .iv-x:hover { background: #3a1818; }
+
+#interview-panel-body {
+  flex: 1;                       /* fill space remaining after header */
+  padding: 14px 18px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.iv-catalog-intro {
+  color: #a0d0b0;
+  font-size: 13px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #0a1520;
+  border-right: 3px solid #2a8a4a;
+  border-radius: 3px;
+}
+.iv-catalog-intro code {
+  background: #102a1a;
+  border: 1px solid #2a8a4a;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #80f0a0;
+}
+
+.iv-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #2a4060;
+  padding-bottom: 0;
+  flex-wrap: wrap;
+}
+.iv-tab {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-bottom: none;
+  color: #80a0c0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 7px 12px 6px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.iv-tab:hover { background: #102018; color: #c0e0f0; }
+.iv-tab-active {
+  background: #102a1a;
+  border-color: #2a8a4a;
+  color: #80f0a0;
+}
+.iv-tab-icon { font-size: 12px; opacity: 0.85; }
+.iv-tab-count {
+  font-size: 9px;
+  background: #1a2030;
+  border: 1px solid #2a4060;
+  color: #6080a0;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.iv-tab-active .iv-tab-count {
+  background: #0a2018;
+  border-color: #39ff80;
+  color: #80f0a0;
+}
+.iv-tab-num {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: bold;
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  color: #80a0c0;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.iv-tab-active .iv-tab-num {
+  background: #0a2018;
+  border-color: #39ff80;
+  color: #80f0a0;
+}
+.iv-card-serial,
+.iv-question-serial {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  color: #0a1520;
+  background: linear-gradient(180deg, #ffd860 0%, #f0b030 100%);
+  border: 1px solid #c08020;
+  border-radius: 4px;
+  padding: 3px 9px;
+  letter-spacing: 1.2px;
+  box-shadow: 0 0 6px rgba(240, 176, 48, 0.5);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.iv-question-serial {
+  font-size: 16px;
+  padding: 4px 11px;
+  margin-inline-end: 10px;
+  vertical-align: middle;
+}
+
+.iv-topic-head {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #2a4060;
+}
+.iv-topic-title {
+  color: #80f0a0;
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.iv-topic-desc {
+  color: #8090b0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.iv-empty {
+  color: #6080a0;
+  font-size: 12px;
+  font-style: italic;
+  padding: 24px 16px;
+  text-align: center;
+  background: #0a1520;
+  border: 1px dashed #2a4060;
+  border-radius: 4px;
+}
+.iv-empty code {
+  background: #102a1a;
+  border: 1px solid #2a8a4a;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #80f0a0;
+  font-style: normal;
+}
+
+/* ── Interview Prep — question cards, hints, answer reveal ───────────── */
+.iv-cards { display: flex; flex-direction: column; gap: 10px; }
+.iv-card {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-radius: 5px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+.iv-card:hover { border-color: #2a8a4a; background: #102018; }
+.iv-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.iv-card-title { color: #80f0a0; font-weight: bold; font-size: 14px; flex: 1; }
+.iv-card-meta { display: flex; gap: 8px; margin-top: 6px; align-items: center; }
+.iv-card-parts { font-size: 10px; color: #80a0c0; }
+
+.iv-badge {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #1a2030;
+  border: 1px solid #2a4060;
+  color: #80a0c0;
+  letter-spacing: 1px;
+}
+.iv-badge-seen     { background: #1a2030; border-color: #4060a0; color: #80b0e0; }
+.iv-badge-mastered { background: #0a2018; border-color: #39ff80; color: #80f0a0; }
+
+.iv-diff {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.iv-diff-easy    { background: #0a2018; border: 1px solid #2a8a4a; color: #80f0a0; }
+.iv-diff-medium  { background: #2a2010; border: 1px solid #aa8a3a; color: #f0d080; }
+.iv-diff-hard    { background: #2a1010; border: 1px solid #aa3a3a; color: #f08080; }
+
+/* ── Question view ────────────────────────────────────────────────── */
+.iv-question-head {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #2a4060;
+}
+.iv-question-title {
+  color: #80f0a0;
+  font-weight: bold;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.iv-question-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.iv-part-label {
+  font-size: 11px;
+  font-weight: bold;
+  background: #102a1a;
+  border: 1px solid #2a8a4a;
+  color: #80f0a0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+}
+.iv-part-progress {
+  font-size: 10px;
+  color: #80a0c0;
+  font-weight: bold;
+}
+
+.iv-intro {
+  background: #0a1520;
+  border-right: 3px solid #2a8a4a;
+  border-radius: 3px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  color: #b0c8d0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.iv-intro p { margin: 0 0 8px 0; }
+.iv-intro p:last-child { margin-bottom: 0; }
+.iv-intro code,
+.iv-prompt code,
+.iv-hint code,
+.iv-answer code {
+  background: #102a1a;
+  border: 1px solid #2a4060;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #80f0a0;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.iv-intro strong, .iv-prompt strong, .iv-hint strong, .iv-answer strong {
+  color: #c0e0d0;
+}
+
+.iv-image-wrap {
+  text-align: center;
+  margin: 8px 0 14px;
+  padding: 8px;
+  background: #f5f5ee;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+}
+.iv-image {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+}
+
+.iv-part-body { margin-bottom: 12px; }
+
+.iv-prompt {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #c8d8f0;
+  background: #0d1830;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.iv-prompt p { margin: 0 0 8px 0; }
+.iv-prompt p:last-child { margin-bottom: 0; }
+
+.iv-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d0e0c0;
+  background: #15281a;
+  border-right: 3px solid #80a060;
+  border-radius: 3px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+}
+
+.iv-answer {
+  margin-top: 10px;
+  background: #0a2018;
+  border: 1px solid #2a8a4a;
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+.iv-answer-head {
+  font-weight: bold;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #80f0a0;
+  margin-bottom: 8px;
+}
+.iv-answer-body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #c8d8f0;
+}
+.iv-answer-body p { margin: 0 0 8px 0; }
+.iv-answer-body p:last-child { margin-bottom: 0; }
+
+.iv-table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.iv-table th, .iv-table td {
+  border: 1px solid #2a4060;
+  padding: 4px 8px;
+  text-align: right;
+}
+.iv-table th {
+  background: #102a1a;
+  color: #80f0a0;
+  font-weight: bold;
+}
+
+/* Action buttons row */
+.iv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #2a4060;
+}
+.iv-btn {
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  color: #c0d0e0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.iv-btn:hover:not(:disabled) { background: #102018; color: #c0e0f0; border-color: #4080a0; }
+.iv-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.iv-btn-primary { background: #102a1a; border-color: #2a8a4a; color: #80f0a0; }
+.iv-btn-primary:hover:not(:disabled) { background: #163a22; border-color: #39ff80; }
+.iv-btn-warn { background: #2a2010; border-color: #aa8a3a; color: #f0d080; }
+.iv-btn-warn:hover:not(:disabled) { background: #3a2818; border-color: #d0a040; }
+.iv-btn-link {
+  background: transparent;
+  border: none;
+  color: #80a0c0;
+  text-decoration: underline;
+  padding: 4px 6px;
+  margin-top: 6px;
+}
+.iv-btn-link:hover { color: #c0e0f0; }
+.iv-btn-mastered { background: #0a2018; border-color: #39ff80; color: #80f0a0; }
+
+/* Schematic SVG container — light bg behind dark-stroke schematics */
+.iv-schematic {
+  background: #0a1830;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 8px 0 14px;
+  text-align: center;
+  overflow-x: auto;
+}
+.iv-schematic svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Answer-check input row (parts that carry expectedAnswers[]) */
+.iv-check-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+}
+.iv-answer-input {
+  flex: 1;
+  min-width: 200px;
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  color: #c8e0f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  outline: none;
+}
+.iv-answer-input:focus {
+  border-color: #2a8a4a;
+  background: #0d1830;
+}
+.iv-check-result {
+  flex: 1 1 100%;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+.iv-check-ok {
+  background: #0a2018;
+  border: 1px solid #2a8a4a;
+  color: #80f0a0;
+}
+.iv-check-bad {
+  background: #2a1010;
+  border: 1px solid #aa3a3a;
+  color: #f08080;
+}
+
+/* Load-circuit / Restore-work bar shown under the schematic */
+.iv-circuit-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: #102a1a;
+  border: 1px solid #2a8a4a;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #c0e0c8;
+}
+.iv-circuit-hint  { flex: 1; min-width: 200px; }
+.iv-circuit-status {
+  flex: 1;
+  min-width: 200px;
+  color: #80f0a0;
+  font-weight: bold;
+}
+
+/* Bullet lists in answers / intros / hints */
+.iv-list {
+  margin: 0 0 8px 0;
+  padding-right: 22px;   /* RTL indent */
+  padding-left: 0;
+  list-style-position: outside;
+}
+.iv-list li {
+  margin-bottom: 6px;
+  line-height: 1.75;
+}
+.iv-list li::marker { color: #80a0c0; }
+
+/* Slightly more breathing room around inline code so Hebrew + LTR code
+   don't visually crowd each other. */
+.iv-intro code,
+.iv-prompt code,
+.iv-hint code,
+.iv-answer code {
+  margin: 0 3px;
+  padding: 1px 6px;
+}
+
+/* Bump line-height in dense answer/intro bodies for easier RTL reading. */
+.iv-intro      { line-height: 1.75; }
+.iv-prompt     { line-height: 1.8; }
+.iv-answer-body { line-height: 1.8; }
+.iv-hint       { line-height: 1.7; padding: 9px 12px; }
+
+/* Word spacing helps mixed Hebrew + English text breathe. */
+.iv-intro,
+.iv-prompt,
+.iv-answer-body,
+.iv-hint {
+  word-spacing: 0.5px;
+}
+
+/* ── Readability — prose in sans-serif, code stays mono ──────────────── */
+
+/*
+ * The panel chrome (header, tabs, buttons) stays in JetBrains Mono for the
+ * engineering aesthetic. Prose blocks (intro, prompt, answer body, hints,
+ * card / question titles) switch to the OS's native sans-serif so mixed
+ * Hebrew + English reads cleanly — JetBrains Mono Hebrew falls back to
+ * generic monospace, which is genuinely hard on the eyes.
+ */
+.iv-intro,
+.iv-prompt,
+.iv-answer-body,
+.iv-hint,
+.iv-card-title,
+.iv-question-title,
+.iv-circuit-bar,
+.iv-empty,
+.iv-list,
+.iv-table td {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  letter-spacing: 0.1px;
+}
+
+/* Code stays in mono regardless of where it's nested. */
+.iv-intro code,
+.iv-prompt code,
+.iv-hint code,
+.iv-answer code,
+.iv-list code,
+.iv-table code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Slightly larger prose for easier reading; keep code its native size. */
+.iv-prompt,
+.iv-answer-body { font-size: 14px; }
+.iv-intro       { font-size: 13.5px; }
+.iv-hint        { font-size: 13px; }
+
+/* Better paragraph spacing in dense answers. */
+.iv-answer-body p,
+.iv-intro p { margin: 0 0 12px 0; }
+.iv-answer-body p:last-child,
+.iv-intro p:last-child { margin-bottom: 0; }
+
+/* Bold — softer color so it stands out without the heavy mono weight. */
+.iv-intro strong,
+.iv-prompt strong,
+.iv-hint strong,
+.iv-answer-body strong { color: #e8f0e0; font-weight: 700; }
+
+/* Headings inside the answer comparison table */
+.iv-table th { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+
+/* ── Font smoothing + GPU compositing — kills subpixel jitter ───────── */
+
+#interview-panel,
+#interview-panel * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Promote the panel to its own composite layer so internal repaints
+   (innerHTML swap, transitions) don't ripple through the page. */
+#interview-panel {
+  transform: translateZ(0);
+  will-change: contents;
+  contain: layout style;
+}
+
+/* Stable scrollbar gutter — prevents the body from "jumping" left↔right
+   when answer/hints toggle and the content height crosses the threshold
+   that adds/removes the vertical scrollbar. */
+#interview-panel-body {
+  scrollbar-gutter: stable;
+}
+
+/* ── Type-scale bump + clearer hierarchy ────────────────────────────── */
+
+/* Bigger prose text — keeps Hebrew comfortable to read on a dark bg. */
+.iv-prompt        { font-size: 15px; }
+.iv-answer-body   { font-size: 14.5px; }
+.iv-intro         { font-size: 14px; }
+.iv-hint          { font-size: 13.5px; }
+
+/* Question title — make the *primary* heading visibly primary so the
+   eye instantly knows what to read first. */
+.iv-question-title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #c8f0d0;        /* slightly warmer than body green */
+}
+
+/* Card titles in the catalog get the same boost so they read like
+   "items" rather than "fine print". */
+.iv-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* Slightly heavier separation between the schematic / circuit-bar /
+   prompt block — so each "section" feels like its own thing. */
+.iv-schematic    { margin-bottom: 16px; }
+.iv-circuit-bar  { margin-bottom: 16px; padding: 10px 14px; }
+.iv-intro        { margin-bottom: 16px; padding: 12px 16px; }
+
+/* Inline code inside prose — slightly larger and less saturated so it
+   blends with the text instead of shouting. */
+.iv-intro code,
+.iv-prompt code,
+.iv-hint code,
+.iv-answer code,
+.iv-list code {
+  font-size: 12.5px;
+  background: #0a2018;
+  border-color: #1a4030;
+  color: #a8e0b8;
+}
+
+/* Fenced code blocks (e.g., ```verilog … ```) inside answers */
+.iv-code {
+  background: #0a1020;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  overflow-x: auto;
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+.iv-code code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #c8e0d8;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  white-space: pre;
+  word-spacing: normal;
+  letter-spacing: 0;
+}
+.iv-code[data-lang]::before {
+  content: attr(data-lang);
+  display: inline-block;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #80a0c0;
+  margin-bottom: 8px;
+  padding: 2px 6px;
+  background: #1a2030;
+  border-radius: 2px;
+}
+
+/* Schematic shown inside an answer block — slight padding-bottom so
+   the answer text below has breathing room. */
+.iv-schematic-answer {
+  margin: 6px 0 14px;
+}

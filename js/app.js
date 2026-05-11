@@ -5424,6 +5424,29 @@ document.getElementById('btn-tutorial')?.addEventListener('click', async () => {
     alert('Tutorial failed to load: ' + (err?.message || err));
   }
 });
+
+// ── Interview Prep (lazy-loaded on first click) ─────────────
+let _interview = null;
+async function _ensureInterview() {
+  if (_interview) return _interview;
+  const mod = await import('./interview/index.js');
+  _interview = mod.createInterview({
+    scene,
+    state,
+    commands,
+    renderer: { zoomToFit: Renderer.zoomToFit },
+  });
+  return _interview;
+}
+document.getElementById('btn-interview')?.addEventListener('click', async () => {
+  try {
+    const iv = await _ensureInterview();
+    iv.panel.toggle();
+  } catch (err) {
+    console.error('[interview] failed to open:', err);
+    alert('Interview prep failed to load: ' + (err?.message || err));
+  }
+});
 document.getElementById('btn-examples-close')?.addEventListener('click', () => {
   examplesOverlay.classList.add('hidden');
 });
