@@ -67,6 +67,28 @@ export const h = {
     n.label = kind;
     return n;
   },
+  /** Full Adder. Inputs A=0, B=1, Cin=2; outputs SUM=out0, COUT=out1. */
+  fa(x, y, label = 'FA') {
+    const n = createComponent(COMPONENT_TYPES.FULL_ADDER, x, y);
+    n.id = _nid();
+    n.label = label;
+    return n;
+  },
+  /** Half Adder. Inputs A=0, B=1; outputs SUM=out0, COUT=out1. */
+  ha(x, y, label = 'HA') {
+    const n = createComponent(COMPONENT_TYPES.HALF_ADDER, x, y);
+    n.id = _nid();
+    n.label = label;
+    return n;
+  },
+  /** 2:1 MUX. Inputs: d0=0, d1=1, sel=2. Output: sel ? d1 : d0. */
+  mux(x, y, label = 'MUX') {
+    const n = createComponent(COMPONENT_TYPES.MUX, x, y);
+    n.id = _nid();
+    n.inputCount = 2;
+    n.label = label;
+    return n;
+  },
   block(type, x, y, overrides = {}) {
     const n = createComponent(type, x, y);
     n.id = _nid();

@@ -256,4 +256,93 @@ slack שלילי לכל path בעייתי. הכלי מציע אוטומטית "w
       };
     }),
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // #5002 — 2-FF synchronizer + metastability + MTBF
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'two-ff-synchronizer',
+    difficulty: 'medium',
+    title: 'סנכרון אות אסינכרוני: 2-FF synchronizer + MTBF',
+    intro:
+`אות \`async_in\` מגיע מ-clock domain אחר (או מכפתור אסינכרוני).
+תכנן מבנה לסנכרון לכניסה ל-domain שלך \`clk\`.
+מהי **metastability**, ומה ה-**MTBF**?`,
+    parts: [
+      {
+        label: null,
+        question: 'מה המבנה המומלץ, ולמה דווקא 2 FFים?',
+        hints: [
+          'אם FF דוגם אות שמשתנה ב-±tsetup/thold סביב ה-edge — Q יכול להישאר במצב לא מוגדר זמן-מה (metastable).',
+          'הפתרון: עוד FF אחרי הראשון. אם הראשון נתקע ב-meta, יש לו מחזור שלם להירגע לפני שהשני דוגם.',
+          'MTBF גדל **אקספוננציאלית** עם הזמן לפני הדגימה הבאה. 2 FFים בדרך כלל מספיקים לתדרים נמוכים; קצבי GHz דורשים 3.',
+        ],
+        answer:
+`**Metastability:** FF שדוגם אות שמשתנה בתוך \`tsetup/thold\` עלול לפלוט \`Q\` במצב ביניים (לא 0 ולא 1) לזמן \`tmet\`. אם \`tmet\` גדול מ-clock period הבא — הערך המטא-יציב מתפשט במעגל ויוצר תקלות.
+
+**הפתרון — 2-FF synchronizer:**
+
+\`\`\`
+async_in ──→ [FF1] ──→ [FF2] ──→ sync_out
+                ↑          ↑
+                clk        clk
+\`\`\`
+
+FF1 עלול להיכנס ל-meta, אבל יש לו **clock period שלם** להתייצב לפני ש-FF2 דוגם.
+
+**נוסחת MTBF:**
+
+\`\`\`
+MTBF = exp(t_met / τ) / (T_w · f_clk · f_data)
+\`\`\`
+
+- \`t_met\` = הזמן שניתן ל-FF להתייצב (≈ clock period פחות tsetup).
+- \`τ\` = קבוע הזמן של ה-FF (תהליך-תלוי, ~30 ps לטכנולוגיה מודרנית).
+- \`T_w\` = רוחב חלון ה-metastability.
+
+**העיקרון החשוב:** MTBF גדל **אקספוננציאלית** עם t_met. כל FF נוסף בשרשרת מכפיל את t_met → מקטין הסתברות ל-meta בסדרי גודל.
+
+**מתי 3-FF במקום 2?** ב-clk מהיר במיוחד (>1 GHz) או ב-aerospace/medical, שבהם MTBF נדרש להיות שנים-עשרות שנים.
+
+**אזהרה:** סנכרון רק לאות חד-ביטי. עבור bus רב-ביטי דרושה שיטה כמו handshake או Gray code (אחרת ביטים שונים עלולים להגיע ב-cycles שונים).`,
+        interviewerMindset:
+`השאלה הזו היא **הליטמוס טסט של ראיון ASIC**. אם תיתקע פה — נגמר. רוצה לראות:
+
+1. **מבדיל בין "מה זה metastability" ל-"איך פותרים":** הרבה מועמדים יודעים תיאוריה ולא פתרון.
+2. **יודע למה 2 ולא 1:** "כי תוסיף עוד time slot להתייצבות, וההסתברות אקספוננציאלית בזמן."
+3. **לא מצמיד סינכרוניזטור ל-bus רב-ביטי:** Gray code, handshake, async FIFO — כולם פתרונות תקפים לפי ההקשר.
+
+**שאלה שמראיין אוהב לזרוק:** "האם 2-FF תופס את הכל?" התשובה: לא. הוא רק מפחית את ההסתברות. \`MTBF\` אינסופי לא קיים. בטכנולוגיה מודרנית, 2-FF נותן MTBF של מאות שנים — לרוב מספיק. ל-aerospace, מוסיפים שלישי.`,
+        expectedAnswers: [
+          '2', 'two', 'שני', 'שתי',
+          'metastability', 'מטא', 'meta',
+          'mtbf', 'exponential', 'אקספוננציאלי',
+          'gray', 'handshake', 'bus', 'τ', 'tau',
+        ],
+        circuitRevealsAnswer: true,
+        circuit: () => build(() => {
+          const async_in = h.input(140, 220, 'async_in');
+          const clk      = h.clock(140, 460);
+          const ff1      = h.ffD(420, 220, 'FF1');
+          const ff2      = h.ffD(700, 220, 'FF2');
+          const out      = h.output(960, 220, 'sync_out');
+          // Async-style toggling: pretend each STEP is a random arrival.
+          async_in.fixedValue = 0;
+          async_in.stepValues = [0, 1, 1, 0, 0, 1, 0, 1, 1, 0];
+          return {
+            nodes: [async_in, clk, ff1, ff2, out],
+            wires: [
+              h.wire(async_in.id, ff1.id, 0),
+              h.wire(clk.id,      ff1.id, 1),
+              h.wire(ff1.id,      ff2.id, 0),
+              h.wire(clk.id,      ff2.id, 1),
+              h.wire(ff2.id,      out.id, 0),
+            ],
+          };
+        }),
+      },
+    ],
+    source: 'מאגר ראיונות — הקלאסיק של CDC (asked everywhere)',
+    tags: ['cdc', 'metastability', 'synchronizer', 'mtbf', 'timing'],
+  },
 ];

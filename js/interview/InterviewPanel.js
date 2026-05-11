@@ -11,6 +11,7 @@
  */
 
 import { TOPICS, serialFor } from './topics.js';
+import { findQuestion as _findQuestion } from './questions.js';
 
 export class InterviewPanel {
   constructor(engine) {
@@ -42,7 +43,10 @@ export class InterviewPanel {
       <div class="iv-resize-grip" title="Drag to resize"></div>
       <div id="interview-panel-header">
         <span>💼 INTERVIEW PREP</span>
-        <button class="iv-x" data-act="close" title="Close">CLOSE</button>
+        <div class="iv-header-actions">
+          <button class="iv-btn iv-btn-mindset-index" data-act="show-mindset-index" title="כל הראש-של-המראיין בכל השלבים">🎯 הראש של המראיין</button>
+          <button class="iv-x" data-act="close" title="Close">CLOSE</button>
+        </div>
       </div>
       <div id="interview-panel-body"></div>
     `;
@@ -69,12 +73,15 @@ export class InterviewPanel {
     if (!t) return;
     const act = t.dataset.act;
     if (act === 'close')              { this.hide(); return; }
-    if (t.dataset.topic)              { this.activeTopic = t.dataset.topic; this.render(); return; }
+    if (act === 'show-mindset-index') { this.view = 'mindset-index'; this.render(); return; }
+    if (act === 'back-from-mindset')  { this.view = this.engine.active ? 'question' : 'catalog'; this.render(); return; }
+    if (t.dataset.topic)              { this.activeTopic = t.dataset.topic; if (this.view === 'mindset-index') this.view = 'catalog'; this.render(); return; }
     if (act === 'open-question')      { this.engine.enter(this.activeTopic, t.dataset.question); this.view = 'question'; return; }
     if (act === 'back-to-catalog')    { this.engine.exit(); this.view = 'catalog'; this.render(); return; }
     if (act === 'hint')               { this.engine.revealHint(); return; }
     if (act === 'show-answer')        { this.engine.showAnswer(); return; }
     if (act === 'hide-answer')        { this.engine.hideAnswer(); return; }
+    if (act === 'toggle-mindset')     { this.engine.toggleMindset(); return; }
     if (act === 'prev-part')          { this.engine.prevPart(); return; }
     if (act === 'next-part')          { this.engine.nextPart(); return; }
     if (act === 'toggle-mastered')    { this.engine.toggleMastered(); return; }
@@ -242,9 +249,10 @@ export class InterviewPanel {
     const selStart = focusedClass ? focused.selectionStart : null;
     const selEnd   = focusedClass ? focused.selectionEnd   : null;
 
-    const html = (this.view === 'question' && this.engine.active)
-      ? this._renderQuestion()
-      : this._renderCatalog();
+    const html =
+      this.view === 'mindset-index'                   ? this._renderMindsetIndex() :
+      (this.view === 'question' && this.engine.active) ? this._renderQuestion()    :
+                                                         this._renderCatalog();
 
     // Skip the swap entirely if the markup is identical — saves a paint and
     // any rare layout reflow noise.
@@ -391,10 +399,6 @@ export class InterviewPanel {
     const topic = TOPICS.find(t => t.id === this.activeTopic);
 
     return `
-      <div class="iv-catalog-intro" dir="rtl">
-        מאגר שאלות לראיונות עבודה בתחום עיצוב דיגיטלי.
-        בחר נושא מהלשוניות למטה — כל נושא מציג את השאלות שהוספת ל-<code dir="ltr">IQ/&lt;topic&gt;/</code>.
-      </div>
       <div class="iv-tabs">${tabsHtml}</div>
       ${topic ? `
         <div class="iv-topic-head" dir="rtl">
@@ -403,6 +407,73 @@ export class InterviewPanel {
         </div>` : ''}
       ${cards}
     `;
+  }
+
+  /**
+   * Mindset index: aggregate every interviewerMindset across all topics
+   * and questions, grouped by topic. Each entry shows the part's full
+   * serial (e.g. #2002·א) + title + the mindset text. Empty topics are
+   * skipped.
+   */
+  _renderMindsetIndex() {
+    let html = `
+      <div class="iv-mindset-index-head" dir="rtl">
+        <div>
+          <div class="iv-mindset-index-title">🎯 הראש של המראיין — כל השלבים</div>
+          <div class="iv-mindset-index-sub">ריכוז של ההסברים "מה המראיין באמת בודק" מכל השאלות במאגר.</div>
+        </div>
+        <button class="iv-btn" data-act="back-from-mindset">↩ חזרה</button>
+      </div>
+    `;
+
+    for (const topic of TOPICS) {
+      const list = this.engine.listQuestions(topic.id);
+      const entries = [];
+      for (let qIdx = 0; qIdx < list.length; qIdx++) {
+        const stub = list[qIdx];
+        // Pull the full question object (need parts + mindset fields).
+        const q = (typeof this.engine.currentQuestion === 'function')
+          ? null  // not active; we need a direct lookup
+          : null;
+        // Use the questions module directly via engine helper-less path:
+        const full = _findQuestion(topic.id, stub.id);
+        if (!full) continue;
+        const serialBase = serialFor(topic.id, qIdx);
+        const parts = Array.isArray(full.parts) && full.parts.length > 0
+          ? full.parts
+          : [{ label: null, interviewerMindset: full.interviewerMindset }];
+        const multi = parts.length > 1;
+        parts.forEach((p, pIdx) => {
+          const text = p?.interviewerMindset || (pIdx === 0 ? full.interviewerMindset : null);
+          if (!text) return;
+          const suffix = (multi && p.label != null) ? `·${p.label}` : '';
+          entries.push({
+            serial: `${serialBase}${suffix}`,
+            title:  full.title,
+            partLabel: p.label,
+            text,
+          });
+        });
+      }
+      if (entries.length === 0) continue;
+      html += `
+        <div class="iv-mindset-topic" dir="rtl">
+          <div class="iv-mindset-topic-head">
+            <span class="iv-tab-num">${topic.tabNumber}</span>
+            <span class="iv-mindset-topic-name">${topic.icon} <span dir="ltr">${_esc(topic.label)}</span></span>
+          </div>
+          ${entries.map(e => `
+            <div class="iv-mindset-card">
+              <div class="iv-mindset-card-head">
+                <span class="iv-card-serial" dir="ltr">#${e.serial}</span>
+                <span class="iv-mindset-card-title">${_esc(e.title)}${e.partLabel ? ` — סעיף ${_esc(e.partLabel)}` : ''}</span>
+              </div>
+              <div class="iv-mindset-body">${_renderRichText(e.text)}</div>
+            </div>
+          `).join('')}
+        </div>`;
+    }
+    return html;
   }
 
   _renderCard(q, indexWithinTopic) {
@@ -449,11 +520,13 @@ export class InterviewPanel {
       // render() after the innerHTML swap and is preserved across renders.
       const savedHeight = this._cmSavedHeight();
       const hostStyle = `--cm-h:${savedHeight}px`;
+      const label = part.editorLabel || 'Verilog';
+      const hint  = part.editorHint  || 'כתוב את המודול בעורך למטה ולחץ "בדוק"';
       return `
         <div class="iv-check-wrap-code" dir="rtl">
           <div class="iv-code-header">
-            <span class="iv-code-label">Verilog</span>
-            <span class="iv-code-hint">כתוב את המודול בעורך למטה ולחץ "בדוק"</span>
+            <span class="iv-code-label">${_esc(label)}</span>
+            <span class="iv-code-hint">${_esc(hint)}</span>
           </div>
           <div class="iv-code-host" id="iv-cm-host" dir="ltr" style="${hostStyle}"></div>
           <div class="iv-code-resize-grip" title="גרור לשינוי גובה העורך"></div>
@@ -522,12 +595,12 @@ export class InterviewPanel {
                <button class="iv-btn" data-act="restore-circuit" title="חזרה למעגל שלך מלפני הטעינה">↩ שחזר את העבודה שלי</button>
              </div>`
           : `<div class="iv-circuit-bar" dir="rtl">
-               <span class="iv-circuit-hint">${q.circuitRevealsAnswer ? 'המעגל המלא של הפתרון — אפשר לטעון לקנבס ולהריץ.' : 'רוצה לבדוק בעצמך? אפשר לטעון את המעגל הזה לקנבס ולהריץ אותו.'}</span>
+               <span class="iv-circuit-hint">${this.engine._activeCircuitRevealsAnswer() ? 'המעגל המלא של הפתרון — אפשר לטעון לקנבס ולהריץ.' : 'רוצה לבדוק בעצמך? אפשר לטעון את המעגל הזה לקנבס ולהריץ אותו.'}</span>
                <button class="iv-btn iv-btn-primary" data-act="load-circuit" title="המעגל הנוכחי שלך יישמר ויחזור כשתסיים">⤓ טען על הקנבס</button>
              </div>`)
       : '';
-    const circuitHtml         = (this.engine.hasCircuit() && !q.circuitRevealsAnswer) ? circuitBarHtml : '';
-    const circuitInAnswerHtml = (this.engine.hasCircuit() &&  q.circuitRevealsAnswer && answerShown) ? circuitBarHtml : '';
+    const circuitHtml         = (this.engine.hasCircuit() && !this.engine._activeCircuitRevealsAnswer()) ? circuitBarHtml : '';
+    const circuitInAnswerHtml = (this.engine.hasCircuit() &&  this.engine._activeCircuitRevealsAnswer() && answerShown) ? circuitBarHtml : '';
 
     const hintsHtml = hints.map((h, i) =>
       `<div class="iv-hint" dir="rtl">💡 רמז ${i + 1}: ${_renderInline(h)}</div>`
@@ -554,10 +627,15 @@ export class InterviewPanel {
     const qList = this.engine.listQuestions(this.topicId);
     const qIdx  = qList.findIndex(x => x.id === q.id);
     const serial = qIdx >= 0 ? serialFor(this.topicId, qIdx) : null;
+    // Per-part suffix: append "·<part-label>" (e.g. "5001·א") so each
+    // sub-question gets a unique citable identifier. Single-part
+    // questions stay as plain "5001".
+    const partSuffix = (part.label != null && total > 1) ? `·${part.label}` : '';
+    const fullSerial = serial ? `${serial}${partSuffix}` : null;
 
     return `
       <div class="iv-question-head">
-        ${serial ? `<span class="iv-question-serial" dir="ltr">#${serial}</span>` : ''}
+        ${fullSerial ? `<span class="iv-question-serial" dir="ltr">#${fullSerial}</span>` : ''}
         <div class="iv-question-title" dir="rtl">${_esc(q.title)}</div>
         <div class="iv-question-meta">
           ${partLabel}
@@ -573,9 +651,16 @@ export class InterviewPanel {
         ${this._renderAnswerCheck()}
         ${hintsHtml}
         ${answerHtml}
+        ${this.engine.mindsetShown() && this.engine.hasMindset()
+          ? `<div class="iv-mindset" dir="rtl">
+               <div class="iv-mindset-head">🎯 ראש המראיין</div>
+               <div class="iv-mindset-body">${_renderRichText(this.engine.mindsetText())}</div>
+             </div>`
+          : ''}
       </div>
       <div class="iv-actions">
         ${moreHints ? '<button class="iv-btn" data-act="hint">💡 רמז</button>' : ''}
+        ${this.engine.hasMindset() ? `<button class="iv-btn iv-btn-mindset" data-act="toggle-mindset">${this.engine.mindsetShown() ? '🎯 הסתר ראש המראיין' : '🎯 ראש המראיין'}</button>` : ''}
         ${!answerShown ? '<button class="iv-btn iv-btn-warn" data-act="show-answer">הצג תשובה</button>' : ''}
         ${total > 1 ? `<button class="iv-btn" data-act="prev-part" ${this.engine.isFirstPart() ? 'disabled' : ''}>← סעיף קודם</button>` : ''}
         ${total > 1 ? `<button class="iv-btn iv-btn-primary" data-act="next-part" ${this.engine.isLastPart() ? 'disabled' : ''}>סעיף הבא →</button>` : ''}

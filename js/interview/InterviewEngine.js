@@ -30,6 +30,7 @@ export class InterviewEngine {
     this._partState    = {};
     this._sceneSnapshot = null;                  // pre-load scene for restore
     this._circuitLoaded = false;                 // currently displayed circuit?
+    this._loadedKey     = null;                  // which (topic,question,part) is currently on the canvas
     this.onChange      = () => {};
 
     this.progress = this._loadProgress();
@@ -90,9 +91,30 @@ export class InterviewEngine {
   }
 
   // ── circuit load / restore ──────────────────────────────────
-  hasCircuit() {
+  /**
+   * Returns the circuit-builder function for the current view. The part
+   * may override the question — useful for multi-part questions where
+   * each part shows a different circuit (e.g. FA in part א vs. a
+   * popcount tree in part ב).
+   */
+  _activeCircuitFn() {
+    const part = this.currentPart();
+    if (part && typeof part.circuit === 'function') return part.circuit;
     const q = this.currentQuestion();
-    return !!(q && typeof q.circuit === 'function' && this.scene);
+    if (q && typeof q.circuit === 'function') return q.circuit;
+    return null;
+  }
+
+  /** Likewise: part-level flag wins over question-level. */
+  _activeCircuitRevealsAnswer() {
+    const part = this.currentPart();
+    if (part && part.circuitRevealsAnswer != null) return !!part.circuitRevealsAnswer;
+    const q = this.currentQuestion();
+    return !!(q && q.circuitRevealsAnswer);
+  }
+
+  hasCircuit() {
+    return !!(this._activeCircuitFn() && this.scene);
   }
 
   isCircuitLoaded() { return this._circuitLoaded; }
@@ -103,18 +125,19 @@ export class InterviewEngine {
    * deserialize the question's circuit.
    */
   loadCircuit() {
-    const q = this.currentQuestion();
-    if (!q || typeof q.circuit !== 'function' || !this.scene) return false;
+    const fn = this._activeCircuitFn();
+    if (!fn || !this.scene) return false;
     try {
       if (!this._sceneSnapshot) {
         this._sceneSnapshot = JSON.stringify(this.scene.serialize());
       }
-      const data = q.circuit();
+      const data = fn();
       this.scene.deserialize(data);
       this.state?.resetSequentialState?.(this.scene.nodes);
       this.commands?.clear?.();
       setTimeout(() => this.renderer?.zoomToFit?.(this.scene.nodes), 50);
       this._circuitLoaded = true;
+      this._loadedKey     = `${this.topicId}::${this.questionId}:${this.partIndex}`;
       this.onChange();
       return true;
     } catch (err) {
@@ -140,6 +163,7 @@ export class InterviewEngine {
     }
     this._sceneSnapshot = null;
     this._circuitLoaded = false;
+    this._loadedKey     = null;
     this.onChange();
     return true;
   }
@@ -183,10 +207,26 @@ export class InterviewEngine {
   _ps() {
     let s = this._partState[this.partIndex];
     if (!s) {
-      s = { hintsShown: 0, answerShown: false, lastCheck: null };
+      s = { hintsShown: 0, answerShown: false, mindsetShown: false, lastCheck: null };
       this._partState[this.partIndex] = s;
     }
     return s;
+  }
+
+  mindsetShown() { return !!this._ps().mindsetShown; }
+  hasMindset()   {
+    const p = this.currentPart();
+    const q = this.currentQuestion();
+    return !!(p?.interviewerMindset || q?.interviewerMindset);
+  }
+  mindsetText() {
+    const p = this.currentPart();
+    if (p?.interviewerMindset) return p.interviewerMindset;
+    return this.currentQuestion()?.interviewerMindset || '';
+  }
+  toggleMindset() {
+    this._ps().mindsetShown = !this._ps().mindsetShown;
+    this.onChange();
   }
 
   /**
@@ -246,11 +286,18 @@ export class InterviewEngine {
     this._ps().answerShown = true;
     // When the circuit IS the solution, drop it onto the canvas right
     // away — saves the user a second click and matches the "reveal
-    // the answer" mental model.
-    const q = this.currentQuestion();
-    if (q?.circuitRevealsAnswer && this.hasCircuit() && !this._circuitLoaded) {
-      this.loadCircuit();
-      return; // loadCircuit() already fired onChange()
+    // the answer" mental model. Part-level circuit takes precedence,
+    // so a multi-part question can reveal a different circuit per part.
+    //
+    // Reload also when a DIFFERENT part's circuit is already loaded
+    // (otherwise navigating from part א → part ב would leave the old
+    // canvas in place even though this part has its own circuit).
+    if (this._activeCircuitRevealsAnswer() && this.hasCircuit()) {
+      const wantKey = `${this.topicId}::${this.questionId}:${this.partIndex}`;
+      if (!this._circuitLoaded || this._loadedKey !== wantKey) {
+        this.loadCircuit();
+        return; // loadCircuit() already fired onChange()
+      }
     }
     this.onChange();
   }

@@ -4039,6 +4039,118 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 .iv-answer-body p { margin: 0 0 8px 0; }
 .iv-answer-body p:last-child { margin-bottom: 0; }
 
+/* ── Interviewer-mindset reveal (🎯 ראש המראיין) ─────────────── */
+.iv-mindset {
+  margin-top: 10px;
+  background: #1a1408;
+  border: 1px solid #c08020;
+  border-left: 3px solid #f0a040;
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+.iv-mindset-head {
+  font-weight: bold;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #f0c060;
+  margin-bottom: 6px;
+}
+.iv-mindset-body {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #e0d0a0;
+}
+.iv-mindset-body p { margin: 0 0 6px 0; }
+.iv-mindset-body p:last-child { margin-bottom: 0; }
+.iv-btn-mindset {
+  background: #1a1408 !important;
+  border-color: #c08020 !important;
+  color: #f0c060 !important;
+}
+.iv-btn-mindset:hover {
+  background: #2a1c10 !important;
+  border-color: #f0a040 !important;
+}
+
+/* ── Mindset index view (🎯 כפתור בכותרת) ────────────────────── */
+.iv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iv-btn-mindset-index {
+  font-size: 10px;
+  font-weight: bold;
+  background: #1a1408;
+  border: 1px solid #c08020;
+  color: #f0c060;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.iv-btn-mindset-index:hover {
+  background: #2a1c10;
+  border-color: #f0a040;
+}
+.iv-mindset-index-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #c08020;
+}
+.iv-mindset-index-title {
+  color: #f0c060;
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+.iv-mindset-index-sub {
+  color: #a09070;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.iv-mindset-topic {
+  margin-bottom: 18px;
+}
+.iv-mindset-topic-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #806040;
+}
+.iv-mindset-topic-name {
+  color: #f0c060;
+  font-weight: bold;
+  font-size: 13px;
+}
+.iv-mindset-card {
+  background: #1a1408;
+  border: 1px solid #806040;
+  border-left: 3px solid #f0a040;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.iv-mindset-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.iv-mindset-card-title {
+  color: #f0c060;
+  font-weight: bold;
+  font-size: 12px;
+  flex: 1;
+}
+
 .iv-table {
   border-collapse: collapse;
   margin: 8px 0;
