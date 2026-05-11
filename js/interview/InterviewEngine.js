@@ -244,6 +244,14 @@ export class InterviewEngine {
 
   showAnswer() {
     this._ps().answerShown = true;
+    // When the circuit IS the solution, drop it onto the canvas right
+    // away — saves the user a second click and matches the "reveal
+    // the answer" mental model.
+    const q = this.currentQuestion();
+    if (q?.circuitRevealsAnswer && this.hasCircuit() && !this._circuitLoaded) {
+      this.loadCircuit();
+      return; // loadCircuit() already fired onChange()
+    }
     this.onChange();
   }
 

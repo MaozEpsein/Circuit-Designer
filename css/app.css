@@ -3757,6 +3757,29 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
   vertical-align: middle;
 }
 
+/* ── Verilog editor (CodeMirror 6) ───────────────────────────────── */
+.iv-check-wrap-code {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.iv-code-host {
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #181c24;
+  min-height: 120px;
+}
+.iv-code-host .cm-editor,
+.iv-code-host .cm-editor.cm-focused { outline: none; }
+.iv-code-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .iv-topic-head {
   margin-bottom: 12px;
   padding-bottom: 8px;

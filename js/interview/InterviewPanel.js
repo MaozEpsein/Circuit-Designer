@@ -22,6 +22,9 @@ export class InterviewPanel {
     /** Typed answer in the active part's input. Cleared when part changes. */
     this._typedAnswer = '';
     this._lastPartKey = null;
+    /** Active CodeMirror editor (one at a time). */
+    this._cmEditor = null;
+    this._cmKey    = null;
   }
 
   show()       { if (!this.root) this._build(); this.root.classList.remove('hidden');
@@ -81,11 +84,20 @@ export class InterviewPanel {
   }
 
   _handleCheckAnswer() {
-    const inp = this.root?.querySelector('.iv-answer-input');
-    if (!inp) return;
-    this.engine.checkAnswer(inp.value);
+    // Prefer the CodeMirror editor (Verilog parts); fall back to the
+    // single-line input for plain text answers.
+    let value;
+    if (this._cmEditor) {
+      value = this._cmEditor.getValue();
+    } else {
+      const inp = this.root?.querySelector('.iv-answer-input');
+      if (!inp) return;
+      value = inp.value;
+    }
+    this.engine.checkAnswer(value);
     // Re-render via onChange; preserve focus + value
     setTimeout(() => {
+      if (this._cmEditor) { this._cmEditor.focus(); return; }
       const inp2 = this.root?.querySelector('.iv-answer-input');
       if (inp2) { inp2.focus(); }
     }, 0);
@@ -147,6 +159,14 @@ export class InterviewPanel {
       return;
     }
     this._lastHtml = html;
+
+    // If a CodeMirror editor is mounted, detach its DOM BEFORE the
+    // innerHTML swap so the editor instance (and its caret / undo
+    // history / focus) survives. We reattach right after.
+    const detachedCm = this._cmEditor?.dom?.parentNode
+      ? (() => { const d = this._cmEditor.dom; d.remove(); return d; })()
+      : null;
+
     body.innerHTML = html;
 
     // Restore scroll + focus + caret position.
@@ -160,6 +180,75 @@ export class InterviewPanel {
         }
       }
     }
+
+    // Re-attach / mount / dispose the CodeMirror editor depending on
+    // whether the new markup has a host and whether the part changed.
+    this._syncCmEditor(body, detachedCm);
+  }
+
+  /**
+   * Keep the CodeMirror editor in sync with the rendered DOM:
+   *   • host present + same part   → re-attach existing editor DOM
+   *   • host present + new part    → destroy old, mount fresh
+   *   • host absent  + editor exists → destroy editor
+   *
+   * `detachedDom` is the editor's root DOM node that we removed before
+   * the innerHTML swap (or null if there was no editor or it was never
+   * attached). It must be re-inserted into the new host or it will be
+   * garbage-collected by CodeMirror's destroy().
+   */
+  _syncCmEditor(body, detachedDom) {
+    const host = body.querySelector('#iv-cm-host');
+    const partKey = this.engine.active
+      ? `${this.engine.questionId}:${this.engine.partIndex}`
+      : null;
+
+    if (!host) {
+      if (this._cmEditor) {
+        this._cmEditor.destroy();
+        this._cmEditor = null;
+        this._cmKey    = null;
+      }
+      return;
+    }
+
+    if (this._cmEditor && this._cmKey === partKey) {
+      // Same part — re-attach the detached DOM into the new host.
+      if (detachedDom) host.appendChild(detachedDom);
+      return;
+    }
+
+    // Different part (or first time): tear down old, mount new.
+    if (this._cmEditor) {
+      this._cmEditor.destroy();
+      this._cmEditor = null;
+    }
+    this._cmKey = partKey;
+    const wantKey = partKey;
+    const starterDoc = this._typedAnswer || '';
+
+    import('./codeEditor.js')
+      .then(({ createVerilogEditor }) => createVerilogEditor({
+        container: host,
+        initialDoc: starterDoc,
+        onChange: (val) => { this._typedAnswer = val; },
+      }))
+      .then((editor) => {
+        // If the user navigated away while CodeMirror was loading,
+        // throw the half-mounted editor away.
+        const nowKey = this.engine.active
+          ? `${this.engine.questionId}:${this.engine.partIndex}`
+          : null;
+        if (nowKey !== wantKey) {
+          editor.destroy();
+          return;
+        }
+        this._cmEditor = editor;
+      })
+      .catch((err) => {
+        console.error('[interview] CodeMirror failed to load:', err);
+        host.innerHTML = '<div class="iv-empty" dir="rtl">לא הצלחנו לטעון את עורך הקוד.</div>';
+      });
   }
 
   _renderCatalog() {
@@ -237,6 +326,21 @@ export class InterviewPanel {
     const resultHtml = last
       ? `<div class="iv-check-result ${resultCls}" dir="rtl">${_esc(last.message)}</div>`
       : '';
+
+    const part = this.engine.currentPart();
+    if (part?.editor === 'verilog') {
+      // Render an empty host; the actual CodeMirror view is mounted by
+      // render() after the innerHTML swap and is preserved across renders.
+      return `
+        <div class="iv-check-wrap iv-check-wrap-code" dir="ltr">
+          <div class="iv-code-host" id="iv-cm-host"></div>
+          <div class="iv-code-actions" dir="rtl">
+            <button class="iv-btn iv-btn-primary" data-act="check-answer">בדוק</button>
+            ${resultHtml}
+          </div>
+        </div>`;
+    }
+
     return `
       <div class="iv-check-wrap" dir="rtl">
         <input type="text" class="iv-answer-input" dir="auto"

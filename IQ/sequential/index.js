@@ -114,55 +114,73 @@ export const QUESTIONS = [
       },
       {
         label: 'ב',
-        question: `איך תיישם את המעגל בפועל ב-Verilog? כתוב מודול סינכרוני
-עם reset אסינכרוני אקטיבי-נמוך.`,
+        editor: 'verilog',
+        question: `איך תיישם את המעגל מסעיף א (גרסת שני ה-FFים) ב-Verilog?
+כתוב מודול סינכרוני עם reset אסינכרוני אקטיבי-נמוך.`,
         hints: [
-          'כל אחד משלושת הרכיבים (D-FF, NOT, AND) הוא ביטוי בודד ב-Verilog. מה הפרדיגמה לכל אחד?',
-          'ה-D-FF נכתב ב-\`always @(posedge clk)\` עם \`q <= d\`. ה-NOT וה-AND הם \`assign\` עם \`~\` ו-\`&\`.',
-          'תכלל reset אסינכרוני בתוך ה-sensitivity list של ה-always block: \`always @(posedge clk or negedge rst_n)\`.',
+          'מבנה D-FF ב-Verilog: \`always @(posedge clk or negedge rst_n)\` עם \`q <= d\`.',
+          'יש שני FFים בטור: ה-\`curr\` דוגם את הקלט, ה-\`prev\` דוגם את \`curr\`. שניהם ב-\`always\` אחד.',
+          'הפלט הוא \`assign pulse = prev & ~curr\` — שילוב קומבינטורי של שתי הדגימות.',
         ],
         answer:
 `\`\`\`verilog
 module falling_edge_detector (
     input  wire clk,
-    input  wire rst_n,    // async reset, active-low
+    input  wire rst_n,     // async reset, active-low
     input  wire d_in,
     output wire pulse
 );
 
-    reg q;
+    reg curr;   // d_in sampled this cycle
+    reg prev;   // curr from the previous cycle
 
-    // D-FF: samples d_in on the rising edge of clk; cleared by rst_n.
+    // Two-stage register chain. Both FFs sample at the same posedge;
+    // non-blocking (<=) ensures \`prev\` latches the OLD \`curr\`, not
+    // the value being assigned to it this cycle.
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) q <= 1'b0;
-        else        q <= d_in;
+        if (!rst_n) begin
+            curr <= 1'b0;
+            prev <= 1'b0;
+        end else begin
+            curr <= d_in;
+            prev <= curr;
+        end
     end
 
-    // Combinational glue: pulse when previous=1 AND current=0.
-    assign pulse = q & ~d_in;
+    // Pulse when the sampled input fell between cycles:
+    //   prev = 1 (sampled HIGH one cycle ago)
+    //   curr = 0 (sampled LOW now)
+    assign pulse = prev & ~curr;
 
 endmodule
 \`\`\`
 
 **הסבר שורה-שורה:**
 
-- \`reg q\` — היציאה של ה-D-FF (הערך של \`d_in\` ב-edge הקודם).
-- \`always @(posedge clk or negedge rst_n)\` — מבנה סטנדרטי ל-D-FF
-  עם reset אסינכרוני. ה-FF נדגם בכל \`clk rising edge\`, ומאופס מיידית
-  כש-\`rst_n\` יורד ל-0.
-- \`assign pulse = q & ~d_in\` — הביטוי הבוליאני שלנו, מתורגם 1:1 ל-Verilog.
+- \`reg curr, prev\` — שני ה-FFים. \`curr\` שומר את \`d_in\` שנדגם בקצה
+  הזה, \`prev\` שומר את \`curr\` מהקצה הקודם.
+- \`always @(posedge clk or negedge rst_n)\` — שני ה-FFים באותו בלוק;
+  שניהם מתאפסים אסינכרונית כש-\`rst_n\` יורד.
+- \`curr <= d_in; prev <= curr;\` — שני ה-assignments הם **non-blocking**
+  (\`<=\`), כך ש-\`prev\` לוקח את הערך **הישן** של \`curr\`, לא את החדש
+  שמוקצה לו עכשיו. זה הסוד שהופך את הצמד לשרשרת רגיסטרים אמיתית.
+- \`assign pulse = prev & ~curr\` — קומבינטוריקה: פולס כש-\`prev=1\` ו-\`curr=0\`,
+  בדיוק כמו ב-AND/NOT של המעגל.
 
 **טיפים שמראיינים מצפים שתזכיר:**
 
 - **\`<=\` ולא \`=\` בתוך \`always @(posedge ...)\`** — non-blocking assignment
-  הוא הסטנדרט ל-FFs. \`=\` (blocking) יוצר race conditions בין FFs.
+  הוא הסטנדרט ל-FFs. עם \`=\` (blocking), \`prev = curr\` היה לוקח את
+  הערך החדש של \`curr\` ולא הקודם — שרשרת ה-FFים הייתה קורסת ל-FF יחיד.
 - **רוחב bit אחד** ל-\`d_in\` ו-\`pulse\`. אם רוצים גלאי על אות רב-ביטי,
   צריך להחליט: detect any change? detect specific transition?
-- **חתימה לתעשייה:** רוב הצוותים דורשים גם \`(* keep *)\` או comment על
-  ה-FF כדי שהסינתסייזר לא יבטל אותו אם נתיב הפלט לא מחובר.`,
+- **למה לא FF אחד?** במעגל סינכרוני שבו ה-\`d_in\` עצמו דגום באותו שעון,
+  FF יחיד היה נותן \`q ≡ d_in\` תמיד; הצורך בשני FFים מבטיח שיש לנו
+  גם "נוכחי" וגם "קודם" שניתן להשוות. ראה את ההסבר בסעיף א.`,
         expectedAnswers: [
-          'always', 'posedge', 'reg', 'assign', 'q & ~d_in', 'q & ~in',
-          'q <= d_in', 'q <= in', 'q<=d_in', '<=',
+          'always', 'posedge', 'reg', 'assign',
+          'prev & ~curr', 'prev&~curr', 'prev & !curr',
+          'curr <= d_in', 'prev <= curr', '<=',
         ],
       },
     ],
@@ -187,7 +205,10 @@ endmodule
       const and_  = h.gate('AND', 980, 320);
       const out   = h.output(1220, 320, 'output');
       inp.fixedValue = 0;
-      inp.stepValues = [0, 1, 1, 1, 0, 0, 1, 1, 0, 0];
+      // Mirror the question's waveform: LOW → HIGH (one wide pulse) → LOW.
+      // The detector's pulse appears two clocks after the falling edge
+      // (FF1 buffer + FF2 prev), i.e. around step 8.
+      inp.stepValues = [0, 1, 1, 1, 1, 1, 0, 0, 0, 0];
       return {
         nodes: [inp, clk, ffCur, ffPrv, inv, and_, out],
         wires: [
