@@ -63,29 +63,50 @@ export const QUESTIONS = [
 המעגל מזהה את הרגע שבו ה-input חוצה מ-1 ל-0 ופולט פולס באורך מחזור
 שעון אחד.
 
-**הרכיבים (3 בלבד):**
+**שתי גרסאות נפוצות:**
+
+**גרסה א — input אסינכרוני (קלאסי, FF אחד):**
 
 - **\`D-FF\`** — דוגם את ה-input ב-\`clk rising edge\` ושומר אותו כ-\`Q\`.
-  זה הזיכרון של הערך הקודם.
 - **\`NOT\`** — מהפך את ה-input הנוכחי ל-\`¬input\`.
 - **\`AND\`** — פולט 1 רק כש-\`Q = 1\` ו-\`input = 0\`.
 
-**ביטוי הפלט:**
+ביטוי: \`output = Q ∧ ¬input\`
 
-\`output = Q ∧ ¬input\`
+זה עובד כי ה-input משתנה **בין** קצות שעון, ולכן ב-rising edge ה-FF
+דוגם את הערך הישן. בחלון הזמן שבין השינוי לקצה הבא, \`Q\` מחזיק עוד
+את הערך הקודם בעוד \`input\` כבר נמוך → \`Q ∧ ¬input = 1\`.
 
-**טבלת אמת:**
+**גרסה ב — input סינכרוני לאותו clock (שני FFים):**
 
-| Q | input | output | מצב |
+כשה-input כבר דגום באותו clock domain (וזה גם מה שקורה בסימולטור
+הזה עם \`stepValues\`), שני ה-FFים יידגמו באותו edge ו-\`Q\` ייצא שווה
+ל-\`input\` — הפולס לא ייווצר. הפתרון: רושמים את ה-input קודם דרך FF
+חיץ:
+
+- **\`FF1\`** — דוגם את ה-input → \`curr\` (הנוכחי).
+- **\`FF2\`** — דוגם את \`FF1.Q\` → \`prev\` (הקודם, באיחור מחזור נוסף).
+- **\`NOT(curr) ∧ AND(prev, ¬curr)\`** — מזהה ש-\`prev = 1\` ו-\`curr = 0\`.
+
+ביטוי: \`output = prev ∧ ¬curr\` = \`FF2.Q ∧ ¬FF1.Q\`
+
+זו הגרסה שטעונה על הקנבס למעלה, ומשתמשת בשני FFים + NOT + AND.
+
+**טבלת אמת (גרסה ב, על הערכים הדגומים):**
+
+| prev (FF2) | curr (FF1) | output | מצב |
 |---|---|---|---|
-| 0 | 0 | 0 | input היה 0 ועדיין 0 — אין קצה |
-| 0 | 1 | 0 | input קם מ-0 ל-1 — קצה עולה (לא רלוונטי) |
-| 1 | 0 | **1** | input ירד מ-1 ל-0 — **קצה יורד!** |
-| 1 | 1 | 0 | input היה 1 ועדיין 1 — אין קצה |
+| 0 | 0 | 0 | אין קצה |
+| 0 | 1 | 0 | קצה עולה |
+| 1 | 0 | **1** | **קצה יורד!** |
+| 1 | 1 | 0 | אין קצה |
 
-**רוחב הפולס:** מחזור שעון אחד. הרגע ה-input ירד, \`¬input = 1\` ו-\`Q\`
-עדיין שווה ל-1 → \`output = 1\`. ב-\`clk rising edge\` הבא, ה-D-FF דוגם
-את הערך החדש (0), \`Q\` מתעדכן ל-0, ו-\`output\` חוזר ל-0.`,
+**רוחב הפולס:** מחזור שעון אחד.
+
+**הערה למראיין:** אם הקלט כבר מסונכרן לאותו שעון (FF output), הגרסה
+המינימלית עם FF יחיד **לא תעבוד** כי \`Q ≡ D\` באותו edge — מצב שתופס
+הרבה מועמדים בלי לב. גרסה ב היא הבטוחה. גרסה עם 3 FFים מוסיפה שלב
+סנכרון נוסף נגד מטא-יציבות עבור קלטים אסינכרוניים אמיתיים.`,
         expectedAnswers: [
           'falling', 'falling edge', 'falling-edge', 'negative edge',
           'קצה יורד', 'גלאי קצה יורד', 'detector',
@@ -148,29 +169,36 @@ endmodule
     source: 'מאגר ראיונות — תכנן מעגל לפי דיאגרמת גלים',
     tags: ['ff', 'edge-detector', 'falling-edge', 'sequential', 'design', 'verilog'],
     circuit: () => build(() => {
-      // input → DFF → Q                ┐
-      //                                 ├─→ AND → output
-      // input → NOT → ~input ───────────┘
-      const inp  = h.input(140, 220, 'input');
-      const clk  = h.clock(140, 460);
-      const dff  = h.ffD(420, 220, 'DFF');
-      const inv  = h.gate('NOT', 420, 380);
-      const and_ = h.gate('AND', 700, 300);
-      const out  = h.output(940, 300, 'output');
-      // Drive the input through a falling-edge sequence so the user can
-      // STEP through and watch input toggle (matching the question's
-      // waveform): LOW → HIGH for a few cycles → LOW → HIGH → LOW.
+      // input → FF1 → "current sampled" ─┬─→ NOT → ~curr ─┐
+      //                                   │                ├─→ AND → output
+      //                                   └→ FF2 → "previous sampled" ─┘
+      //
+      // Two FFs (not one): with `stepValues` the simulator applies the
+      // new input value BEFORE the rising clock edge, so a 1-FF design
+      // would sample the new value and `Q & ~input` would always be 0.
+      // Adding FF1 as an input buffer guarantees FF2 holds the value
+      // from one cycle earlier than FF1 — exactly the "previous vs
+      // current" relationship the detector needs.
+      const inp   = h.input(140, 220, 'input');
+      const clk   = h.clock(140, 540);
+      const ffCur = h.ffD(380, 220, 'FF_curr');   // current sampled
+      const ffPrv = h.ffD(700, 220, 'FF_prev');   // previous sampled
+      const inv   = h.gate('NOT', 700, 400);
+      const and_  = h.gate('AND', 980, 320);
+      const out   = h.output(1220, 320, 'output');
       inp.fixedValue = 0;
       inp.stepValues = [0, 1, 1, 1, 0, 0, 1, 1, 0, 0];
       return {
-        nodes: [inp, clk, dff, inv, and_, out],
+        nodes: [inp, clk, ffCur, ffPrv, inv, and_, out],
         wires: [
-          h.wire(inp.id, dff.id, 0),    // input → DFF.D
-          h.wire(clk.id, dff.id, 1),    // clk   → DFF.CLK
-          h.wire(inp.id, inv.id, 0),    // input → NOT
-          h.wire(dff.id, and_.id, 0),   // Q     → AND.in0
-          h.wire(inv.id, and_.id, 1),   // ¬input → AND.in1
-          h.wire(and_.id, out.id, 0),   // AND   → output
+          h.wire(inp.id,   ffCur.id, 0),   // input → FF1.D
+          h.wire(clk.id,   ffCur.id, 1),   // clk   → FF1.CLK
+          h.wire(ffCur.id, ffPrv.id, 0),   // FF1.Q → FF2.D
+          h.wire(clk.id,   ffPrv.id, 1),   // clk   → FF2.CLK
+          h.wire(ffCur.id, inv.id,   0),   // FF1.Q → NOT
+          h.wire(ffPrv.id, and_.id,  0),   // FF2.Q → AND.in0  (previous)
+          h.wire(inv.id,   and_.id,  1),   // ¬curr → AND.in1
+          h.wire(and_.id,  out.id,   0),   // AND   → output
         ],
       };
     }),
