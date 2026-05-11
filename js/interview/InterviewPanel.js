@@ -332,11 +332,15 @@ export class InterviewPanel {
       // Render an empty host; the actual CodeMirror view is mounted by
       // render() after the innerHTML swap and is preserved across renders.
       return `
-        <div class="iv-check-wrap iv-check-wrap-code" dir="ltr">
-          <div class="iv-code-host" id="iv-cm-host"></div>
-          <div class="iv-code-actions" dir="rtl">
-            <button class="iv-btn iv-btn-primary" data-act="check-answer">בדוק</button>
-            ${resultHtml}
+        <div class="iv-check-wrap iv-check-wrap-code" dir="rtl">
+          <div class="iv-code-header">
+            <span class="iv-code-label">Verilog</span>
+            <span class="iv-code-hint">כתוב את המודול בעורך למטה ולחץ "בדוק"</span>
+          </div>
+          <div class="iv-code-host" id="iv-cm-host" dir="ltr"></div>
+          ${resultHtml}
+          <div class="iv-code-actions">
+            <button class="iv-btn iv-btn-primary iv-btn-check" data-act="check-answer">✓ בדוק את הקוד</button>
           </div>
         </div>`;
     }
