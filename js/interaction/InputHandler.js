@@ -281,7 +281,11 @@ function _onMouseDown(e) {
 
   if (_state.tool === 'select') {
     if (node) {
-      const world = Renderer.canvasToWorld(canvasPoint.x, canvasPoint.y);
+      // Use the un-rounded conversion so the grab offset stores the
+      // true cursor-to-anchor vector. Pairing it with the rounded
+      // _mouseWorld on every move snapped the node to whole world-
+      // units, which after zoom-out reads as a visible gap.
+      const world = Renderer.canvasToWorldExact(canvasPoint.x, canvasPoint.y);
       _dragNode = node;
       _dragOffset = { x: world.x - node.x, y: world.y - node.y };
       _dragStartPos = { x: node.x, y: node.y };
@@ -583,10 +587,13 @@ function _onMouseMove(e) {
     return;
   }
 
-  // Node dragging
+  // Node dragging — match the un-rounded grab offset captured in
+  // mousedown so the cursor stays glued to its original click point on
+  // the component, regardless of zoom level.
   if (_dragNode && _state.tool === 'select') {
-    _dragNode.x = _mouseWorld.x - _dragOffset.x;
-    _dragNode.y = _mouseWorld.y - _dragOffset.y;
+    const worldExact = Renderer.canvasToWorldExact(x, y);
+    _dragNode.x = worldExact.x - _dragOffset.x;
+    _dragNode.y = worldExact.y - _dragOffset.y;
     _canvas.style.cursor = 'grabbing';
     return;
   }

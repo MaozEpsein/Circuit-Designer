@@ -1528,9 +1528,12 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         //   9 Select-IR, 10 Capture-IR, 11 Shift-IR, 12 Exit1-IR,
         //   13 Pause-IR, 14 Exit2-IR, 15 Update-IR.
         // TMS=0 / TMS=1 transitions per the IEEE state diagram.
-        const tms  = (_w(dataSlots[1]) || 0) & 1;
-        const tdi  = (_w(dataSlots[2]) || 0) & 1;
-        const trst = (_w(dataSlots[3]) || 0) & 1;
+        // TCK sits at pin index 0 (IEEE convention) and is the clkSlot
+        // that filter() removes — so the remaining dataSlots collapse
+        // to [TMS, TDI, TRST] at array indices [0, 1, 2].
+        const tms  = (_w(dataSlots[0]) || 0) & 1;
+        const tdi  = (_w(dataSlots[1]) || 0) & 1;
+        const trst = (_w(dataSlots[2]) || 0) & 1;
         const irBits = Math.max(1, (node.irBits | 0) || 4);
         const irMask = _mask(irBits);
         if (typeof ms.tapState !== 'number') ms.tapState = 0;

@@ -2419,6 +2419,21 @@ function _formatMemValue(val, bits) {
 function _refreshMemInspector() {
   if (!memBody || !_memInspectorVisible) return;
 
+  // If the user is actively editing a field inside the panel, skip this
+  // refresh — replacing innerHTML would yank focus mid-keystroke and
+  // discard partial input. The next 200 ms tick picks it up after they
+  // commit (blur).
+  const ae = document.activeElement;
+  if (ae && memBody.contains(ae) &&
+      (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) {
+    return;
+  }
+
+  // Preserve scroll position across the full innerHTML rewrite, otherwise
+  // the panel snaps back to the top every 200 ms — that's what reads as
+  // "jumpy" when the user is scrolled into a long memory dump.
+  const _savedScrollTop = memBody.scrollTop;
+
   const memNodes = scene.nodes.filter(n =>
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
     n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
@@ -2545,6 +2560,7 @@ function _refreshMemInspector() {
   }
 
   memBody.innerHTML = html;
+  memBody.scrollTop = _savedScrollTop;
 
   // Click header to select node on canvas
   memBody.querySelectorAll('.mem-comp-header').forEach(row => {

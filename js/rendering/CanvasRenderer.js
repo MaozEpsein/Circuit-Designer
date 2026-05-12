@@ -4197,6 +4197,18 @@ export function canvasToWorld(px, py) {
   };
 }
 
+// Un-rounded version, used by drag math so the grab offset and the
+// follow-up node-position update share the exact same precision. The
+// rounded variant snaps to whole world-units, which after zoom-out
+// becomes several CSS pixels — visible as a "gap" between cursor and
+// dragged component on every move.
+export function canvasToWorldExact(px, py) {
+  return {
+    x: (px - _offsetX) / _scale,
+    y: (py - _offsetY) / _scale,
+  };
+}
+
 export function getOffset() { return { x: _offsetX, y: _offsetY, scale: _scale }; }
 
 export function panBy(dx, dy) {
