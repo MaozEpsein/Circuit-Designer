@@ -165,185 +165,227 @@ endmodule
   },
 
   // ─────────────────────────────────────────────────────────────
-  // #2002 — sequence detector "101" (Mealy + Moore)
+  // #2002 — sequence detector "101" (Moore, fault-detection framing)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'sequence-detector-101',
     difficulty: 'medium',
-    title: 'גלאי "101" עם חפיפה — Mealy/Moore',
-    intro: 'תזהה את הרצף "1,0,1" באות סדרתי \`x\`. חפיפה מותרת.',
+    title: 'מזהה רצף חכם — "101" (Moore vs Mealy)',
+    intro:
+`**הקשר:** אנחנו בונים שבב שאמור לזהות תקלות בקו תקשורת.
+
+**המשימה:** תכנן מעגל שמקבל בכל מחזור שעון ביט אחד (\`X\`). המעגל צריך להוציא '1' לוגי ביציאה (\`Y\`) רק אם זיהה את הרצף **"101"**.`,
     parts: [
       {
         label: 'א',
-        question: 'ממש כ-Mealy FSM. כמה מצבים מינימלית?',
+        question: 'תכנון המכונה: צייר דיאגרמת מצבים. האם תבחר במימוש Moore או Mealy? הסבר מדוע (רמז: תחשוב על מהירות התגובה לעומת יציבות האות).',
         hints: [
-          'Mealy: פלט = f(state, input). 3 מצבים מספיקים.',
-          'S0=התחלה, S1=ראיתי 1, S2=ראיתי 10. ב-S2+x=1 → y=1 ועוברים ל-S1 (חפיפה).',
+          'Mealy: \`Y = f(state, X)\` — מגיב באותו cycle. תגובה מהירה אבל \`Y\` קומבינטורי וחשוף ל-glitches.',
+          'Moore: \`Y = f(state)\` בלבד — דורש cycle נוסף לזהות, אבל \`Y\` רשום ויציב.',
+          'בהקשר של "זיהוי תקלה בקו תקשורת": אות יציב חשוב יותר מ-cycle אחד של עיכוב. **Moore עדיף.**',
+          'Moore דורש מצב נוסף (\`S3\` = "זיהיתי 101") כדי שהפלט יבוא ממצב, לא מצירוף state+input.',
         ],
         answer:
-`**3 מצבים** (S0, S1=״1״, S2=״10״). קידוד 00/01/10.
+`**בחירה: Moore.** הסיבה: בקו תקשורת רועש, ה-\`Y\` של Mealy עלול לקפוץ במהלך ה-cycle בגלל glitches על \`X\` (כל שינוי על \`X\` משפיע מיד על \`Y\`). Moore מקבל \`Y\` ישירות מ-FF — אות נקי ויציב, סנכרון מובטח, מחיר: cycle אחד של latency.
 
-\`D0 = x\` , \`D1 = ¬Q1·Q0·¬x\` , \`y = Q1·¬Q0·x\`.
+**4 מצבים** (Moore דורש מצב ייעודי לפלט):
 
-\`y\` קומבינטורי → תגובה באותו cycle אבל חשוף ל-glitches.`,
+- \`S0\` — מצב התחלה / "לא ראיתי כלום שימושי". פלט Y=0.
+- \`S1\` — "ראיתי 1". פלט Y=0.
+- \`S2\` — "ראיתי 10". פלט Y=0.
+- \`S3\` — "ראיתי 101" — **הצלחה!** פלט Y=1.
+
+**טבלת מעברים:**
+
+| ממצב | X=0 → | X=1 → |
+|------|-------|-------|
+| S0   | S0    | S1    |
+| S1   | S2    | S1    |
+| S2   | S0    | S3    |
+| S3   | S2    | S1    | ← חפיפה: אחרי "101", ה-"1" האחרון הופך ל-S1 חדש
+
+**חפיפה (overlap):** מ-\`S3\` עם \`X=1\` עוברים ל-\`S1\` (ולא ל-\`S0\`) כי ה-"1" של "101" הוא גם תחילת רצף חדש. עם \`X=0\` מ-\`S3\` עוברים ל-\`S2\` (כי "10" כבר ראינו).`,
+        answerSchematic: `
+<svg viewBox="0 0 560 320" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="11" role="img" aria-label="Moore FSM state diagram for 101 detector">
+  <text x="280" y="20" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Moore FSM — "101" Detector</text>
+  <g stroke="#80b0e0" stroke-width="1.8" fill="#0a1520">
+    <circle cx="80"  cy="180" r="34"/>
+    <circle cx="220" cy="180" r="34"/>
+    <circle cx="360" cy="180" r="34"/>
+    <circle cx="500" cy="180" r="34"/>
+    <circle cx="500" cy="180" r="40" fill="none" stroke="#39ff80" stroke-width="1.4"/>
+  </g>
+  <g fill="#c8d8f0" text-anchor="middle" font-weight="bold" font-size="12">
+    <text x="80"  y="178">S0</text><text x="220" y="178">S1</text>
+    <text x="360" y="178">S2</text><text x="500" y="178">S3</text>
+  </g>
+  <g fill="#80b0e0" text-anchor="middle" font-size="10">
+    <text x="80"  y="194">Y=0</text><text x="220" y="194">Y=0</text>
+    <text x="360" y="194">Y=0</text><text x="500" y="194" fill="#39ff80" font-weight="bold">Y=1</text>
+  </g>
+  <path d="M 114 180 L 186 180" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="150" y="172" text-anchor="middle" fill="#c8d8f0">X=1</text>
+  <path d="M 254 180 L 326 180" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="290" y="172" text-anchor="middle" fill="#c8d8f0">X=0</text>
+  <path d="M 394 180 L 460 180" stroke="#39ff80" fill="none" marker-end="url(#arr-g)"/>
+  <text x="427" y="172" text-anchor="middle" fill="#39ff80" font-weight="bold">X=1</text>
+  <path d="M 60 152 C 30 100, 100 100, 80 146" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="50" y="100" text-anchor="middle" fill="#c8d8f0">X=0</text>
+  <path d="M 200 152 C 170 100, 240 100, 220 146" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="210" y="100" text-anchor="middle" fill="#c8d8f0">X=1</text>
+  <path d="M 332 208 C 240 280, 130 280, 100 212" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="220" y="278" text-anchor="middle" fill="#c8d8f0">X=0</text>
+  <path d="M 478 152 C 380 80, 260 80, 240 148" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="360" y="82" text-anchor="middle" fill="#c8d8f0">X=1 (overlap)</text>
+  <path d="M 472 168 C 440 132, 388 132, 372 156" stroke="#c8d8f0" fill="none" marker-end="url(#arr)"/>
+  <text x="430" y="130" text-anchor="middle" fill="#c8d8f0">X=0</text>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8d8f0"/>
+    </marker>
+    <marker id="arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff80"/>
+    </marker>
+  </defs>
+  <text x="280" y="305" text-anchor="middle" fill="#c8d8f0" font-size="10">המעבר S2→S3 (ירוק) הוא הרגע שבו רצף "101" הושלם → Y=1 ב-cycle הבא.</text>
+</svg>
+`,
         interviewerMindset:
-`רוצה לראות שאתה יודע לבנות FSM מינימלי. הטעות הקלאסית — מדברים על 4 מצבים בלי לחשוב למה. **3 מספיק ב-Mealy, ולא ב-Moore — וזה ההבדל המהותי בין השתיים.**
+`**הראיין רוצה לשמוע "Moore" — אבל עם נימוק שמתחבר ל-context** (קו תקשורת = יציבות > מהירות). אם אתה עונה "Mealy כי מהיר יותר" בלי לחבר ליציבות, הפסדת את הניקוד המרכזי.
 
-**בונוס:** הזכרת חפיפה (overlap) מיוזמתך — לפני שמרמזים לך.`,
-        circuitRevealsAnswer: true,
-        circuit: () => build(() => {
-          // Inputs
-          const x   = h.input(120, 220, 'x');
-          const clk = h.clock(120, 560);
-          // Drive x through a stream with two overlapping "101" patterns.
-          // Sequence: 1,0,1,0,1,1,0,1 → expect Mealy y high on cycles 3, 5, 8.
-          x.fixedValue = 0;
-          x.stepValues = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0];
-
-          // Two D-FFs: Q1 (high state bit), Q0 (low state bit).
-          const ff0 = h.ffD(440, 380, 'Q0');
-          const ff1 = h.ffD(440, 180, 'Q1');
-
-          // Inverters
-          const invX  = h.gate('NOT', 280, 260);
-          const invQ1 = h.gate('NOT', 700, 100);
-          const invQ0 = h.gate('NOT', 700, 480);
-
-          // D1 = ¬Q1 · (Q0 · ¬x) — chain of two 2-input ANDs.
-          const tQ0nx = h.gate('AND', 640, 340);
-          const tD1   = h.gate('AND', 820, 200);
-          // y = (Q1 · ¬Q0) · x — chain of two 2-input ANDs.
-          const andY1 = h.gate('AND', 900, 280);
-          const andY2 = h.gate('AND', 1080, 320);
-
-          const y = h.output(1260, 320, 'y');
-
-          return {
-            nodes: [
-              x, clk, ff0, ff1,
-              invX, invQ1, invQ0,
-              tQ0nx, tD1, andY1, andY2,
-              y,
-            ],
-            wires: [
-              // Clock to both FFs
-              h.wire(clk.id, ff0.id, 1),
-              h.wire(clk.id, ff1.id, 1),
-              // D0 ← x
-              h.wire(x.id,   ff0.id, 0),
-              // Inverters
-              h.wire(x.id,   invX.id,  0),
-              h.wire(ff1.id, invQ1.id, 0),
-              h.wire(ff0.id, invQ0.id, 0),
-              // t1 = Q0 · ¬x
-              h.wire(ff0.id, tQ0nx.id, 0),
-              h.wire(invX.id, tQ0nx.id, 1),
-              // D1 = ¬Q1 · t1
-              h.wire(invQ1.id, tD1.id, 0),
-              h.wire(tQ0nx.id, tD1.id, 1),
-              h.wire(tD1.id,   ff1.id, 0),    // D1 → FF1.D
-              // y = (Q1 · ¬Q0) · x
-              h.wire(ff1.id,  andY1.id, 0),
-              h.wire(invQ0.id, andY1.id, 1),
-              h.wire(andY1.id, andY2.id, 0),
-              h.wire(x.id,     andY2.id, 1),
-              h.wire(andY2.id, y.id, 0),
-            ],
-          };
-        }),
+**מקפיץ לטובה:**
+- להזכיר חפיפה (overlap) ביוזמתך.
+- לציין ש-Mealy חוסך מצב (3 לעומת 4) — מראה שהבנת את שתי האופציות.
+- להוסיף "Moore הוא ברירת מחדל ב-ASIC ל-control paths כי STA פשוטה יותר — \`Y\` יוצא מ-FF, לא מ-cone של לוגיקה."`,
         expectedAnswers: [
-          'mealy', '3', 'שלושה', 'שלוש',
-          's0', 's1', 's2',
-          'q1 · ¬q0 · x', 'q1 & ~q0 & x', 'q1*!q0*x',
-          'y = q1 · ¬q0 · x', 'output combinational',
+          'moore', 'mealy', '4', 'four', 'ארבעה',
+          's0', 's1', 's2', 's3',
+          'overlap', 'חפיפה', 'glitch', 'יציב', 'יציבות',
+          'state', 'מצבים',
         ],
       },
       {
         label: 'ב',
-        question: 'ממש כ-Moore FSM. למה צריך עוד מצב?',
+        question: 'מימוש לוגי: נניח שבחרת ב-Moore. כמה פליפ-פלופים תצטרך כדי לייצג את המצבים? איך תקודד אותם?',
         hints: [
-          'Moore: פלט = f(state) בלבד. צריך מצב ייעודי "ראיתי 101".',
-          '4 מצבים. S3=״101״, \`y = Q1·Q0\`.',
+          'מספר ה-FFs ב-binary encoding: \`⌈log₂(N)⌉\` כש-N = מספר המצבים.',
+          '4 מצבים → \`⌈log₂4⌉ = 2\` FFs.',
+          'קידוד אפשרי: S0=00, S1=01, S2=10, S3=11. (one-hot היה דורש 4 FFs — בזבזני כאן.)',
+          'אלטרנטיבה: Gray code לקידוד (00,01,11,10) — בין מצבים סמוכים משתנה רק ביט אחד → פחות צריכת חשמל ופחות סיכון ל-metastability.',
         ],
         answer:
-`**4 מצבים** (S0..S3). קידוד 00/01/10/11.
+`**2 פליפ-פלופים** (Q1, Q0) — מספיק ל-4 מצבים: \`⌈log₂4⌉ = 2\`.
 
-\`D0 = x\` , \`D1 = (Q0·¬x) + (Q1·¬Q0·x)\` , \`y = Q1·Q0\`.
+**קידוד בינארי טריוויאלי:**
 
-\`y\` יוצא מ-FFים → ללא glitches, אבל מופיע **מחזור מאוחר יותר** מ-Mealy.`,
+| מצב | Q1 Q0 |
+|-----|-------|
+| S0  | 0 0   |
+| S1  | 0 1   |
+| S2  | 1 0   |
+| S3  | 1 1   |
+
+**טבלת next-state (D1, D0 = הקלטים ל-FFs):**
+
+| Q1 Q0 | X | D1 D0 | (מצב→) |
+|-------|---|-------|--------|
+| 00    | 0 | 00    | S0→S0  |
+| 00    | 1 | 01    | S0→S1  |
+| 01    | 0 | 10    | S1→S2  |
+| 01    | 1 | 01    | S1→S1  |
+| 10    | 0 | 00    | S2→S0  |
+| 10    | 1 | 11    | S2→S3  |
+| 11    | 0 | 10    | S3→S2  |
+| 11    | 1 | 01    | S3→S1  |
+
+**מ-K-maps מקבלים:**
+- \`D1 = Q0·¬X + Q1·¬X\` = \`¬X · (Q0 + Q1)\`
+- \`D0 = ¬Q1·X + ¬Q0·X + Q1·Q0·X\` = \`X\` (אחרי פישוט — \`D0=X\` כי בכל מצב הוא תמיד עוקב אחרי X! בדוק את הטבלה — נכון.)
+
+**שיקולי קידוד מתקדמים:**
+- **Gray code** (00,01,11,10): מעבר state↔state משנה ביט יחיד → פחות simultaneous switching, פחות גליצ'ים, פחות צריכה.
+- **One-hot** (4 FFs): מהיר יותר ל-decode (\`Y = Q3\` ישיר) אבל יקר ב-area.
+- **Binary** (כאן): פשרה — קומפקטי אבל ה-Y דורש AND קטן.`,
+        expectedAnswers: [
+          '2', 'two', 'שניים', 'שתי',
+          'log', 'log2', 'binary', 'בינארי',
+          'q1', 'q0', 'd1', 'd0',
+          'one-hot', 'one hot', 'gray',
+          'encoding', 'קידוד',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'האתגר הצירופי: איך תיראה הלוגיקה הצירופית שקובעת את \`Y\`? האם היא תלויה רק בערך שנמצא בתוך הפליפ-פלופים, או גם בביט \`X\` שנכנס באותו רגע?',
+        hints: [
+          'בהגדרה של Moore — \`Y\` תלוי **רק במצב** (ב-FFs), לא ב-X.',
+          'הצב את הקידוד שלנו: S3 = Q1 Q0 = 11. \`Y\` דולק רק ב-S3.',
+          '\`Y = Q1 · Q0\` — שער AND אחד בלבד. אין \`X\` בביטוי.',
+          'השווה ל-Mealy: שם \`Y = Q1·¬Q0·X\` — נכנס X לביטוי → 3 קלטים → חשוף לגליץ\' מ-X.',
+        ],
+        answer:
+`\`\`\`
+Y = Q1 · Q0
+\`\`\`
+
+**תלוי רק ב-FFs — \`X\` לא נכנס לביטוי.** זו עצם ההגדרה של Moore: \`Y = f(state)\` בלבד. הקידוד שלנו (S3 = 11) הופך את זה לשער AND יחיד.
+
+**למה זה חשוב מבחינת תכנון VLSI:**
+1. **STA פשוטה:** ה-cone של \`Y\` הוא Q1 → AND → port. אורך נתיב קצר וקבוע — אין input-to-output path שצריך לאפיין.
+2. **יציבות:** Q1, Q0 משתנים רק על קצה השעון → \`Y\` יכול לזוז רק פעם אחת לכל cycle, ואחרי \`t_pd\` של AND יחיד הוא יציב לשארית ה-cycle.
+3. **גליצ\' של \`X\`** (רעש בקו התקשורת!) **לא משפיע על \`Y\` בכלל**. הוא ישפיע רק על \`D0, D1\` — שיינתנו ל-FFs בקצה השעון הבא. ה-FFs "מסננים" את הרעש.
+
+**השוואה ל-Mealy של אותה משימה:** \`Y_mealy = Q1·¬Q0·X\` — קלט \`X\` נכנס ישירות לפלט. כל glitch על \`X\` (spike של 100ps באמצע cycle) יופיע על \`Y\`. בקו רועש זה אסון.
+
+**זו בדיוק הסיבה שבחרנו Moore בסעיף א'** — והנה הראיה הקונקרטית במשוואת הפלט.`,
         interviewerMindset:
-`השאלה האמיתית היא **"מה תבחר ולמה"**. מועמד טוב יודע את המבנים; מועמד מצוין יודע מתי לבחור איזה.
+`הסעיף הזה בודק שאתה באמת מבין את ההבדל Moore↔Mealy, לא רק שינון. **התשובה הנכונה היא לא רק "Y=Q1·Q0" אלא "Y תלוי רק במצב, ולכן הוא יציב לכל ה-cycle, ולכן בחרנו Moore."** הסגירה למה שאמרת בסעיף א' היא מה שמבדיל מועמד בינוני ממועמד מצוין.
 
-**תשובה רצויה:** "אם הלקוח של y דוגם ב-clk הבא ויש סיכון ל-glitches — Moore. אם אני צריך תגובה באותו cycle (control signal לכניסה ל-stage הבא ב-pipeline) — Mealy."`,
+**מקפיץ לטובה:** להזכיר ש-Moore נותן "registered output" שמתנהג כאילו יש לך FF נוסף על הפלט — ולכן setup/hold לכל מי שמקבל את Y מוגדרים היטב.`,
+        expectedAnswers: [
+          'q1', 'q0', 'q1·q0', 'q1*q0', 'q1 & q0', 'q1q0', 'and',
+          'only state', 'רק במצב', 'רק על המצב', 'רק מצב',
+          'not x', 'לא תלוי ב-x', 'לא תלוי בx', 'ללא x', 'בלי x',
+          'moore', 'registered', 'יציב',
+        ],
         circuitRevealsAnswer: true,
         circuit: () => build(() => {
-          const x   = h.input(120, 220, 'x');
-          const clk = h.clock(120, 640);
-          x.fixedValue = 0;
-          x.stepValues = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0];
+          const X   = h.input(120, 200, 'X');
+          const clk = h.clock(120, 600);
+          X.fixedValue = 1;
 
-          const ff0 = h.ffD(540, 420, 'Q0');
-          const ff1 = h.ffD(540, 200, 'Q1');
+          const ff1 = h.ffD(720, 280, 'FF1 (Q1)');
+          const ff0 = h.ffD(720, 460, 'FF0 (Q0)');
 
-          const invX  = h.gate('NOT', 280, 280);
-          const invQ0 = h.gate('NOT', 800, 540);
+          const notX = h.gate('NOT', 320, 200);
+          const orQ  = h.gate('OR',  320, 360);
+          const andD1 = h.gate('AND', 500, 280);
 
-          // D1 = (Q0 · ¬x) + (Q1 · ¬Q0 · x)
-          const t_q0nx   = h.gate('AND', 320, 100);     // Q0 · ¬x
-          const t_q1nq0  = h.gate('AND', 280, 540);     // Q1 · ¬Q0
-          const t_pq1nq0 = h.gate('AND', 460, 600);     // (Q1 · ¬Q0) · x
-          const orD1     = h.gate('OR',  680, 320);     // D1
-          // y = Q1 · Q0
-          const andY = h.gate('AND', 800, 320);
-
-          const y = h.output(1100, 320, 'y');
+          const andY = h.gate('AND', 960, 370);
+          const Y    = h.output(1180, 370, 'Y');
 
           return {
-            nodes: [
-              x, clk, ff0, ff1,
-              invX, invQ0,
-              t_q0nx, t_q1nq0, t_pq1nq0, orD1, andY,
-              y,
-            ],
+            nodes: [X, clk, notX, orQ, andD1, ff1, ff0, andY, Y],
             wires: [
-              // Clock
-              h.wire(clk.id, ff0.id, 1),
+              h.wire(X.id, notX.id, 0),
+              h.wire(X.id, ff0.id,  0),
+              h.wire(ff1.id, orQ.id, 0),
+              h.wire(ff0.id, orQ.id, 1),
+              h.wire(notX.id, andD1.id, 0),
+              h.wire(orQ.id,  andD1.id, 1),
+              h.wire(andD1.id, ff1.id,  0),
               h.wire(clk.id, ff1.id, 1),
-              // D0 ← x
-              h.wire(x.id, ff0.id, 0),
-              // Inverters
-              h.wire(x.id, invX.id, 0),
-              h.wire(ff0.id, invQ0.id, 0),
-              // Q0 · ¬x
-              h.wire(ff0.id, t_q0nx.id, 0),
-              h.wire(invX.id, t_q0nx.id, 1),
-              // Q1 · ¬Q0
-              h.wire(ff1.id,  t_q1nq0.id, 0),
-              h.wire(invQ0.id, t_q1nq0.id, 1),
-              // (Q1 · ¬Q0) · x
-              h.wire(t_q1nq0.id, t_pq1nq0.id, 0),
-              h.wire(x.id,       t_pq1nq0.id, 1),
-              // OR → D1
-              h.wire(t_q0nx.id,   orD1.id, 0),
-              h.wire(t_pq1nq0.id, orD1.id, 1),
-              h.wire(orD1.id,     ff1.id, 0),
-              // y = Q1 · Q0
+              h.wire(clk.id, ff0.id, 1),
               h.wire(ff1.id, andY.id, 0),
               h.wire(ff0.id, andY.id, 1),
-              h.wire(andY.id, y.id, 0),
+              h.wire(andY.id, Y.id, 0),
             ],
           };
         }),
-        expectedAnswers: [
-          'moore', '4', 'ארבעה', 'ארבע',
-          's0', 's1', 's2', 's3',
-          'q1 · q0', 'q1 & q0', 'q1*q0',
-          'y = q1 · q0', 'one cycle later', 'cycle delay',
-        ],
       },
     ],
-    source: 'מאגר ראיונות — FSM קלאסי, Mealy מול Moore',
-    tags: ['fsm', 'mealy', 'moore', 'sequence-detector', 'sequential'],
+    source: 'מאגר ראיונות — FSM קלאסי, גלאי רצף "101" (Moore)',
+    tags: ['fsm', 'moore', 'mealy', 'sequence-detector', '101', 'sequential', 'state-diagram'],
   },
 
   // ─────────────────────────────────────────────────────────────
@@ -870,5 +912,565 @@ assign clk_out = pos_high | n;  // 1.5 cycles high, 1.5 cycles low
     ],
     source: 'מאגר ראיונות junior — FSM + K-map + שערים',
     tags: ['fsm', '11-detector', 'kmap', 'dont-cares', 'state-encoding', 'sequential'],
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // #2007 — Mealy "11" overlapping detector (low-latency framing)
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'mealy-11-detector-lowlat',
+    difficulty: 'medium',
+    title: 'גלאי "11" כ-Mealy — חתימת פרוטוקול בזרם מהיר',
+    intro:
+`**הקשר:** מתכננים יחידה שמזהה "חתימה" של פרוטוקול תקשורת בזרם נתונים מהיר. כל cycle של latency עולה לנו ב-throughput.
+
+**המשימה:** מעגל שמקבל בכל פעימת שעון ביט אחד (\`X\`), ומוציא \`Y=1\` בכל פעם שזוהה הרצף **"11"**. הזיהוי **חופף**: רצף "111" יפיק שתי אינדיקציות רצופות של \`Y=1\`.`,
+    parts: [
+      {
+        label: 'א',
+        question: 'ממש כמכונת Mealy. הסבר מדוע בחרת Mealy ולא Moore בהקשר של latency.',
+        hints: [
+          'Mealy: \`Y = f(state, X)\` — תגובה **באותו cycle** שבו הגיע הביט המסיים את הרצף.',
+          'Moore: \`Y = f(state)\` בלבד — דורש cycle נוסף כדי שהמצב "ראיתי 11" יתעדכן ב-FF, ורק אז Y עולה.',
+          'בזרם נתונים מהיר latency של cycle אחד = עיכוב של כל הצינור. Mealy חוסך את ה-cycle הזה.',
+          'המחיר של Mealy: \`Y\` קומבינטורי → חשוף ל-glitches על \`X\`. בהקשר של "throughput קודם" — מקובל.',
+        ],
+        answer:
+`**בחירה: Mealy.** ה-Y נקבע כפונקציה של (מצב נוכחי, X נוכחי), ולכן ברגע שמגיע ה-"1" השני, ה-Y כבר עולה **באותו cycle**.
+
+ב-Moore, היינו צריכים מצב ייעודי "ראיתי 11" — ה-FF צריך לעבור אליו בקצה השעון, ורק ב-cycle שאחרי כן Y יעלה. עיכוב של cycle שלם בכל זיהוי = פגיעה ב-throughput של הצינור.
+
+**ב-streaming protocol detection**: latency הוא שיקול עליון. Mealy חוסך 1 cycle בכל אירוע — אם יש זיהוי כל ~10 cycles, זה 10% throughput.
+
+**המחיר של Mealy:** \`Y\` קומבינטורי = חשוף ל-glitches על \`X\`. בקונטקסט שלנו זה סביר כי הצד הצורך את Y הוא לרוב FF סינכרוני שדוגם רק על קצה השעון — glitches בין הקצוות לא משנים.`,
+        interviewerMindset:
+`הראיין רוצה לראות שאתה מקשר Mealy↔latency ו-Moore↔glitch-free. **התשובה "כי Mealy יותר מהיר" בלי הסבר למה — חלקית.** התשובה המלאה: "Mealy משתף את ה-X הנכנס עם החישוב של ה-Y, לכן אין צורך לחכות לקצה שעון נוסף — וזה קריטי ב-streaming."
+
+**מקפיץ לטובה:** להזכיר שמועמד טוב בוחר Mealy אם הצרכן הוא FF, ו-Moore אם הצרכן הוא לוגיקה אסינכרונית או דרישה ל-glitch-free.`,
+        expectedAnswers: [
+          'mealy', 'moore', 'latency',
+          'same cycle', 'אותו cycle', 'אותו מחזור',
+          'throughput', 'streaming', 'מהירות תגובה',
+          'glitch', 'קומבינטורי',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'צייר את דיאגרמת המצבים במינימום מצבים. כמה מצבים צריך?',
+        hints: [
+          '"מה אני צריך לזכור?" → רק את הביט הקודם. שני מצבים: \`S0\`="הביט הקודם היה 0" ו-\`S1\`="הביט הקודם היה 1".',
+          'מעבר: \`S0 --X=1--> S1\` (Y=0) ; \`S1 --X=1--> S1\` (Y=**1**, חפיפה!).',
+          'מעבר אפס: כל מצב עם X=0 → \`S0\`, Y=0.',
+          'ב-Moore היו צריכים 3 מצבים (גם "ראיתי 11"); ב-Mealy שניים מספיקים — זה הניצחון המבני של Mealy.',
+        ],
+        answer:
+`**2 מצבים** — מינימום מוחלט.
+
+- \`S0\` — "הביט האחרון היה 0" (או מצב התחלה).
+- \`S1\` — "הביט האחרון היה 1".
+
+**מעברים** (פורמט Mealy: \`X / Y\`):
+
+| ממצב | X=0 / Y | X=1 / Y |
+|------|---------|---------|
+| S0   | S0 / 0  | S1 / 0  |
+| S1   | S0 / 0  | S1 / **1** ← זיהוי! חופף |
+
+**למה רק 2?** ב-Mealy ה-Y "חי על החץ", לא במצב — אז לא צריך מצב נפרד שמייצג "זה הרגע של הזיהוי". המידע היחיד שצריך לזכור הוא: האם הביט הקודם היה 1.
+
+**חפיפה (overlap):** מ-\`S1\` עם X=1 חוזרים ל-\`S1\` (לא מאופסים ל-S0) — ולכן רצף "111" נותן Y=1 בשני ה-cycles האחרונים. ב-S1 כל "1" נוסף מייד מפיק זיהוי.`,
+        answerSchematic: `
+<svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="11" role="img" aria-label="Mealy FSM state diagram for 11 detector">
+  <text x="210" y="20" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Mealy FSM — "11" Detector</text>
+  <g stroke="#80b0e0" stroke-width="1.8" fill="#0a1520">
+    <circle cx="120" cy="140" r="36"/>
+    <circle cx="300" cy="140" r="36"/>
+  </g>
+  <g fill="#c8d8f0" text-anchor="middle" font-weight="bold" font-size="13">
+    <text x="120" y="145">S0</text>
+    <text x="300" y="145">S1</text>
+  </g>
+
+  <!-- S0 -> S1  on X=1 / Y=0 -->
+  <path d="M 156 132 L 264 132" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="210" y="124" text-anchor="middle" fill="#c8d8f0">X=1 / Y=0</text>
+  <!-- S1 -> S0  on X=0 / Y=0 (lower curve) -->
+  <path d="M 264 152 L 156 152" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="210" y="170" text-anchor="middle" fill="#c8d8f0">X=0 / Y=0</text>
+
+  <!-- S0 self loop X=0 / Y=0 -->
+  <path d="M 96 112 C 60 60, 140 60, 120 104" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="98" y="50" text-anchor="middle" fill="#c8d8f0">X=0 / Y=0</text>
+
+  <!-- S1 self loop X=1 / Y=1 — green, highlighted -->
+  <path d="M 276 112 C 240 60, 360 60, 324 104" stroke="#39ff80" stroke-width="2" fill="none" marker-end="url(#m-arr-g)"/>
+  <text x="300" y="50" text-anchor="middle" fill="#39ff80" font-weight="bold">X=1 / Y=1</text>
+
+  <defs>
+    <marker id="m-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8d8f0"/>
+    </marker>
+    <marker id="m-arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff80"/>
+    </marker>
+  </defs>
+
+  <text x="210" y="220" text-anchor="middle" fill="#c8d8f0" font-size="10">החץ הירוק (S1→S1, X=1) הוא הרגע שבו רצף "11" מזוהה.</text>
+  <text x="210" y="238" text-anchor="middle" fill="#c8d8f0" font-size="10">בגלל החפיפה — נשארים ב-S1, ולכן "111" → 2 זיהויים רצופים.</text>
+</svg>
+`,
+        expectedAnswers: [
+          '2', 'two', 'שניים', 'שתי', 'שני מצבים',
+          's0', 's1', 'overlap', 'חפיפה',
+          'last bit', 'הביט הקודם', 'הביט האחרון',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'כמה רכיבי Flip-Flop נדרשים למימוש בקידוד בינארי?',
+        hints: [
+          'מספר ה-FFs ב-binary encoding: \`⌈log₂(N)⌉\` כש-N = מספר המצבים.',
+          '2 מצבים → \`⌈log₂2⌉ = 1\` FF.',
+          'קידוד: \`S0 = 0\`, \`S1 = 1\`. ה-FF היחיד שומר את "האם הביט הקודם היה 1".',
+          'משוואת ה-FF: \`D = X\` — המצב הבא הוא פשוט הביט הנכנס. (FF יחיד הופך לפועל יוצא מהמבנה.)',
+        ],
+        answer:
+`**FF יחיד** (Q).
+
+קידוד: \`S0 ⇔ Q=0\`, \`S1 ⇔ Q=1\`. אז \`Q\` בעצם **"זוכר את הביט הקודם"** — בדיוק מה שצריך לגלאי "11".
+
+**משוואת המצב הבא:**
+
+\`\`\`
+D = X
+\`\`\`
+
+המצב הבא = הביט הנכנס. אין כאן בכלל לוגיקה צירופית למצב — \`X\` זורם ישירות ל-\`D\`. ב-cycle הבא \`Q\` יחזיק את הביט הזה, ויהיה זמין כאינדיקציה "הביט הקודם היה 1".
+
+**מבני זה אומר:** ה-FF היחיד הוא בעצם **delay line של ביט אחד** — והגלאי כולו = "AND בין הביט הנוכחי לביט הקודם". זה גם מסביר אינטואיטיבית את התשובה לסעיף ד'.
+
+**השוואה ל-Moore (#2006):** שם צריך 3 מצבים → 2 FFs. החיסכון של Mealy: חצי משאבי שמירה.`,
+        expectedAnswers: [
+          '1', 'one', 'אחד', 'ff יחיד', 'ff אחד',
+          'd = x', 'd=x',
+          'log', 'log2', 'binary',
+          'q', 'delay',
+        ],
+      },
+      {
+        label: 'ד',
+        question: 'חלץ את המשוואה הלוגית של \`Y\`. האם הוא תלוי רק במצב הנוכחי?',
+        hints: [
+          'מהטבלת המעברים: \`Y=1\` רק כש-(state=S1) **וגם** (X=1).',
+          'בקידוד שלנו: \`Y = Q · X\`.',
+          'תלוי **גם** ב-X — זוהי בדיוק ההגדרה של Mealy: \`Y = f(state, input)\`.',
+          'השווה ל-Moore: שם \`Y = Q1·¬Q0\` (תלוי רק במצב). זה ה-trade-off המבני.',
+        ],
+        answer:
+`\`\`\`
+Y = Q · X
+\`\`\`
+
+**לא — Y תלוי גם ב-X (הביט הנכנס באותו cycle), לא רק במצב הנוכחי \`Q\`.** זו ההגדרה המדויקת של Mealy.
+
+**ניתוח אינטואיטיבי:** ה-Y עולה ⟺ "הביט הקודם היה 1" (\`Q=1\`) **וגם** "הביט הנוכחי 1" (\`X=1\`). שניהם נחוצים — וזה בדיוק ה-AND.
+
+**המעגל הכולל — מינימלי לקיצוניות:**
+
+| רכיב           | תפקיד                |
+|----------------|----------------------|
+| 1 × D-FF       | זוכר את הביט הקודם   |
+| חוט: \`D ← X\`  | אין לוגיקה למצב הבא  |
+| 1 × AND        | \`Y = Q · X\`         |
+
+**Latency:** ברגע ש-X עולה (וכבר היה Q=1 מ-cycle קודם) — Y עולה אחרי t_pd של שער AND אחד בלבד. **באותו cycle.** זה בדיוק היתרון של Mealy ש-justified-ho בסעיף א'.
+
+**גליצ'ים:** glitch על X → glitch על Y. בקונטקסט שלנו (הצרכן הוא FF סינכרוני שדוגם בקצה השעון) — לא מפריע.`,
+        interviewerMindset:
+`התשובה הנכונה היא לא רק "\`Y = Q·X\`" אלא **"Y תלוי גם ב-X — וזה בדיוק מה שעושה אותו Mealy."** סגירה מודעת למה שאמרת בסעיף א' (\`Y = f(state, input)\`) מבדילה מועמד טוב ממצוין.
+
+**מקפיץ לטובה:** לציין את ההשלכה הפרקטית — "ה-Y יוצא ממש מהר (\`t_pd\` של AND אחד), אבל **תזמון Y תלוי בנתיב מ-X לפלט** — לא רק בנתיב מ-FF לפלט כמו ב-Moore. ב-STA זה אומר שצריך לאפיין input-to-output path."`,
+        expectedAnswers: [
+          'q · x', 'q*x', 'q & x', 'qx', 'q and x', 'and',
+          'גם ב-x', 'גם בx', 'תלוי ב-x', 'תלוי בx',
+          'mealy', 'state and input', 'state, input',
+          'לא רק', 'not only',
+        ],
+        circuitRevealsAnswer: true,
+        circuit: () => build(() => {
+          const X   = h.input(120, 200, 'X');
+          const clk = h.clock(120, 500);
+          X.fixedValue = 1;
+
+          const ffQ = h.ffD(480, 280, 'Q');
+
+          const andY = h.gate('AND', 760, 250);
+          const Y    = h.output(1000, 250, 'Y');
+
+          return {
+            nodes: [X, clk, ffQ, andY, Y],
+            wires: [
+              // D ← X (next state = current bit)
+              h.wire(X.id, ffQ.id, 0),
+              h.wire(clk.id, ffQ.id, 1),
+              // Y = Q · X
+              h.wire(ffQ.id, andY.id, 0),
+              h.wire(X.id,   andY.id, 1),
+              h.wire(andY.id, Y.id, 0),
+            ],
+          };
+        }),
+      },
+    ],
+    source: 'מאגר ראיונות — Mealy "11" detector בהקשר protocol-signature',
+    tags: ['fsm', 'mealy', '11-detector', 'overlap', 'low-latency', 'sequential'],
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // #2008 — "1011" detector — min-state + setup-time driven Moore/Mealy choice
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'detector-1011-setup-driven',
+    difficulty: 'hard',
+    title: 'גלאי "1011" — מינימום מצבים + Setup-Time מכתיב Moore/Mealy',
+    intro:
+`תכנן מעגל שמזהה את הרצף **"1011"** עם **חפיפה (Overlapping)**. לדוגמה, עבור הקלט \`1011011\` המעגל צריך להוציא \`1\` **פעמיים**.
+
+האתגר:
+1. ממש את המכונה ב**מינימום המצבים האפשרי**.
+2. נתון: ה-\`X\` שלך מגיע ממעגל צירופי **ארוך ואיטי**, ומתייצב ממש רגע לפני עליית השעון. החלט Moore או Mealy תוך התייחסות ל-**setup time** של ה-FF הצרכן את \`Y\`.`,
+    parts: [
+      {
+        label: 'א',
+        question: 'בנה את המכונה במינימום מצבים. כמה מצבים? כמה FFs בקידוד בינארי? צייר את הדיאגרמה.',
+        hints: [
+          'הטריק לחפיפה: מצב \`Si\` = "ה-suffix הארוך ביותר של הקלט עד כה שהוא prefix של \`1011\`".',
+          'Prefixes של "1011": \`""\`, \`"1"\`, \`"10"\`, \`"101"\`, \`"1011"\`. כל אחד הופך למצב.',
+          '**ב-Mealy:** מצב "1011" אינו נחוץ — \`Y=1\` יוצא **על המעבר** מ-\`S3\` (=\`"101"\`) עם \`X=1\`. ⇒ **4 מצבים** בלבד.',
+          'ב-Moore היו צריכים מצב "match" נוסף = 5 מצבים. Mealy חוסך מצב — וזה המינימום.',
+          '4 מצבים → \`⌈log₂4⌉ = 2\` FFs.',
+          'מעבר מ-\`S3\` עם X=1 חוזרים ל-\`S1\` (לא ל-\`S0\`!) — אחרי "1011" יש "1" שיכול להתחיל רצף חדש.',
+        ],
+        answer:
+`**מינימום: 4 מצבים** (Mealy). מבוסס על "כמה אותיות מ-\`1011\` ראיתי כ-suffix":
+
+| מצב | משמעות         |
+|-----|----------------|
+| \`S0\` | לא ראיתי כלום שימושי |
+| \`S1\` | ראיתי "1"      |
+| \`S2\` | ראיתי "10"     |
+| \`S3\` | ראיתי "101"    |
+
+**אין מצב \`S4\`="1011"** כי ב-Mealy ה-\`Y=1\` נפלט **על המעבר** מ-\`S3\` (\`X=1\`) — לא צריך מצב נפרד.
+
+**טבלת מעברים (Mealy: \`X / Y\`):**
+
+| ממצב | X=0 / Y    | X=1 / Y       |
+|------|------------|---------------|
+| S0   | S0 / 0     | S1 / 0        |
+| S1   | S2 / 0     | S1 / 0        |
+| S2   | S0 / 0     | S3 / 0        |
+| S3   | S2 / 0     | **S1 / 1** ← זיהוי! |
+
+**הסבר מעברי החפיפה הקריטיים:**
+- מ-\`S3\` (=\`"101"\`) עם \`X=1\` → קלט מצטבר \`"1011"\`. ה-suffix הארוך ביותר שהוא prefix של "1011" = \`"1"\` ⇒ \`S1\`. *לא* חוזרים ל-S0!
+- מ-\`S3\` עם \`X=0\` → \`"1010"\`. ה-suffix הארוך = \`"10"\` ⇒ \`S2\`.
+- מ-\`S1\` עם \`X=1\` → \`"11"\`. Suffix = \`"1"\` ⇒ נשארים ב-\`S1\`.
+
+**הוכחה שעבדנו על המקרה הדורש זיהוי כפול: \`1011011\`**
+- t=0: S0 →(1)→ S1 (Y=0)
+- t=1: S1 →(0)→ S2 (Y=0)
+- t=2: S2 →(1)→ S3 (Y=0)
+- t=3: S3 →(1)→ S1 (**Y=1**) ← זיהוי ראשון
+- t=4: S1 →(0)→ S2 (Y=0)
+- t=5: S2 →(1)→ S3 (Y=0)
+- t=6: S3 →(1)→ S1 (**Y=1**) ← זיהוי שני ✓
+
+**מספר FFs:** \`⌈log₂4⌉ = 2\`. קידוד נוח: \`S0=00, S1=01, S2=10, S3=11\`.`,
+        answerSchematic: `
+<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="11" role="img" aria-label="Mealy FSM state diagram for 1011 detector">
+  <text x="300" y="22" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Mealy FSM — "1011" Detector (4 states)</text>
+
+  <g stroke="#80b0e0" stroke-width="1.8" fill="#0a1520">
+    <circle cx="80"  cy="200" r="34"/>
+    <circle cx="220" cy="200" r="34"/>
+    <circle cx="380" cy="200" r="34"/>
+    <circle cx="520" cy="200" r="34"/>
+  </g>
+  <g fill="#c8d8f0" text-anchor="middle" font-weight="bold" font-size="12">
+    <text x="80"  y="198">S0</text>
+    <text x="220" y="198">S1</text>
+    <text x="380" y="198">S2</text>
+    <text x="520" y="198">S3</text>
+  </g>
+  <g fill="#80b0e0" text-anchor="middle" font-size="9">
+    <text x="80"  y="212">""</text>
+    <text x="220" y="212">"1"</text>
+    <text x="380" y="212">"10"</text>
+    <text x="520" y="212">"101"</text>
+  </g>
+
+  <!-- Forward path S0 -1/0-> S1 -0/0-> S2 -1/0-> S3 -->
+  <path d="M 114 200 L 186 200" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="150" y="192" text-anchor="middle" fill="#c8d8f0">1 / 0</text>
+  <path d="M 254 200 L 346 200" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="300" y="192" text-anchor="middle" fill="#c8d8f0">0 / 0</text>
+  <path d="M 414 200 L 486 200" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="450" y="192" text-anchor="middle" fill="#c8d8f0">1 / 0</text>
+
+  <!-- S3 -1/1-> S1 (green, big curve overhead — detection!) -->
+  <path d="M 500 168 C 460 100, 280 100, 240 170" stroke="#39ff80" stroke-width="2.2" fill="none" marker-end="url(#d-arr-g)"/>
+  <text x="370" y="95" text-anchor="middle" fill="#39ff80" font-weight="bold">X=1 / Y=1  ← זיהוי</text>
+
+  <!-- S3 -0/0-> S2 (small back-arrow) -->
+  <path d="M 488 220 C 460 248, 410 248, 396 226" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="442" y="262" text-anchor="middle" fill="#c8d8f0">0 / 0</text>
+
+  <!-- S2 -0/0-> S0 (long curve below) -->
+  <path d="M 350 232 C 240 310, 120 310, 90 232" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="220" y="312" text-anchor="middle" fill="#c8d8f0">0 / 0</text>
+
+  <!-- S0 self loop X=0 -->
+  <path d="M 60 172 C 24 120, 100 116, 80 166" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="40" y="118" text-anchor="middle" fill="#c8d8f0">0 / 0</text>
+
+  <!-- S1 self loop X=1 -->
+  <path d="M 200 172 C 168 122, 240 122, 220 166" stroke="#c8d8f0" fill="none" marker-end="url(#d-arr)"/>
+  <text x="210" y="120" text-anchor="middle" fill="#c8d8f0">1 / 0</text>
+
+  <defs>
+    <marker id="d-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8d8f0"/>
+    </marker>
+    <marker id="d-arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff80"/>
+    </marker>
+  </defs>
+
+  <text x="300" y="340" text-anchor="middle" fill="#c8d8f0" font-size="10">החץ הירוק (S3 → S1, X=1) הוא הרגע שבו "1011" זוהה — וחוזרים ל-S1 (לא S0!) כי ה-"1" האחרון מתחיל רצף חדש.</text>
+</svg>
+`,
+        interviewerMindset:
+`הראיין רוצה לראות שאתה מבין את **עיקרון ה-suffix-prefix** — לא רק לזכור את התשובה "4 מצבים". מי שאומר "5 מצבים: S0,S1,S2,S3,S4=match" — בנה Moore, לא Mealy. **המינימום האמיתי הוא 4** (Mealy), כי ה-Y יוצא על המעבר ולא דורש מצב.
+
+**מקפיץ לטובה:**
+- לבנות את המעברים שיטתית מ"מה ה-suffix הארוך ביותר של הקלט שהוא prefix של 1011".
+- להזכיר ש-Moore היה דורש 5 מצבים (\`⌈log₂5⌉ = 3\` FFs) — Mealy חוסך FF שלם.
+- לרוץ מעבר על \`1011011\` ולהראות 2 זיהויים.`,
+        expectedAnswers: [
+          '4', 'ארבעה', 'ארבע', 'four',
+          's0', 's1', 's2', 's3',
+          'overlap', 'חפיפה', 'suffix', 'prefix',
+          '2 ff', '2 flip', 'log2',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'נתח את ה-Critical Path של המעגל. מה מסלול ההתפשטות הארוך ביותר ב-cycle, ומה כל "צרכן" של אות צריך לקיים?',
+        hints: [
+          'בכל FSM סינכרוני יש שני "סינקים" שצריכים לעמוד ב-setup: (1) ה-FFs של המצב, (2) ה-FF הבא שדוגם את ה-Y.',
+          'Path 1 — **state path:** \`Q → next-state logic → D\`. מבוסס על Q (יציב מהקצה הקודם) + X.',
+          'Path 2 — **output path:** מ-\`Y\` ל-FF הצרכן. **כאן ההבדל בין Moore ל-Mealy מתבטא:**',
+          '   • Moore: \`Q → output logic → Y\`. \`X\` לא בנתיב הזה.',
+          '   • Mealy: \`Q + X → output logic → Y\`. ⚠️ \`X\` בנתיב!',
+          'כש-X איטי, הוספתו לנתיב Y הופכת אותו לקריטי. בלי X = יש שפע slack.',
+        ],
+        answer:
+`**שני נתיבים קריטיים פוטנציאליים בכל cycle:**
+
+**Path 1 — State Path** (Q ← next-state logic):
+\`Q[n−1]\` (יציב מקצה קודם) + \`X\` (איטי, מתייצב מאוחר) → לוגיקה צירופית → \`D\` של ה-FFs של המצב.
+דרישה: \`t_X_setup + t_combinational ≤ t_clk − t_setup,FSM\` של ה-FF של ה-FSM עצמו.
+
+**Path 2 — Output Path** (\`Y\` → FF צרכן חיצוני):
+- **ב-Moore:** \`Q[n−1] → output_logic → Y\`. \`Y\` תלוי **רק במצב**, שהוא יציב מקצה השעון הקודם.
+  \`t_clk-to-Q + t_Y_logic\` — קצר, **\`X\` לא נכנס לחישוב**.
+- **ב-Mealy:** \`(Q[n−1], X) → output_logic → Y\`. \`Y\` תלוי **גם ב-X**.
+  \`max(t_clk-to-Q, t_X_arrival) + t_Y_logic\`.
+  ⚠️ ה-\`X\` (האיטי!) שורשר ישירות לחישוב \`Y\`.
+
+**הצרכן של \`Y\`** (FF חיצוני שדוגם בקצה הבא) דורש:
+\`\`\`
+t_Y_arrival + t_setup,downstream ≤ t_clk
+\`\`\`
+
+ב-Mealy, \`t_Y_arrival\` כולל את ה-\`t_X_arrival\` האיטי + לוגיקת Y. ב-Moore, רק \`t_clk-to-Q + t_Y_logic\` (X לא משתתף).
+
+**זו תמצית ה-trade-off:** Mealy חוסך מצב/FF אבל גורר את X לתוך Y. כש-X איטי, זה הורג את ה-timing של downstream.`,
+        expectedAnswers: [
+          'critical path', 'נתיב קריטי',
+          'setup', 'setup time', 'זמן הקמה',
+          'clk-to-q', 'tco', 'tcq',
+          'output path', 'state path',
+          'combinational', 'צירופית',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'בהינתן שה-\`X\` מתייצב ממש רגע לפני עליית השעון — האם תבחר Moore או Mealy? נמק תוך התייחסות ל-setup time של ה-FF הצרכן.',
+        hints: [
+          'Mealy: Y = f(state, X). ה-X האיטי נכנס לחישוב Y → ה-Y מתעדכן רק אחרי ש-X התייצב + delay של לוגיקת Y.',
+          'הצרכן של Y צריך \`t_setup\` לפני קצה השעון. אם \`Y\` מתאחר → setup violation.',
+          'Moore: Y = f(state) בלבד. ה-Q יציב מאז קצה השעון הקודם. \`Y\` ערוך הרבה לפני הקצה הבא — בלי קשר ל-X.',
+          'המחיר: Moore דורש 5 מצבים (\`⌈log₂5⌉ = 3\` FFs), עוד מצב ועוד FF. אבל timing-wise — שווה את זה.',
+          'כלל אצבע: כש-X על הגבול של ה-setup, אסור לשרשר אותו לעוד נתיב. Moore "מנקה" את נתיב Y מ-X.',
+        ],
+        answer:
+`**בחירה: Moore.** הסיבה — **setup time של ה-FF הצרכן**.
+
+**ניתוח Mealy (הבעיה):**
+
+\`X\` מגיע ב-\`t_clk − ε\` (רק רגע לפני הקצה). ב-Mealy:
+\`\`\`
+t_Y_arrival = t_X_arrival + t_Y_combinational
+            ≈ (t_clk − ε) + t_Y_logic
+\`\`\`
+דרישה ל-setup של ה-FF הצרכן:
+\`\`\`
+t_Y_arrival + t_setup,downstream ≤ t_clk
+⟹ (t_clk − ε) + t_Y_logic + t_setup ≤ t_clk
+⟹ t_Y_logic + t_setup ≤ ε
+\`\`\`
+\`ε\` הוא זעיר ⇒ **setup violation כמעט מובטח**. ב-Mealy ה-\`X\` האיטי "נספג" לתוך נתיב הפלט — ופותח חזית timing שניה שצריכה להיגמר באותו cycle.
+
+**ניתוח Moore (הפתרון):**
+
+\`Y = f(Q)\` בלבד. \`Q\` יציב מאז \`t_clk-to-Q\` של הקצה הקודם — כלומר זמין בערך \`t_clk-to-Q\` אחרי תחילת ה-cycle (\`≈ 100ps\` בטכנולוגיה מודרנית, מתוך \`t_clk\` של ננו-שניות).
+\`\`\`
+t_Y_arrival = t_clk-to-Q + t_Y_logic   ← זעיר ביחס ל-t_clk
+\`\`\`
+ה-\`X\` האיטי משפיע רק על \`D\` של ה-FFs של ה-FSM עצמו — וזו חזית timing **נפרדת** שצריכה לעמוד רק ב-setup של ה-FF של ה-FSM, לא של ה-downstream. הצרכן של \`Y\` מקבל אות **רגוע ויציב** עם שפע slack.
+
+**המחיר של Moore כאן:** מצב נוסף (\`S4\`=match) → \`⌈log₂5⌉ = 3\` FFs במקום 2. עוד FF בודד וקצת לוגיקה — **מחיר זניח** לעומת רווח של setup margin על כל הצרכנים של Y.
+
+**העיקרון הכללי לזכור לראיון:**
+> "כשקלט מגיע על הסף של ה-setup, אסור לחבר אותו לנתיב פלט ארוך. Moore 'מבודד' את ה-X מ-Y דרך ה-FFs של המצב — וזה הופך את ה-Y לנקי ומהיר ביחס לקצה השעון הבא."
+
+**Trade-off כללי שצריך לאלף עצמך:**
+
+| תרחיש                          | בחירה   | למה                       |
+|--------------------------------|---------|---------------------------|
+| X איטי, latency פחות חשוב      | Moore   | מבודד X מ-Y                |
+| X מהיר, latency קריטי          | Mealy   | חוסך cycle, מצב, FF        |
+| Y מוזן ל-FF סינכרוני           | שניהם תקפים | תזמון מכריע        |
+| Y מוזן ללוגיקה אסינכרונית/IO   | Moore   | אין glitches               |`,
+        interviewerMindset:
+`זה השאלה המרכזית בראיון — כל מי שזרק "Mealy כי פחות מצבים" בלי לחשב את ה-setup **הפסיד**. הראיין רוצה לראות שאתה:
+1. מזהה ש-X נמצא ב-critical path.
+2. **מחשב במשוואה** — לא רק "Moore יותר טוב"; אלא "\`t_Y_logic + t_setup ≤ ε\` שזה בלתי אפשרי".
+3. מנמק שהמחיר (FF נוסף) זניח לעומת הרווח (margin על כל הצרכנים של Y).
+
+**מקפיץ לטובה:**
+- להזכיר את ה-trade-off הכללי: Mealy חוסך אזור/FFs, Moore חוסך timing slack.
+- להציע פתרון hybrid: Mealy + register-the-output (\`Y_reg\` יוצא מ-FF נוסף) — מקבל את היתרונות של שניהם במחיר cycle latency. זו טכניקה נפוצה ב-pipelined designs.
+- לציין שזה בדיוק העניין מאחורי "registered outputs" כ-best practice ב-ASIC.
+
+**מי שזורק "Mealy" כאן — חוטף נוק-אאוט.** השאלה כתובה בכוונה כדי לחשוף את זה.`,
+        expectedAnswers: [
+          'moore',
+          'setup', 'setup time', 'זמן הקמה',
+          'critical path', 'נתיב קריטי',
+          'register', 'registered output',
+          't_co', 'tcq', 'clk-to-q', 'clk to q',
+          'slack', 'margin',
+        ],
+        circuitRevealsAnswer: true,
+        circuit: () => build(() => {
+          // Moore implementation, 5 states encoded with 3 FFs.
+          // S0=000, S1=001, S2=010, S3=011, S4=100 (match → Y=1).
+          // Transitions:
+          //   S0: 0→S0(000), 1→S1(001)
+          //   S1: 0→S2(010), 1→S1(001)
+          //   S2: 0→S0(000), 1→S3(011)
+          //   S3: 0→S2(010), 1→S4(100)
+          //   S4: 0→S2(010), 1→S1(001)
+          //
+          // Showing the structural concept (Q2,Q1,Q0 → next-state CL → D2,D1,D0; Y=Q2),
+          // without expanding minimized boolean equations on the canvas. The canvas
+          // illustrates: 3 FFs, output Y = Q2 (Moore — depends on state only),
+          // and a placeholder "next-state CL" block driven by X + Q.
+          const X   = h.input(100, 240, 'X');
+          const clk = h.clock(100, 720);
+          X.fixedValue = 1;
+
+          const ff2 = h.ffD(720, 200, 'Q2');
+          const ff1 = h.ffD(720, 380, 'Q1');
+          const ff0 = h.ffD(720, 560, 'Q0');
+
+          // Next-state logic, expressed gate-by-gate from the transition table.
+          // The minimized boolean equations (derived via K-maps on Q2,Q1,Q0,X) are:
+          //   D2 = Q1·Q0·X                           ; only S3+X=1 → S4
+          //   D1 = (Q0·¬X) | (Q1·¬Q0·¬X) | (Q2·¬X)   ; transitions into S2
+          //   D0 = X·¬Q2 & (Q1≠Q0 reduces here)
+          // For clarity we wire a compact gate-level version. (Some redundancies are
+          // intentional to keep the topology readable on canvas.)
+          const notX  = h.gate('NOT', 260, 240);
+          const notQ0 = h.gate('NOT', 460, 620);
+          const notQ2 = h.gate('NOT', 460, 140);
+
+          // D2 = Q1 · Q0 · X
+          const andQ1Q0 = h.gate('AND', 460, 460);
+          const andD2   = h.gate('AND', 600, 280);
+          // D1 = Q0 · ¬X   (representative of "into S2" path; full term family is
+          //                  Q0·¬X + Q2·¬X — both go to S2; combined under OR below)
+          const andQ0nX = h.gate('AND', 460, 360);
+          const orD1    = h.gate('OR',  600, 420);
+          const andQ2nX = h.gate('AND', 460, 540);
+          // D0 = X · ¬Q2   (transitions into S1/S3, both have Q0=1)
+          const andD0   = h.gate('AND', 600, 600);
+
+          // Moore output: Y = Q2  (S4 = 100)
+          const Y = h.output(1000, 200, 'Y = Q2');
+
+          return {
+            nodes: [
+              X, clk,
+              notX, notQ0, notQ2,
+              andQ1Q0, andD2, andQ0nX, orD1, andQ2nX, andD0,
+              ff2, ff1, ff0,
+              Y,
+            ],
+            wires: [
+              // X → ¬X
+              h.wire(X.id, notX.id, 0),
+              // Q0, Q2 → inverters
+              h.wire(ff0.id, notQ0.id, 0),
+              h.wire(ff2.id, notQ2.id, 0),
+
+              // D2 = Q1 · Q0 · X
+              h.wire(ff1.id,   andQ1Q0.id, 0),
+              h.wire(ff0.id,   andQ1Q0.id, 1),
+              h.wire(andQ1Q0.id, andD2.id, 0),
+              h.wire(X.id,       andD2.id, 1),
+              h.wire(andD2.id,   ff2.id,   0),
+
+              // D1 path: (Q0·¬X) OR (Q2·¬X)
+              h.wire(ff0.id,    andQ0nX.id, 0),
+              h.wire(notX.id,   andQ0nX.id, 1),
+              h.wire(ff2.id,    andQ2nX.id, 0),
+              h.wire(notX.id,   andQ2nX.id, 1),
+              h.wire(andQ0nX.id, orD1.id, 0),
+              h.wire(andQ2nX.id, orD1.id, 1),
+              h.wire(orD1.id,    ff1.id, 0),
+
+              // D0 = X · ¬Q2
+              h.wire(X.id,    andD0.id, 0),
+              h.wire(notQ2.id, andD0.id, 1),
+              h.wire(andD0.id, ff0.id,   0),
+
+              // Clocks
+              h.wire(clk.id, ff2.id, 1),
+              h.wire(clk.id, ff1.id, 1),
+              h.wire(clk.id, ff0.id, 1),
+
+              // Moore output Y = Q2  ← תלוי רק במצב!
+              h.wire(ff2.id, Y.id, 0),
+            ],
+          };
+        }),
+      },
+    ],
+    source: 'מאגר ראיונות — "1011" detector + setup-time / critical-path reasoning',
+    tags: ['fsm', 'mealy', 'moore', 'sequence-detector', '1011', 'setup-time', 'critical-path', 'sequential'],
   },
 ];
