@@ -612,7 +612,7 @@ NAND הוא ה-dual של NOR (טור↔מקביל). ב-ASIC מעדיפים NAND 
 מצא את ביטוי ה-**SOP המינימלי** באמצעות מפת קרנו.`,
     parts: [
       {
-        label: null,
+        label: 'א',
         question: 'בנה את המפה, סמן קבוצות, וכתוב את הביטוי המינימלי.',
         hints: [
           'סדר את המפה בקוד Gray: שורות \`AB ∈ {00,01,11,10}\`, עמודות \`CD ∈ {00,01,11,10}\`.',
@@ -723,6 +723,79 @@ NAND הוא ה-dual של NOR (טור↔מקביל). ב-ASIC מעדיפים NAND 
           'corners', 'פינות', 'wrap',
           '3', 'שלוש', 'three',
           'sop', 'minimal', 'מינימלי',
+        ],
+      },
+      {
+        label: 'ב',
+        editor: 'verilog',
+        question: 'ממש את הפונקציה \`F = A\'B + B\'D\' + BD\` ב-Verilog כמודול קומבינטורי.',
+        hints: [
+          'מודול קומבינטורי — \`assign\` (continuous assignment) מתאים, או \`always @(*)\` עם \`=\` בלוקינג.',
+          'אופרטורים ב-Verilog: \`&\` = AND, \`|\` = OR, \`~\` = NOT.',
+          'לדוגמה: \`assign F = (~A & B) | (~B & ~D) | (B & D);\`',
+          'אפשר גם בגרסה הקריאה יותר עם signals ביניים (\`wire t1, t2, t3;\`).',
+        ],
+        starterCode:
+`module f_kmap (
+    input  wire A,
+    input  wire B,
+    input  wire C,
+    input  wire D,
+    output wire F
+);
+    // TODO: implement F = A'B + B'D' + BD
+endmodule
+`,
+        answer:
+`\`\`\`verilog
+module f_kmap (
+    input  wire A,
+    input  wire B,
+    input  wire C,   // unused — K-map showed C is "don't care" after minimization
+    input  wire D,
+    output wire F
+);
+    assign F = (~A & B) | (~B & ~D) | (B & D);
+endmodule
+\`\`\`
+
+**הערה חשובה:** אחרי המינימיזציה, **C נשמט לחלוטין** מהביטוי — שלוש הקבוצות מכסות את שני הערכים של C כל אחת. C נשאר בפורט של המודול כדי להתאים לחתימה המקורית של 4 משתנים, אבל לא משמש בלוגיקה. סינתסייזר טוב יזהיר על "unused input".
+
+**גרסה אלטרנטיבית** עם בלוק קומבינטורי מפורש:
+
+\`\`\`verilog
+always @(*) begin
+    F = (~A & B) | (~B & ~D) | (B & D);
+end
+\`\`\`
+(אז F צריך להיות \`reg\`, לא \`wire\`).
+
+**גרסה קריאה יותר** עם signals ביניים:
+
+\`\`\`verilog
+wire g1 = ~A & B;     // A'B
+wire g2 = ~B & ~D;    // B'D'
+wire g3 = B  & D;     // BD
+assign F = g1 | g2 | g3;
+\`\`\`
+
+**טעויות נפוצות בראיון:**
+- לכתוב \`&&\`/\`||\` (logical) במקום \`&\`/\`|\` (bitwise). על ביט יחיד התוצאה זהה, אבל זו ריח-קוד.
+- לשכוח שאחרי K-map הצלחנו לסלק את \`C\` — חלק מנסים "להחזיר" אותו לביטוי.
+- להגדיר \`F\` כ-\`wire\` ולכתוב לתוכו ב-\`always\` (זה שגיאת קומפילציה).`,
+        interviewerMindset:
+`השאלה הזו בודקת **תרגום נקי** מ-SOP ל-Verilog. הראיין רוצה לראות שלוש דברים:
+
+1. **בחירה נכונה של construct:** \`assign\` לקומבינטורי. אם השתמשת ב-\`always @(*)\` — חייב \`reg\` ובלוקינג \`=\`.
+2. **שימוש ב-bitwise (\`&\`, \`|\`, \`~\`), לא ב-logical** (\`&&\`, \`||\`, \`!\`). על 1-bit זה עובד בכל מקרה — אבל מי שמערבב, מערבב גם בקוד הרחב יותר.
+3. **לזהות שה-C מיותר.** אם אתה משאיר \`C\` "ליתר ביטחון" בביטוי, זה אומר שלא באמת הבנת מה K-map עשה.
+
+**מקפיץ לטובה:** להזכיר שאפשר לכתוב \`assign F = ~((A & ~B) | ...);\` (POS) ולשאול אם רוצים SOP או POS. או להציע testbench קצר.`,
+        expectedAnswers: [
+          'assign', '~a & b', "~a&b", '~b & ~d', 'b & d',
+          'always @(*)', 'always@(*)',
+          'bitwise', '&', '|', '~',
+          'unused', 'c is', 'unused input',
         ],
       },
     ],
