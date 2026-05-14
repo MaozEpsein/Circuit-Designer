@@ -334,6 +334,25 @@ export class InterviewEngine {
     this.onChange();
   }
 
+  /** Toggle the "bookmarked" flag on the active question. Orthogonal
+   *  to `mastered` — a user can star a question they haven't solved
+   *  to come back to it later. */
+  toggleBookmark() {
+    if (!this.questionId) return;
+    const k = this._key(this.topicId, this.questionId);
+    const cur = this.progress[k] || { seen: true };
+    cur.bookmarked = !cur.bookmarked;
+    cur.seen = true;
+    this.progress[k] = cur;
+    this._saveProgress();
+    this.onChange();
+  }
+
+  isBookmarked(topicId, questionId) {
+    const k = this._key(topicId, questionId);
+    return !!this.progress[k]?.bookmarked;
+  }
+
   _markSeen(topicId, questionId) {
     const k = this._key(topicId, questionId);
     const cur = this.progress[k] || {};

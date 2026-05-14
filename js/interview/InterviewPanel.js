@@ -63,18 +63,45 @@ export class InterviewPanel {
       if (e.key === 'Enter' && e.target.classList?.contains('iv-answer-input')) {
         e.preventDefault();
         this._handleCheckAnswer();
+        return;
       }
+      // ── Keyboard navigation for the code-trace player ─────────────
+      // Only fires when (a) the user isn't typing in an input/textarea
+      // /CodeMirror, AND (b) the current part actually has a trace.
+      // Without these guards Left/Right would steal caret movement
+      // inside the Python editor.
+      const tag = (e.target.tagName || '').toLowerCase();
+      const inField = tag === 'input' || tag === 'textarea'
+                   || e.target.isContentEditable
+                   || e.target.closest?.('.cm-editor');
+      if (inField) return;
+      const part = this.engine.currentPart();
+      const hasTrace = !!part?.trace?.steps?.length;
+      if (!hasTrace || !this.engine.answerShown()) return;
+      // RTL convention: right-arrow = "next" (advance through narrative
+      // that reads right-to-left). Left = previous. R resets to step 1.
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this._traceMove(+1); return; }
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); this._traceMove(-1); return; }
+      if (e.key === 'r' || e.key === 'R')                  { e.preventDefault(); this._traceReset();  return; }
     });
     this._wireResizeGrip(el);
   }
 
   _onClick(e) {
-    const t = e.target.closest('[data-act], [data-topic], [data-question]');
+    const t = e.target.closest('[data-act], [data-topic], [data-mindset-topic], [data-question]');
     if (!t) return;
     const act = t.dataset.act;
     if (act === 'close')              { this.hide(); return; }
-    if (act === 'show-mindset-index') { this.view = 'mindset-index'; this.render(); return; }
+    if (act === 'show-mindset-index') { this.view = 'mindset-index'; this.mindsetFilter = null; this.render(); return; }
     if (act === 'back-from-mindset')  { this.view = this.engine.active ? 'question' : 'catalog'; this.render(); return; }
+    // Mindset-index has its own topic-filter tabs (data-mindset-topic) so
+    // clicking them stays inside the index view rather than jumping to the
+    // catalog like the regular catalog tabs do.
+    if (t.dataset.mindsetTopic !== undefined) {
+      this.mindsetFilter = t.dataset.mindsetTopic || null;
+      this.render();
+      return;
+    }
     if (t.dataset.topic)              { this.activeTopic = t.dataset.topic; if (this.view === 'mindset-index') this.view = 'catalog'; this.render(); return; }
     if (act === 'open-question')      { this.engine.enter(this.activeTopic, t.dataset.question); this.view = 'question'; return; }
     if (act === 'back-to-catalog')    { this.engine.exit(); this.view = 'catalog'; this.render(); return; }
@@ -85,12 +112,62 @@ export class InterviewPanel {
     if (act === 'prev-part')          { this.engine.prevPart(); return; }
     if (act === 'next-part')          { this.engine.nextPart(); return; }
     if (act === 'toggle-mastered')    { this.engine.toggleMastered(); return; }
+    if (act === 'toggle-bookmark')    { this.engine.toggleBookmark(); return; }
     if (act === 'check-answer')       { this._handleCheckAnswer(); return; }
     if (act === 'paste-code')         { this._handlePasteCode();   return; }
     if (act === 'clear-code')         { this._handleClearCode();   return; }
     if (act === 'load-skeleton')      { this._handleLoadSkeleton(); return; }
+    if (act === 'compare-solution')   { this._handleCompareSolution(); return; }
+    if (act === 'close-compare')      { this._closeCompareModal();    return; }
     if (act === 'load-circuit')       { this.engine.loadCircuit();    return; }
     if (act === 'restore-circuit')    { this.engine.restoreCircuit(); return; }
+    // Code-trace player — step forward / back / reset. The current step
+    // is kept on this panel (not the engine) since it's pure view-state
+    // that resets when the user navigates away.
+    if (act === 'trace-prev')         { this._traceMove(-1); return; }
+    if (act === 'trace-next')         { this._traceMove(+1); return; }
+    if (act === 'trace-reset')        { this._traceReset(); return; }
+  }
+
+  _traceKey() {
+    if (!this.engine.active) return null;
+    return `${this.engine.questionId}:${this.engine.partIndex}`;
+  }
+  // localStorage-backed step persistence so a user who navigates away
+  // (close panel / refresh / switch question) comes back to the same
+  // step in the trace player. Mirrors the pattern used for `_cmPersist`.
+  _traceStorageKey() {
+    if (!this.engine.active) return null;
+    return `circuit_designer_pro__iv_trace_step__${this.engine.topicId}::${this.engine.questionId}:${this.engine.partIndex}`;
+  }
+  _traceStepLoad() {
+    const k = this._traceStorageKey();
+    if (!k) return 0;
+    try { return parseInt(localStorage.getItem(k) || '0', 10) || 0; } catch (_) { return 0; }
+  }
+  _traceStepPersist(step) {
+    const k = this._traceStorageKey();
+    if (!k) return;
+    try { localStorage.setItem(k, String(step)); } catch (_) { /* ignore quota */ }
+  }
+  _traceMove(delta) {
+    const k = this._traceKey(); if (!k) return;
+    this._traceStep ||= {};
+    const part = this.engine.currentPart();
+    const total = part?.trace?.steps?.length || 0;
+    if (!total) return;
+    const cur = this._traceStep[k] ?? this._traceStepLoad();
+    const next = Math.max(0, Math.min(total - 1, cur + delta));
+    this._traceStep[k] = next;
+    this._traceStepPersist(next);
+    this.render();
+  }
+  _traceReset() {
+    const k = this._traceKey(); if (!k) return;
+    this._traceStep ||= {};
+    this._traceStep[k] = 0;
+    this._traceStepPersist(0);
+    this.render();
   }
 
   async _handlePasteCode() {
@@ -115,6 +192,111 @@ export class InterviewPanel {
     this._typedAnswer = '';
     this._cmPersist('');
     this._cmEditor.focus();
+  }
+
+  // ── Compare-to-solution modal ────────────────────────────────────────
+  // Side-by-side diff between the user's editor contents and the
+  // canonical solution. Solution source preference order:
+  //   1. part.approaches[best].code  — "best" is the last approach
+  //      (usually the optimal one in our authoring convention).
+  //   2. first ```python ... ``` block in part.answer.
+  // If neither is present the button shouldn't render (we gate it
+  // in _renderAnswerCheck above).
+  _solutionCodeForCurrentPart() {
+    const part = this.engine.currentPart();
+    if (!part) return '';
+    if (Array.isArray(part.approaches) && part.approaches.length > 0) {
+      // Pick the last approach — by convention it's the optimal one
+      // in our authoring style ("brute … then hash").
+      const last = part.approaches[part.approaches.length - 1];
+      if (last?.code) return last.code;
+    }
+    // Fallback: extract the first ```...``` block from the markdown answer.
+    if (typeof part.answer === 'string') {
+      const m = part.answer.match(/```\w*\n([\s\S]*?)\n```/);
+      if (m) return m[1];
+    }
+    return '';
+  }
+
+  _handleCompareSolution() {
+    const user = (this._cmEditor ? this._cmEditor.getValue() : this._typedAnswer) || '';
+    const solution = this._solutionCodeForCurrentPart();
+    if (!solution) {
+      alert('אין פתרון רשמי זמין להשוואה לשאלה הזו.');
+      return;
+    }
+    this._renderCompareModal(user, solution);
+  }
+
+  _closeCompareModal() {
+    const m = document.getElementById('iv-compare-modal');
+    if (m) m.remove();
+  }
+
+  // Build the diff modal. Line-level diff: each line is either common,
+  // user-only, or solution-only. We use a simple longest-common-
+  // subsequence on lines (textbook DP) — small inputs, so O(n·m) is
+  // fine and we avoid a third-party diff dep.
+  _renderCompareModal(userCode, solutionCode) {
+    this._closeCompareModal();
+    const diff = _lineDiff(userCode, solutionCode);
+    const userHtml = diff.left.map(row =>
+      `<div class="iv-diff-line iv-diff-${row.kind}"><span class="iv-diff-num">${row.num || ''}</span><pre>${_esc(row.text)}</pre></div>`
+    ).join('');
+    const solHtml = diff.right.map(row =>
+      `<div class="iv-diff-line iv-diff-${row.kind}"><span class="iv-diff-num">${row.num || ''}</span><pre>${_esc(row.text)}</pre></div>`
+    ).join('');
+    const sameCount   = diff.left.filter(r => r.kind === 'same').length;
+    const totalLines  = Math.max(diff.left.length, diff.right.length);
+    const matchPct    = totalLines ? Math.round((sameCount / totalLines) * 100) : 100;
+
+    const el = document.createElement('div');
+    el.id = 'iv-compare-modal';
+    el.className = 'iv-compare-modal';
+    el.innerHTML = `
+      <div class="iv-compare-backdrop" data-act="close-compare"></div>
+      <div class="iv-compare-box" dir="rtl">
+        <div class="iv-compare-head">
+          <div class="iv-compare-title">⇄ השוואה לפתרון המומלץ</div>
+          <div class="iv-compare-meta">
+            <span class="iv-compare-pct">${matchPct}% התאמת שורות</span>
+            <button class="iv-btn iv-x" data-act="close-compare">CLOSE</button>
+          </div>
+        </div>
+        <div class="iv-compare-cols">
+          <div class="iv-compare-col">
+            <div class="iv-compare-col-head">הקוד שלך</div>
+            <div class="iv-compare-pane" dir="ltr">${userHtml || '<div class="iv-compare-empty">(ריק)</div>'}</div>
+          </div>
+          <div class="iv-compare-col">
+            <div class="iv-compare-col-head">פתרון מומלץ</div>
+            <div class="iv-compare-pane" dir="ltr">${solHtml}</div>
+          </div>
+        </div>
+        <div class="iv-compare-legend" dir="ltr">
+          <span class="iv-diff-swatch iv-diff-same"></span>same
+          <span class="iv-diff-swatch iv-diff-del"></span>only in yours
+          <span class="iv-diff-swatch iv-diff-add"></span>only in solution
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    // The modal lives in document.body — outside the interview panel
+    // root — so the panel's click handler never sees its events.
+    // Wire dedicated handlers here. Backdrop click + CLOSE button +
+    // Escape key all dismiss the modal.
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act="close-compare"]')) {
+        this._closeCompareModal();
+      }
+    });
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        this._closeCompareModal();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
   }
 
   _handleLoadSkeleton() {
@@ -273,6 +455,13 @@ export class InterviewPanel {
 
     // Restore scroll + focus + caret position.
     body.scrollTop = scrollTop;
+    // Second restore on the next frame: when the new markup contains
+    // images, MathJax, or any late-layout content, the body's
+    // scrollHeight finalizes AFTER this sync block — and a synchronous
+    // `scrollTop = X` set BEFORE scrollHeight grew gets clamped to the
+    // smaller maxScroll, leaving the panel at the top. rAF runs once
+    // layout is committed so the second set takes the intended value.
+    requestAnimationFrame(() => { body.scrollTop = scrollTop; });
     if (focusedClass) {
       const next = body.querySelector('.' + focusedClass);
       if (next) {
@@ -339,10 +528,17 @@ export class InterviewPanel {
     const starterDoc = this._typedAnswer || this._cmLoad() || '';
     if (starterDoc) this._typedAnswer = starterDoc;
 
+    // Pick the highlighter language from the part. Defaults to Verilog
+    // for legacy questions that don't specify (the loader treats
+    // unknown values the same way).
+    const part = this.engine.currentPart();
+    const language = part?.editor === 'python' ? 'python' : 'verilog';
+
     import('./codeEditor.js')
       .then(({ createVerilogEditor }) => createVerilogEditor({
         container: host,
         initialDoc: starterDoc,
+        language,
         onChange: (val) => {
           this._typedAnswer = val;
           this._cmPersist(val);
@@ -416,6 +612,22 @@ export class InterviewPanel {
    * skipped.
    */
   _renderMindsetIndex() {
+    const filter = this.mindsetFilter || null;
+
+    // Per-topic tabs filter the index to a single topic. The "הכל" tab
+    // (empty data-mindset-topic) is the default — show all topics
+    // stacked, like before the filter feature was added.
+    const tabsHtml = [
+      `<button class="iv-mindset-tab${!filter ? ' iv-mindset-tab-active' : ''}" data-mindset-topic="">הכל</button>`,
+      ...TOPICS.map(t => `
+        <button class="iv-mindset-tab${filter === t.id ? ' iv-mindset-tab-active' : ''}"
+                data-mindset-topic="${_esc(t.id)}"
+                title="${_esc(t.description)}">
+          <span class="iv-tab-num">${t.tabNumber}</span>
+          <span class="iv-tab-icon">${t.icon}</span>${_esc(t.label)}
+        </button>`),
+    ].join('');
+
     let html = `
       <div class="iv-mindset-index-head" dir="rtl">
         <div>
@@ -424,9 +636,11 @@ export class InterviewPanel {
         </div>
         <button class="iv-btn" data-act="back-from-mindset">↩ חזרה</button>
       </div>
+      <div class="iv-mindset-tabs" dir="rtl">${tabsHtml}</div>
     `;
 
     for (const topic of TOPICS) {
+      if (filter && topic.id !== filter) continue;
       const list = this.engine.listQuestions(topic.id);
       const entries = [];
       for (let qIdx = 0; qIdx < list.length; qIdx++) {
@@ -487,9 +701,15 @@ export class InterviewPanel {
       : '';
     const partsLabel = q.partCount > 1 ? `<span class="iv-card-parts">${q.partCount} סעיפים</span>` : '';
     const serial = serialFor(this.activeTopic, indexWithinTopic);
+    // Optional-chain the engine call: a stale browser cache may have
+    // shipped the engine module before `isBookmarked` existed. Without
+    // the `?.` the whole panel would TypeError and refuse to render
+    // until the user clears site data.
+    const bookmarked = this.engine.isBookmarked?.(this.activeTopic, q.id) ?? false;
     return `
-      <div class="iv-card" data-act="open-question" data-question="${_esc(q.id)}">
+      <div class="iv-card${bookmarked ? ' iv-card-bookmarked' : ''}" data-act="open-question" data-question="${_esc(q.id)}">
         <div class="iv-card-head">
+          ${bookmarked ? '<span class="iv-card-star" title="במועדפים">★</span>' : ''}
           <span class="iv-card-serial" dir="ltr">#${serial}</span>
           <div class="iv-card-title" dir="rtl">${_esc(q.title)}</div>
           ${badge}
@@ -515,13 +735,17 @@ export class InterviewPanel {
       : '';
 
     const part = this.engine.currentPart();
-    if (part?.editor === 'verilog') {
+    if (part?.editor === 'verilog' || part?.editor === 'python') {
       // Render an empty host; the actual CodeMirror view is mounted by
       // render() after the innerHTML swap and is preserved across renders.
       const savedHeight = this._cmSavedHeight();
       const hostStyle = `--cm-h:${savedHeight}px`;
-      const label = part.editorLabel || 'Verilog';
-      const hint  = part.editorHint  || 'כתוב את המודול בעורך למטה ולחץ "בדוק"';
+      const defaultLabel = part.editor === 'python' ? 'Python' : 'Verilog';
+      const defaultHint  = part.editor === 'python'
+        ? 'כתוב את הפתרון בפייתון בעורך למטה ולחץ "בדוק"'
+        : 'כתוב את המודול בעורך למטה ולחץ "בדוק"';
+      const label = part.editorLabel || defaultLabel;
+      const hint  = part.editorHint  || defaultHint;
       return `
         <div class="iv-check-wrap-code" dir="rtl">
           <div class="iv-code-header">
@@ -535,6 +759,7 @@ export class InterviewPanel {
             ${part.starterCode || _hasGenericStarter() ? '<button class="iv-btn" data-act="load-skeleton" title="טען תבנית מודול ריקה לעורך">🧩 שלב מודול - רמז!</button>' : ''}
             <button class="iv-btn" data-act="paste-code" title="ייבא את התוכן של הלוח לתוך העורך (Ctrl+V עובד גם בעורך עצמו)">📋 הדבק מהלוח</button>
             <button class="iv-btn" data-act="clear-code" title="נקה את כל התוכן בעורך">🗑 נקה</button>
+            ${part.approaches?.length || part.answer ? '<button class="iv-btn" data-act="compare-solution" title="השווה את הקוד שלך לפתרון המומלץ">⇄ השווה לפתרון</button>' : ''}
             <button class="iv-btn iv-btn-primary iv-btn-check" data-act="check-answer">✓ בדוק את הקוד</button>
           </div>
         </div>`;
@@ -614,10 +839,33 @@ export class InterviewPanel {
       ? `<div class="iv-schematic iv-schematic-answer">${answerSvg}</div>`
       : '';
 
+    // Pre-answer complexity pills: visible always (next to the prompt)
+    // when the question wants to advertise the target Big-O up front —
+    // doubles as a hint without being a spoiler.
+    const promptCmplxHtml = _renderComplexities(part.complexities);
+
+    // Inside the answer block: side-by-side approach cards (if the
+    // part has multiple solution paths) and an optional code-trace
+    // player. Both live under the "תשובה" reveal so they don't spoil
+    // the user before they try.
+    const approachesHtml = _renderApproaches(part.approaches);
+    // Trace step preference: in-memory cache → localStorage (resumes
+    // across visits / page reloads) → 0. The first read seeds the
+    // in-memory cache so subsequent renders are O(1).
+    const tKey = `${this.engine.questionId}:${this.engine.partIndex}`;
+    this._traceStep ||= {};
+    if (this._traceStep[tKey] == null) {
+      this._traceStep[tKey] = this._traceStepLoad();
+    }
+    const traceStep = this._traceStep[tKey];
+    const traceHtml = _renderTrace(part.trace, traceStep);
+
     const answerHtml = answerShown
       ? `<div class="iv-answer" dir="rtl">
            <div class="iv-answer-head">תשובה</div>
            ${answerSvgHtml}
+           ${approachesHtml}
+           ${traceHtml}
            <div class="iv-answer-body">${_renderRichText(part.answer || '')}</div>
            ${circuitInAnswerHtml}
            <button class="iv-btn iv-btn-link" data-act="hide-answer">הסתר תשובה</button>
@@ -633,10 +881,17 @@ export class InterviewPanel {
     const partSuffix = (part.label != null && total > 1) ? `·${part.label}` : '';
     const fullSerial = serial ? `${serial}${partSuffix}` : null;
 
+    // For multi-part questions, inline the part label into the title
+    // itself so the section is visible at a glance even when the meta
+    // chips below are off-screen / scrolled past.
+    const titleSuffix = (part.label != null && total > 1)
+      ? ` — סעיף ${_esc(part.label)}`
+      : '';
+
     return `
       <div class="iv-question-head">
         ${fullSerial ? `<span class="iv-question-serial" dir="ltr">#${fullSerial}</span>` : ''}
-        <div class="iv-question-title" dir="rtl">${_esc(q.title)}</div>
+        <div class="iv-question-title" dir="rtl">${_esc(q.title)}${titleSuffix}</div>
         <div class="iv-question-meta">
           ${partLabel}
           ${partProgress}
@@ -648,6 +903,7 @@ export class InterviewPanel {
       ${circuitHtml}
       <div class="iv-part-body">
         <div class="iv-prompt" dir="rtl">${_renderRichText(part.question || '')}</div>
+        ${promptCmplxHtml}
         ${this._renderAnswerCheck()}
         ${hintsHtml}
         ${answerHtml}
@@ -667,6 +923,9 @@ export class InterviewPanel {
         <button class="iv-btn ${isMastered ? 'iv-btn-mastered' : ''}" data-act="toggle-mastered" title="סמן/בטל סימון של 'אני שולט בזה'">
           ${isMastered ? '✓ שולט' : '✓ סמן כ-Mastered'}
         </button>
+        ${this.engine.isBookmarked ? `<button class="iv-btn ${this.engine.isBookmarked(this.engine.topicId, this.engine.questionId) ? 'iv-btn-bookmarked' : ''}" data-act="toggle-bookmark" title="הוסף/הסר מהמועדפים">
+          ${this.engine.isBookmarked(this.engine.topicId, this.engine.questionId) ? '★ במועדפים' : '☆ סמן כמועדף'}
+        </button>` : ''}
         <button class="iv-btn" data-act="back-to-catalog" title="חזרה לרשימת השאלות">↩ חזרה לתפריט</button>
       </div>
     `;
@@ -674,6 +933,142 @@ export class InterviewPanel {
 }
 
 // ── helpers ───────────────────────────────────────────────────
+
+/**
+ * Classify a complexity string (e.g. "O(n²)", "O(2ⁿ)") into one of
+ * four buckets that map to CSS palettes. Lossy heuristic — we only
+ * need it to colour-code the badge consistently, not to actually
+ * compute order-of-growth.
+ */
+function _cmplxClass(s) {
+  if (!s) return 'ok';
+  const v = String(s).toLowerCase().replace(/\s+/g, '');
+  if (/2\^n|2ⁿ|n!|n\^n|n·2\^n|n·2ⁿ|n\*2\^n/.test(v)) return 'exp';
+  if (/n\^[2-9]|n²|n³|n\*n/.test(v))                  return 'bad';
+  if (/o\(1\)|o\(log/.test(v))                         return 'good';
+  return 'ok';
+}
+
+/**
+ * Render a row of complexity pills. Accepts:
+ *   complexities: [{ label, value }]     (free form)
+ * Returns '' when input is empty so it's safe to inline.
+ */
+function _renderComplexities(items) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const pills = items.map(c => {
+    const cls   = _cmplxClass(c.value);
+    const label = c.label ? `<span class="iv-cmplx-prefix">${_esc(c.label)}:</span>` : '';
+    return `<span class="iv-cmplx" data-class="${cls}">${label}${_esc(c.value)}</span>`;
+  }).join('');
+  return `<div class="iv-cmplx-row" dir="ltr">${pills}</div>`;
+}
+
+/** Side-by-side approach cards. Each card carries its own complexities. */
+function _renderApproaches(approaches) {
+  if (!Array.isArray(approaches) || approaches.length === 0) return '';
+  const cards = approaches.map(a => {
+    const cmplx = [];
+    if (a.time)  cmplx.push({ label: 'Time',  value: a.time  });
+    if (a.space) cmplx.push({ label: 'Space', value: a.space });
+    return `
+      <div class="iv-approach">
+        <div class="iv-approach-head">
+          <div class="iv-approach-name" dir="rtl">${_esc(a.name || '')}</div>
+          ${_renderComplexities(cmplx)}
+        </div>
+        ${a.summary  ? `<div class="iv-approach-summary" dir="rtl">${_renderInline(a.summary)}</div>` : ''}
+        ${a.code     ? `<pre class="iv-approach-code">${_esc(a.code)}</pre>` : ''}
+        ${a.explain  ? `<div class="iv-approach-explain" dir="rtl">${_renderInline(a.explain)}</div>` : ''}
+      </div>`;
+  }).join('');
+  return `<div class="iv-approaches">${cards}</div>`;
+}
+
+/**
+ * Code-trace player — one step at a time with prev/next/reset.
+ * `step` is the 0-based index of the step currently displayed; the
+ * caller passes it from panel state so the player survives re-renders.
+ */
+function _renderTrace(trace, step) {
+  if (!trace || !Array.isArray(trace.steps) || trace.steps.length === 0) return '';
+  const total = trace.steps.length;
+  const idx = Math.max(0, Math.min(total - 1, step || 0));
+  const cur = trace.steps[idx];
+  const pct = total > 1 ? ((idx / (total - 1)) * 100) : 100;
+  return `
+    <div class="iv-trace" dir="rtl">
+      <div class="iv-trace-head">
+        <div class="iv-trace-title">▶ ${_esc(trace.title || 'מעקב הרצה')}</div>
+        <div class="iv-trace-step-num" dir="ltr">${idx + 1} / ${total}</div>
+      </div>
+      <div class="iv-trace-viz" dir="ltr">${cur.viz || ''}</div>
+      ${cur.code    ? `<div class="iv-trace-line">${_esc(cur.code)}</div>` : ''}
+      ${cur.explain ? `<div class="iv-trace-explain">${_renderInline(cur.explain)}</div>` : ''}
+      <div class="iv-trace-controls">
+        <button class="iv-btn" data-act="trace-prev" title="ניווט: ← או חץ למעלה" ${idx === 0 ? 'disabled' : ''}>◀ קודם</button>
+        <div class="iv-trace-progress" title="${idx + 1} / ${total}">
+          <div class="iv-trace-progress-bar" style="width:${pct}%"></div>
+        </div>
+        <button class="iv-btn iv-btn-primary" data-act="trace-next" title="ניווט: → או חץ למטה" ${idx === total - 1 ? 'disabled' : ''}>הבא ▶</button>
+        <button class="iv-btn iv-btn-link" data-act="trace-reset" title="קיצור: R">↺ אפס</button>
+      </div>
+      <div class="iv-trace-keys" dir="rtl">⌨ ניווט מקלדת: <kbd>←</kbd> קודם · <kbd>→</kbd> הבא · <kbd>R</kbd> אפס</div>
+    </div>`;
+}
+
+// ── Line-level diff (small inputs only) ──────────────────────────────
+// Returns { left: [{kind, num, text}], right: [...] } where `kind` is
+// one of 'same' | 'del' | 'add'. Aligns lines using an LCS DP; gaps
+// (one side has nothing) are rendered as blank rows so the two
+// columns stay row-aligned in the modal.
+function _lineDiff(a, b) {
+  const aLines = String(a || '').split('\n');
+  const bLines = String(b || '').split('\n');
+  const m = aLines.length, n = bLines.length;
+  // LCS DP table
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = (aLines[i - 1] === bLines[j - 1])
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  // Backtrack
+  const left = [], right = [];
+  let i = m, j = n;
+  const out = [];
+  while (i > 0 && j > 0) {
+    if (aLines[i - 1] === bLines[j - 1]) {
+      out.push({ kind: 'same', a: aLines[i - 1], b: bLines[j - 1], ai: i, bi: j });
+      i--; j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      out.push({ kind: 'del', a: aLines[i - 1], b: null, ai: i, bi: null });
+      i--;
+    } else {
+      out.push({ kind: 'add', a: null, b: bLines[j - 1], ai: null, bi: j });
+      j--;
+    }
+  }
+  while (i > 0) { out.push({ kind: 'del', a: aLines[i - 1], b: null, ai: i, bi: null }); i--; }
+  while (j > 0) { out.push({ kind: 'add', a: null, b: bLines[j - 1], ai: null, bi: j }); j--; }
+  out.reverse();
+  // Project to two parallel columns
+  for (const e of out) {
+    if (e.kind === 'same') {
+      left.push({ kind: 'same', num: e.ai, text: e.a });
+      right.push({ kind: 'same', num: e.bi, text: e.b });
+    } else if (e.kind === 'del') {
+      left.push({ kind: 'del', num: e.ai, text: e.a });
+      right.push({ kind: 'blank', num: '', text: '' });
+    } else {
+      left.push({ kind: 'blank', num: '', text: '' });
+      right.push({ kind: 'add', num: e.bi, text: e.b });
+    }
+  }
+  return { left, right };
+}
 
 function _hasGenericStarter() { return true; }
 
@@ -736,9 +1131,14 @@ function _renderRichText(s) {
   // that we restore at the end.
   const codeBlocks = [];
   const marker = (i) => `IVCODE${i}`;
+  // Wrap the marker in blank lines so the subsequent paragraph-split
+  // *always* puts the marker in its own block. Without this, when the
+  // author writes "**דוגמה:**\n```...```\n" (a label glued to the
+  // fence) the marker stays inside the label paragraph, the `^IVCODE…$`
+  // match fails, and `IVCODE0` leaks into the rendered output.
   const withMarkers = String(s).replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) => {
     codeBlocks.push({ lang: lang || '', code });
-    return marker(codeBlocks.length - 1);
+    return `\n\n${marker(codeBlocks.length - 1)}\n\n`;
   });
 
   return withMarkers.split(/\n\s*\n/).map(b => {

@@ -37,6 +37,46 @@ let _mouseCanvas = { x: 0, y: 0 };
 let _dragged = null;
 let _dragGhost = null;
 
+// Pre-loaded transparent 1x1 image used to suppress the browser's
+// native drag image. Creating it on dragstart is a race — the Image
+// object's src assignment is async, so when setDragImage() runs the
+// pixel data isn't decoded yet and the browser falls back to a
+// snapshot of the source chip element. That snapshot is anchored at
+// the original click point, so the chip appears offset from the
+// cursor by however far the user clicked from the chip's centre.
+// Loading it at module-init guarantees the image is ready.
+// Transparent drag image used to suppress the browser's native
+// snapshot. A 1x1 gif is *sometimes* honoured by Chromium and
+// sometimes ignored — when ignored the browser falls back to a
+// bitmap of the source chip, which appears at the cursor for a frame
+// before our ghost takes over (visible as a "flash" at the wrong
+// position, especially under `body { zoom }`). Using a larger
+// transparent PNG and a non-zero hotspot reliably wins the race.
+const _emptyDragImg = (() => {
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 32;
+  const img = new Image(32, 32);
+  img.src = c.toDataURL('image/png');
+  return img;
+})();
+
+// `body { zoom: 0.8 }` (see style.css) scales every laid-out pixel
+// inside body to 80%, including position:fixed descendants like the
+// drag ghost. `e.clientX/Y` are viewport (unscaled) pixels, so
+// assigning them raw to the ghost's `left`/`top` puts it at 0.8x the
+// cursor position — visibly drifting further from the cursor as you
+// move right/down. Divide by the body's effective zoom to compensate.
+function _bodyZoom() {
+  const z = parseFloat(getComputedStyle(document.body).zoom);
+  return z > 0 ? z : 1;
+}
+function _placeGhost(clientX, clientY) {
+  if (!_dragGhost) return;
+  const z = _bodyZoom();
+  _dragGhost.style.left = (clientX / z) + 'px';
+  _dragGhost.style.top  = (clientY / z) + 'px';
+}
+
 // Tool-to-component mapping
 // Simple placements (type only)
 const TOOL_TYPE_MAP = {
@@ -191,11 +231,21 @@ export function init(canvasEl, scene, stateManager, commandManager, selectionMan
 
   _canvas.addEventListener('dragover',   _onCanvasDragOver);
   _canvas.addEventListener('drop',       _onCanvasDrop);
-  document.addEventListener('drag', (e) => {
-    if (!_dragged || !e.clientX) return;
-    if (_dragGhost) {
-      _dragGhost.style.left = e.clientX + 'px';
-      _dragGhost.style.top = e.clientY + 'px';
+  // Track the cursor for the floating drag ghost via document-level
+  // `dragover`. The native `drag` event (fired from the source chip and
+  // bubbled to document) reports stale or shifted clientX/clientY on
+  // Chromium/Windows — that produced a visible ~150-200 px offset
+  // between the ghost and the actual cursor. `dragover` on document
+  // fires on every cursor move during a drag and reports reliable
+  // viewport coords on every browser, regardless of which element the
+  // cursor is currently over (palette / canvas / HUD).
+  document.addEventListener('dragover', (e) => {
+    if (!_dragged) return;
+    e.preventDefault();  // required to keep the drag operation alive
+    if (e.clientX) {
+      _placeGhost(e.clientX, e.clientY);
+      // Reveal here, not in dragstart — see _onChipDragStart.
+      if (_dragGhost) _dragGhost.classList.remove('hidden');
     }
   });
   _canvas.addEventListener('mousemove',  _onMouseMove);
@@ -657,16 +707,27 @@ function _onChipDragStart(e) {
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/plain', JSON.stringify(_dragged));
-    const emptyImg = new Image();
-    emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(emptyImg, 0, 0);
+    // Use the pre-decoded transparent image (declared at module-load
+    // time). Setting the drag image to an Image still loading would
+    // have the browser fall back to the source-element snapshot,
+    // anchored at the original click point — exactly the "component
+    // floats far from the cursor" symptom.
+    e.dataTransfer.setDragImage(_emptyDragImg, 16, 16);
   }
 
   if (_dragGhost) {
+    // Prepare content/styling but DO NOT remove the `hidden` class
+    // here. `clientX/Y` on the dragstart event (fired from the chip
+    // inside `body { zoom: 0.8 }`) sits in a different coordinate
+    // frame from `clientX/Y` on the document-level dragover events
+    // we use to track the cursor afterwards. Showing the ghost in
+    // dragstart therefore produced a one-frame flash at the wrong
+    // place before the first dragover snapped it under the cursor.
+    // The document-level dragover handler reveals the ghost on its
+    // first fire (see init()).
     _dragGhost.textContent = _dragged.value + (_dragged.kind === 'ff' ? '-FF' : '');
-    _dragGhost.className = _dragged.kind === 'ff' ? 'ff-ghost' : '';
-    _dragGhost.style.left = e.clientX + 'px';
-    _dragGhost.style.top = e.clientY + 'px';
+    const ghostClass = _dragged.kind === 'ff' ? 'ff-ghost' : '';
+    _dragGhost.className = ghostClass ? ghostClass + ' hidden' : 'hidden';
   }
   _canvas.style.cursor = 'copy';
 }
@@ -683,10 +744,7 @@ function _onCanvasDragOver(e) {
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
   _canvas.style.cursor = 'copy';
 
-  if (_dragGhost) {
-    _dragGhost.style.left = e.clientX + 'px';
-    _dragGhost.style.top = e.clientY + 'px';
-  }
+  _placeGhost(e.clientX, e.clientY);
 }
 
 function _onCanvasDrop(e) {
@@ -1131,6 +1189,16 @@ function _initKeyboard() {
 
 // ── Helpers ─────────────────────────────────────────────────
 function _getCanvasPoint(e) {
+  // The canvas's CSS display size (rect.width/height) can differ from
+  // its backing-store size (_canvas.width/height) — most notably here
+  // because `body { zoom: 0.8 }` shrinks every laid-out pixel to 80%.
+  // `e.clientX/Y` are viewport (post-zoom) CSS pixels, while internal
+  // drawing math uses backing-store pixels. Scaling by the ratio
+  // converts cursor coords into the canvas's own coordinate space, so
+  // the dropped component lands exactly under the cursor regardless
+  // of ancestor zoom/scale transforms.
   const rect = _canvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const sx = rect.width  ? _canvas.width  / rect.width  : 1;
+  const sy = rect.height ? _canvas.height / rect.height : 1;
+  return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
 }

@@ -13,6 +13,7 @@ import { QUESTIONS as verilog }      from '../../IQ/verilog/index.js';
 import { QUESTIONS as architecture } from '../../IQ/architecture/index.js';
 import { QUESTIONS as timingCdc }    from '../../IQ/timing-cdc/index.js';
 import { QUESTIONS as dft }          from '../../IQ/dft/index.js';
+import { QUESTIONS as algorithms }   from '../../IQ/algorithms/index.js';
 import { QUESTIONS as puzzles }      from '../../IQ/puzzles/index.js';
 
 /**
@@ -26,6 +27,7 @@ export const QUESTIONS_BY_TOPIC = {
   'architecture': architecture,
   'timing-cdc':   timingCdc,
   'dft':          dft,
+  'algorithms':   algorithms,
   'puzzles':      puzzles,
 };
 

@@ -10,55 +10,69 @@
  * the IQ subfolder name and as the active-tab key in panel state.
  */
 
+// Tabs are listed in *display order*. `tabNumber` is a separate, stable
+// identifier embedded in each question's 4-digit serial (see `serialFor`)
+// — DO NOT renumber existing tabs, or saved/printed serials become wrong.
+// New tabs take the next free integer.
 export const TOPICS = [
   {
     id: 'logic',
     tabNumber: 1,
-    label: 'Logic',
+    label: 'לוגיקה קומבינטורית',
     icon: '⊕',
-    description: 'Combinational logic, Boolean algebra, Karnaugh maps, MUX/DEMUX, decoders, encoders.',
+    description: 'אלגברה בוליאנית, מפות קרנו, MUX/DEMUX, מקודדים ומפענחים, סוגיות CMOS ברמת השער.',
   },
   {
     id: 'sequential',
     tabNumber: 2,
-    label: 'Sequential',
+    label: 'מעגלים סדרתיים',
     icon: '⏱',
-    description: 'Flip-flops, latches, FSMs (Mealy / Moore), counters, shift registers.',
+    description: 'Flip-flops, latches, מכונות מצב (Mealy / Moore), מונים, אוגרי הזזה, גלאי רצפים.',
   },
   {
     id: 'verilog',
     tabNumber: 3,
     label: 'Verilog',
     icon: '⌘',
-    description: 'Syntax, blocking vs non-blocking, race conditions, coding-style traps, synthesizable subset.',
+    description: 'תחביר, blocking מול non-blocking, מרוצי תזמון, מלכודות סגנון, תת-הקבוצה הסינתזבילית.',
   },
   {
     id: 'architecture',
     tabNumber: 4,
-    label: 'Architecture',
+    label: 'ארכיטקטורה',
     icon: '◉',
-    description: 'Pipelining, hazards, forwarding, branch prediction, cache, ISA design.',
+    description: 'Pipelining, hazards, forwarding, ניבוי הסתעפויות, מטמון, תכנון ISA.',
   },
   {
     id: 'timing-cdc',
     tabNumber: 5,
-    label: 'Timing & CDC',
+    label: 'תזמון ו-CDC',
     icon: '⏲',
-    description: 'Setup / hold, clock skew, metastability, synchronizers, clock-domain crossing.',
+    description: 'Setup / hold, clock skew, מטא-יציבות, סינכרונייזרים, מעבר בין תחומי שעון.',
   },
   {
     id: 'dft',
     tabNumber: 6,
-    label: 'DFT',
+    label: 'DFT וטסט',
     icon: '⌬',
-    description: 'Scan chains, BIST, JTAG, fault models, coverage.',
+    description: 'Scan chains, BIST, JTAG, מודלים של תקלות, fault coverage.',
+  },
+  {
+    // Display this tab AFTER puzzles in the catalogue UI, but keep its
+    // `tabNumber` higher than puzzles so the existing 7xxx serials of the
+    // puzzles topic remain stable. New algorithm questions get 8xxx.
+    id: 'algorithms',
+    tabNumber: 8,
+    label: 'קוד',
+    icon: '⌗',
+    description: 'שאלות תכנות אלגוריתמיות — מבני נתונים, מורכבות, פתרונות **בפייתון בלבד**.',
   },
   {
     id: 'puzzles',
     tabNumber: 7,
     label: 'חידות',
     icon: '★',
-    description: 'Brain teasers, math / logic puzzles often asked in technical interviews.',
+    description: 'חידות מתמטיקה/לוגיקה הנפוצות בראיונות טכניים.',
   },
 ];
 

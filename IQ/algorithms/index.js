@@ -1,0 +1,2168 @@
+// ─── Shared design system for trace visualizations ───────────────────
+// Every algorithm trace uses these tokens + defs so the panel feels
+// like one coherent product instead of N disconnected mini-demos.
+//
+//   • Cyan  (#39ff80 / #80d4ff)  → the "now" cell / current step
+//   • Gold  (#ffd060)            → the answer / eureka moment
+//   • Slate (#3a5575 / #142435)  → idle background
+//
+// `_traceDefs(uid)` returns an SVG <defs> + <style> block. Pass it a
+// unique id suffix so multiple instances on the same page never clash.
+// `_traceDefIds(uid)` returns the matching `url(#...)` strings as a
+// convenient dict for the caller.
+function _traceDefIds(uid) {
+  return {
+    idleGrad:    `url(#tr-idle-${uid})`,
+    curGrad:     `url(#tr-cur-${uid})`,
+    matchGrad:   `url(#tr-match-${uid})`,
+    chipGrad:    `url(#tr-chip-${uid})`,
+    bannerCyan:  `url(#tr-banner-c-${uid})`,
+    bannerGold:  `url(#tr-banner-g-${uid})`,
+    glowCyan:    `url(#tr-glow-c-${uid})`,
+    glowGold:    `url(#tr-glow-g-${uid})`,
+    arrowGold:   `url(#tr-arrow-g-${uid})`,
+    arrowCyan:   `url(#tr-arrow-c-${uid})`,
+    // animation names — apply via inline style="animation: <name> ...".
+    animPop:     `tr-pop-${uid}`,
+    animFade:    `tr-fade-${uid}`,
+    animDash:    `tr-dash-${uid}`,
+    animSlide:   `tr-slide-${uid}`,
+  };
+}
+function _traceDefs(uid) {
+  return `
+    <style>
+      @keyframes tr-pop-${uid}   { from { opacity:0; transform:translateY(-6px) scale(0.92); } to { opacity:1; transform:none; } }
+      @keyframes tr-fade-${uid}  { from { opacity:0; } to { opacity:1; } }
+      @keyframes tr-dash-${uid}  { to { stroke-dashoffset:-24; } }
+      @keyframes tr-slide-${uid} { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:none; } }
+    </style>
+    <defs>
+      <linearGradient id="tr-idle-${uid}"   x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#142435"/><stop offset="1" stop-color="#0a1828"/>
+      </linearGradient>
+      <linearGradient id="tr-cur-${uid}"    x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#163a26"/><stop offset="1" stop-color="#0e2418"/>
+      </linearGradient>
+      <linearGradient id="tr-match-${uid}"  x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3a2a10"/><stop offset="1" stop-color="#241808"/>
+      </linearGradient>
+      <linearGradient id="tr-chip-${uid}"   x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0e2820"/><stop offset="1" stop-color="#081a14"/>
+      </linearGradient>
+      <linearGradient id="tr-banner-c-${uid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0a2a40" stop-opacity="0.9"/><stop offset="1" stop-color="#06182a" stop-opacity="0.9"/>
+      </linearGradient>
+      <linearGradient id="tr-banner-g-${uid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2a1f08" stop-opacity="0.9"/><stop offset="1" stop-color="#181208" stop-opacity="0.9"/>
+      </linearGradient>
+      <filter id="tr-glow-c-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+        <feFlood flood-color="#39ff80" flood-opacity="0.6"/>
+        <feComposite in2="blur" operator="in" result="glow"/>
+        <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="tr-glow-g-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur"/>
+        <feFlood flood-color="#ffd060" flood-opacity="0.7"/>
+        <feComposite in2="blur" operator="in" result="glow"/>
+        <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <marker id="tr-arrow-g-${uid}" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffd060"/>
+      </marker>
+      <marker id="tr-arrow-c-${uid}" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff80"/>
+      </marker>
+    </defs>`;
+}
+function _traceUid() { return Math.random().toString(36).slice(2, 7); }
+
+// ─── Registers-table SVG (Multiply-ISA trace) ────────────────────────
+// Renders R0..R7 (or whichever subset we track) as a row of cards
+// with their current 4-bit values. Cards that *changed* this step
+// glow cyan and show a ±1 delta; cards that hold the answer at the
+// final step glow gold.
+//
+//   state    : { R1, R2, R3, R4, R5 } — current values
+//   changes  : { R3: +1, R1: -1, … } — what just changed (this step)
+//   instr    : the current instruction line shown as a code banner
+//   phase    : short label e.g. "outer-loop", "copy", "restore", "done"
+//   formula  : optional text shown at bottom (e.g. "R3 = a·b")
+//   done     : final step → gold theming on result register R3
+function _registersSvg({ state, changes = {}, instr, phase, formula, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 900;
+  const order = ['R1', 'R2', 'R3', 'R4', 'R5'];
+  const cardW = 150, cardH = 110, gap = 18;
+  const totalW = order.length * cardW + (order.length - 1) * gap;
+  const cardsLeft = (W - totalW) / 2;
+  const cardsY = 130;
+
+  // Per-register role colors — readers map intent at a glance.
+  const role = {
+    R1: { label: 'input a',  hue: '#80d4ff' },
+    R2: { label: 'counter',  hue: '#ff9a70' },
+    R3: { label: 'output',   hue: '#80f0a0' },
+    R4: { label: 'temp',     hue: '#c0a0e0' },
+    R5: { label: 'sentinel', hue: '#a0a0a0' },
+  };
+
+  const cards = order.map((reg, i) => {
+    const x = cardsLeft + i * (cardW + gap);
+    const v = state[reg] ?? 0;
+    const delta = changes[reg];
+    const isChanged = delta !== undefined;
+    const isAnswer  = done && reg === 'R3';
+    const stroke = isAnswer ? '#ffd060' : (isChanged ? '#39ff80' : '#3a5575');
+    const fill   = isAnswer ? D.matchGrad : (isChanged ? D.curGrad : D.idleGrad);
+    const filter = isAnswer ? `filter="${D.glowGold}"`
+                 : (isChanged ? `filter="${D.glowCyan}"` : '');
+    const valColor = isAnswer ? '#fff0c0' : (isChanged ? '#c8f8d0' : '#e8f0fa');
+    const roleColor = role[reg]?.hue || '#7090b0';
+
+    // 4-bit binary view, monospace under the decimal value.
+    const bin = (v & 0xF).toString(2).padStart(4, '0');
+
+    return `
+      <g style="animation: ${D.animPop} 320ms ${i * 60}ms both;">
+        <rect x="${x}" y="${cardsY}" width="${cardW}" height="${cardH}" rx="12"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isChanged || isAnswer ? 3 : 1.5}" ${filter}/>
+        <text x="${x + cardW / 2}" y="${cardsY + 24}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold"
+              fill="${roleColor}">${reg}</text>
+        <text x="${x + cardW / 2}" y="${cardsY + 42}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="10"
+              fill="#5a7090" letter-spacing="1">${role[reg]?.label || ''}</text>
+        <text x="${x + cardW / 2}" y="${cardsY + 78}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="36" font-weight="bold"
+              fill="${valColor}">${v}</text>
+        <text x="${x + cardW / 2}" y="${cardsY + 100}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#5a7090">${bin}</text>
+        ${isChanged ? `
+          <g>
+            <rect x="${x + cardW - 38}" y="${cardsY - 14}" width="46" height="26" rx="13"
+                  fill="${delta > 0 ? '#0a2018' : '#2a1010'}"
+                  stroke="${delta > 0 ? '#39ff80' : '#ff8060'}" stroke-width="2"
+                  filter="${D.glowCyan}"/>
+            <text x="${x + cardW - 15}" y="${cardsY + 3}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="14" font-weight="bold"
+                  fill="${delta > 0 ? '#80f0a0' : '#ff9a70'}">${delta > 0 ? '+' : ''}${delta}</text>
+          </g>` : ''}
+      </g>`;
+  }).join('');
+
+  // Instruction banner (top)
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="48" rx="10"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="44" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="20"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' : ''}${instr}
+      </text>
+    </g>`;
+
+  // Phase chip (below banner)
+  const phaseChip = phase ? `
+    <g style="animation: ${D.animFade} 300ms 100ms both;">
+      <rect x="${W/2 - 70}" y="74" width="140" height="28" rx="14"
+            fill="#0e1a2a" stroke="#3a5575" stroke-width="1"/>
+      <text x="${W/2}" y="93" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="14"
+            fill="#80a0c0" font-weight="bold" letter-spacing="2">phase: ${phase}</text>
+    </g>` : '';
+
+  // Formula at the bottom (final step or always when given)
+  const formulaY = cardsY + cardH + 50;
+  const formulaHtml = formula ? `
+    <g style="animation: ${D.animFade} 400ms 200ms both;">
+      <rect x="${W/2 - 240}" y="${formulaY - 28}" width="480" height="48" rx="10"
+            fill="${done ? D.matchGrad : D.chipGrad}"
+            stroke="${done ? '#ffd060' : '#2a4060'}" stroke-width="${done ? 2.4 : 1.4}"
+            ${done ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${W/2}" y="${formulaY + 4}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="20" font-weight="bold"
+            fill="${done ? '#ffd060' : '#a0c0e0'}">${formula}</text>
+    </g>` : '';
+
+  const H = formulaY + 40;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${phaseChip}
+    ${cards}
+    ${formulaHtml}
+  </svg>`;
+}
+
+// ─── Two-pointer in-place reverse SVG ────────────────────────────────
+// Single row of character cells with two labeled pointer arrows (i, j)
+// converging from the edges. The cells at i, j are highlighted; on a
+// "swap just happened" step, a curved swap arrow connects them. Done
+// frame flips to gold and the pointers meet at the center.
+function _twoPointerSvg({ state, i, j, swapped, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 64, CELL_H = 60;
+  const n = state.length;
+  const W = Math.max(640, n * CELL + 100);
+  const rowY = 130;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+
+  // Cells
+  const cells = [...state].map((ch, k) => {
+    const isI = k === i;
+    const isJ = k === j;
+    const hot = isI || isJ;
+    const stroke = hot ? (done ? '#ffd060' : '#39ff80') : '#3a5575';
+    const fill   = hot ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = hot ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    return `
+      <g style="animation: ${D.animPop} 260ms ${k * 35}ms both;">
+        <text x="${left + k * CELL + CELL / 2}" y="${rowY - 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#7090b0" font-weight="bold">[${k}]</text>
+        <rect x="${left + k * CELL}" y="${rowY}" width="${CELL - 6}" height="${CELL_H}" rx="8"
+              fill="${fill}" stroke="${stroke}" stroke-width="${hot ? 2.4 : 1.2}" ${filter}/>
+        <text x="${left + k * CELL + (CELL - 6) / 2}" y="${rowY + 42}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="32" font-weight="bold"
+              fill="${hot ? (done ? '#fff0c0' : '#c8f8d0') : '#e8f0fa'}">${ch}</text>
+      </g>`;
+  }).join('');
+
+  // Pointer labels (i above-left, j above-right of their cells)
+  const pointerColor = done ? '#ffd060' : '#80f0a0';
+  const pointer = (label, idx, yOff) => {
+    if (idx < 0 || idx >= n) return '';
+    const cx = left + idx * CELL + (CELL - 6) / 2;
+    return `
+      <g style="animation: ${D.animFade} 320ms 200ms both;">
+        <text x="${cx}" y="${rowY - 38}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="22"
+              fill="${pointerColor}" font-weight="bold">${label}</text>
+        <path d="M ${cx} ${rowY - 30} L ${cx - 6} ${rowY - 16} L ${cx + 6} ${rowY - 16} z"
+              fill="${pointerColor}"/>
+      </g>`;
+  };
+  // If pointers met (i === j), draw single combined arrow.
+  const pointers = (i === j)
+    ? pointer(`i = j = ${i}`, i, 0)
+    : pointer('i', i, 0) + pointer('j', j, 0);
+
+  // Swap connector arrow (only on a "swap-just-happened" frame).
+  let swap = '';
+  if (swapped && i !== j && i >= 0 && j >= 0 && i < n && j < n) {
+    const xi = left + i * CELL + (CELL - 6) / 2;
+    const xj = left + j * CELL + (CELL - 6) / 2;
+    const arcY = rowY + CELL_H + 36;
+    swap = `
+      <g style="animation: ${D.animFade} 480ms both;">
+        <path d="M ${xi} ${rowY + CELL_H + 4} C ${xi} ${arcY + 20}, ${xj} ${arcY + 20}, ${xj} ${rowY + CELL_H + 4}"
+              stroke="${done ? '#ffd060' : '#39ff80'}" stroke-width="2.5" fill="none"
+              stroke-dasharray="6 4"
+              filter="${done ? D.glowGold : D.glowCyan}"
+              style="animation: ${D.animDash} 1.2s linear infinite;"
+              marker-end="${done ? D.arrowGold : D.arrowCyan}"/>
+        <text x="${(xi + xj) / 2}" y="${arcY + 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="15"
+              fill="${done ? '#ffd060' : '#80f0a0'}" font-weight="bold">swap</text>
+      </g>`;
+  }
+
+  // Banner
+  const bannerText = done
+    ? 'pointers met — i ≥ j → done'
+    : (swapped ? `swap a[${i - 1}] ↔ a[${j + 1}], then i++, j--` : `compare a[${i}] and a[${j}]`);
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 260}" y="14" width="520" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + bannerText : bannerText}
+      </text>
+    </g>`;
+
+  const H = rowY + CELL_H + (swapped ? 80 : 40);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${pointers}
+    ${cells}
+    ${swap}
+  </svg>`;
+}
+
+// ─── Rate-limiter SVG — timeline + sliding window + deque ────────────
+// Visualization shows the *story* of one IP under the rate detector:
+//   • Time axis 0..tMax along the top, with tick marks per 10s.
+//   • Each request rendered as a dot above the axis, colored cyan
+//     when inside the current sliding window (60s), grey when expired.
+//   • A semi-transparent "window" rectangle from `now-60` to `now`
+//     makes the window slide visible across steps.
+//   • Below the axis: the deque — chips of timestamps currently held.
+//   • Right card: counter "X / 10", flips to gold + "SUSPECT" glow
+//     once the count crosses the threshold.
+//
+//   args:
+//     now      : current simulated time (seconds)
+//     requests : array of request timestamps SEEN SO FAR (including
+//                expired). The renderer figures out which are in the
+//                window itself.
+//     suspect  : sticky flag — once flipped, stays flipped (matches
+//                the algorithm's behaviour where a flagged IP is
+//                remembered even after the burst).
+//     subtitle : optional one-liner displayed under the banner
+function _rateLimiterSvg({ now, requests, suspect, subtitle, justArrived, justDropped, bannerOverride }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 900, H = 380;
+  const WINDOW = 60;
+  const THRESHOLD = 10;
+  const tMax = 100;
+  const axisLeft = 60, axisRight = W - 110, axisY = 175;
+  const pxPerSec = (axisRight - axisLeft) / tMax;
+  const xOf = (t) => axisLeft + t * pxPerSec;
+
+  const inWindow = requests.filter(t => t > now - WINDOW && t <= now);
+  const count = inWindow.length;
+  const overThreshold = count > THRESHOLD;
+  const isSuspect = suspect || overThreshold;
+  const banner = bannerOverride || (isSuspect ? 'SUSPECT  ⚠' : 'monitoring…');
+  // Whether to emphasise a specific event this step.
+  const arrivedSet = new Set(Array.isArray(justArrived) ? justArrived : (justArrived != null ? [justArrived] : []));
+  const droppedSet = new Set(Array.isArray(justDropped) ? justDropped : (justDropped != null ? [justDropped] : []));
+
+  // Window rectangle
+  const wLo = Math.max(0, now - WINDOW);
+  const wX  = xOf(wLo);
+  const wW  = xOf(now) - wX;
+  const windowRect = `
+    <rect x="${wX}" y="${axisY - 60}" width="${wW}" height="80" rx="6"
+          fill="${isSuspect ? D.matchGrad : D.curGrad}"
+          stroke="${isSuspect ? '#ffd060' : '#39ff80'}" stroke-width="1.6"
+          opacity="0.55"
+          filter="${isSuspect ? D.glowGold : D.glowCyan}"
+          style="animation: ${D.animFade} 320ms both;"/>
+    <text x="${wX + wW / 2}" y="${axisY - 66}" text-anchor="middle"
+          font-family="'JetBrains Mono', monospace" font-size="13"
+          fill="${isSuspect ? '#ffd060' : '#80f0a0'}" font-weight="bold">
+      sliding window (${WINDOW}s)
+    </text>`;
+
+  // Axis line + ticks every 10s
+  const ticks = [];
+  for (let t = 0; t <= tMax; t += 10) {
+    const x = xOf(t);
+    ticks.push(`
+      <line x1="${x}" y1="${axisY}" x2="${x}" y2="${axisY + 5}" stroke="#4a6080" stroke-width="1"/>
+      <text x="${x}" y="${axisY + 22}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="12"
+            fill="#7090b0">${t}s</text>`);
+  }
+  const axisLine = `<line x1="${axisLeft}" y1="${axisY}" x2="${axisRight}" y2="${axisY}" stroke="#4a6080" stroke-width="2"/>`;
+  const nowMarker = `
+    <g style="animation: ${D.animFade} 280ms both;">
+      <line x1="${xOf(now)}" y1="${axisY - 70}" x2="${xOf(now)}" y2="${axisY + 30}"
+            stroke="${isSuspect ? '#ffd060' : '#39ff80'}" stroke-width="2.5" stroke-dasharray="4 3"/>
+      <text x="${xOf(now)}" y="${axisY + 44}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="14"
+            fill="${isSuspect ? '#ffd060' : '#80f0a0'}" font-weight="bold">now=${now}s</text>
+    </g>`;
+
+  // Request dots — include dropped ones too so the user sees them fade.
+  const allTimestamps = Array.from(new Set([...requests, ...droppedSet])).sort((a, b) => a - b);
+  const dots = allTimestamps.map((t, i) => {
+    const inside  = t > now - WINDOW && t <= now;
+    const arrived = arrivedSet.has(t);
+    const dropped = droppedSet.has(t);
+    const x = xOf(t);
+    let r = 6, color = '#4a5a70', filterAttr = '', extra = '';
+    if (arrived) {
+      r = 10;
+      color = '#ffd060';
+      filterAttr = `filter="${D.glowGold}"`;
+      // Pulsing aura for the newcomer
+      extra = `<circle cx="${x}" cy="${axisY - 24}" r="14" fill="none"
+                       stroke="#ffd060" stroke-width="2" opacity="0.6"
+                       style="animation: ${D.animFade} 600ms both;"/>
+               <text x="${x}" y="${axisY - 46}" text-anchor="middle"
+                     font-family="'JetBrains Mono', monospace" font-size="13"
+                     fill="#ffd060" font-weight="bold">+req</text>`;
+    } else if (dropped) {
+      r = 6;
+      color = '#5a3030';
+      extra = `<line x1="${x - 7}" y1="${axisY - 27}" x2="${x + 7}" y2="${axisY - 13}"
+                     stroke="#a05050" stroke-width="2"/>
+               <text x="${x}" y="${axisY - 36}" text-anchor="middle"
+                     font-family="'JetBrains Mono', monospace" font-size="11"
+                     fill="#a05050">expired</text>`;
+    } else if (inside) {
+      color = isSuspect ? '#ffd060' : '#80f0a0';
+      filterAttr = `filter="${isSuspect ? D.glowGold : D.glowCyan}"`;
+    }
+    return `
+      <g style="animation: ${D.animPop} 220ms ${i * 12}ms both;">
+        <circle cx="${x}" cy="${axisY - 24}" r="${r}" fill="${color}"
+                stroke="#0a1828" stroke-width="1.5" ${filterAttr}/>
+        ${extra}
+      </g>`;
+  }).join('');
+
+  // ── DICT STATE block ──────────────────────────────────────────────
+  // Renders the python data structures the algorithm actually keeps:
+  //   history: dict[ip → deque[timestamps]]
+  //   suspicious: set[ip]
+  // The block visually mimics a code snippet, so the user sees the
+  // exact state of memory at every step (not just the timeline).
+  const dictY = 245;
+  const blockX = 40, blockW = W - 80;
+  const ipKey = '"192.168.1.1"';
+
+  // History dict header
+  const historyHeader = `
+    <text x="${blockX + 14}" y="${dictY + 24}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#80c0e0" font-weight="bold">history =</text>
+    <text x="${blockX + 14 + 100}" y="${dictY + 24}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#a0c8e0">{</text>
+    <text x="${blockX + 14 + 116}" y="${dictY + 24}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#ffb060" font-weight="bold">${ipKey}</text>
+    <text x="${blockX + 14 + 116 + 150}" y="${dictY + 24}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#a0c8e0">: deque[</text>`;
+
+  // Chips for the deque values — placed on a second line.
+  const chipsY = dictY + 42;
+  const chipsLeft = blockX + 14;
+  const availW = blockW - 28 - 40; // leave space for trailing ']'
+  const chipW = Math.max(38, Math.min(70, availW / Math.max(1, inWindow.length)));
+  // Each chip carries its **deque index** above and its **age**
+  // (now - t) below. Indices visibly shift down whenever a popleft
+  // expires the head — exactly what the user needs to see.
+  const chipsHtml = inWindow.length === 0
+    ? `<text x="${chipsLeft}" y="${chipsY + 26}" font-family="'JetBrains Mono', monospace"
+            font-size="16" fill="#5a7090" font-style="italic">(empty)</text>`
+    : inWindow.map((t, i) => {
+        const x = chipsLeft + i * (chipW + 4);
+        const isNew = arrivedSet.has(t);
+        const isHead = i === 0;            // oldest — the popleft candidate
+        const isTail = i === inWindow.length - 1;
+        const stroke = isNew ? '#ffd060' : (isSuspect ? '#ffd060' : '#39ff80');
+        const filter = (isNew || isSuspect) ? `filter="${D.glowGold}"` : '';
+        const age = now - t;
+        return `
+          <g style="animation: ${D.animSlide} 280ms ${i * 35}ms both;">
+            <text x="${x + chipW / 2}" y="${chipsY - 6}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="11"
+                  fill="${isNew ? '#ffd060' : '#7090b0'}" font-weight="bold">
+              ${isNew ? 'NEW' : `[${i}]`}
+            </text>
+            <rect x="${x}" y="${chipsY}" width="${chipW}" height="40" rx="6"
+                  fill="${isNew ? D.matchGrad : D.chipGrad}" stroke="${stroke}" stroke-width="${isNew ? 2.8 : 1.6}"
+                  ${filter}/>
+            <text x="${x + chipW / 2}" y="${chipsY + 26}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="16" font-weight="bold"
+                  fill="${isNew ? '#fff0c0' : (isSuspect ? '#fff0c0' : '#a8e0b8')}">${t}s</text>
+            <text x="${x + chipW / 2}" y="${chipsY + 53}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="10"
+                  fill="#6a8090">age ${age}s</text>
+            ${isHead && !isNew ? `<text x="${x + chipW / 2}" y="${chipsY + 67}" text-anchor="middle"
+                                         font-family="'JetBrains Mono', monospace" font-size="10"
+                                         fill="#80c0a0" font-weight="bold">← head</text>` : ''}
+            ${isTail && !isNew && inWindow.length > 1 ? `<text x="${x + chipW / 2}" y="${chipsY + 67}" text-anchor="middle"
+                                                              font-family="'JetBrains Mono', monospace" font-size="10"
+                                                              fill="#80c0a0" font-weight="bold">tail →</text>` : ''}
+          </g>`;
+      }).join('');
+
+  // Closing bracket + summary on the line below — now includes the
+  // explicit window cut-off so users can see WHY entries expire.
+  const cutoff = Math.max(0, now - WINDOW);
+  const summaryY = chipsY + 84;
+  const summaryHtml = `
+    <text x="${chipsLeft}" y="${summaryY}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#a0c8e0">] }
+      <tspan fill="#5a7090"># window = (${cutoff}s, ${now}s]   →   ${count} entr${count === 1 ? 'y' : 'ies'}${inWindow.length ? `, oldest=${inWindow[0]}s, newest=${inWindow[inWindow.length-1]}s` : ''}</tspan>
+    </text>`;
+
+  // Just-dropped notes — small grey strikethrough chips for the drops.
+  const dropsY = summaryY + 26;
+  const drops = droppedSet.size > 0
+    ? `<g style="animation: ${D.animFade} 360ms both;">
+         <text x="${chipsLeft}" y="${dropsY}" font-family="'JetBrains Mono', monospace"
+               font-size="13" fill="#a05050">expired this step:
+           <tspan fill="#a05050" font-weight="bold"> [${Array.from(droppedSet).map(t => `${t}s`).join(', ')}]</tspan>
+         </text>
+       </g>`
+    : '';
+
+  // Suspicious set (second data structure)
+  const susY = summaryY + (droppedSet.size > 0 ? 50 : 26);
+  const susHtml = `
+    <text x="${chipsLeft}" y="${susY}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#80c0e0" font-weight="bold">suspicious =</text>
+    <text x="${chipsLeft + 118}" y="${susY}" font-family="'JetBrains Mono', monospace"
+          font-size="15" fill="#a0c8e0">{${isSuspect ? '' : ' '}</text>
+    ${isSuspect ? `
+      <g style="animation: ${D.animPop} 360ms both;">
+        <rect x="${chipsLeft + 132}" y="${susY - 16}" width="170" height="22" rx="11"
+              fill="${D.matchGrad}" stroke="#ffd060" stroke-width="1.6"
+              filter="${D.glowGold}"/>
+        <text x="${chipsLeft + 217}" y="${susY}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13" font-weight="bold"
+              fill="#fff0c0">${ipKey}</text>
+      </g>
+      <text x="${chipsLeft + 312}" y="${susY}" font-family="'JetBrains Mono', monospace"
+            font-size="15" fill="#a0c8e0"> }</text>
+    ` : `
+      <text x="${chipsLeft + 134}" y="${susY}" font-family="'JetBrains Mono', monospace"
+            font-size="15" fill="#5a7090">}  <tspan font-style="italic">(empty)</tspan></text>
+    `}`;
+
+  // The block frame around the dict state
+  const blockH = (susY + 22) - (dictY) + 10;
+  const dictBlock = `
+    <rect x="${blockX}" y="${dictY - 4}" width="${blockW}" height="${blockH}" rx="10"
+          fill="#06121e" stroke="#1e3850" stroke-width="1.5"
+          style="animation: ${D.animFade} 320ms both;"/>
+    <text x="${blockX + 14}" y="${dictY - 12}" font-family="'JetBrains Mono', monospace"
+          font-size="13" fill="#7090b0" font-weight="bold" letter-spacing="2">DICT STATE</text>`;
+
+  // Counter card — moved to under the timeline area now so it doesn't
+  // collide with the bigger dict block below. Right-aligned, small.
+  const cardX = W - 150, cardY = 95;
+  const counterCard = `
+    <g style="animation: ${D.animFade} 320ms both;">
+      <rect x="${cardX}" y="${cardY}" width="120" height="58" rx="8"
+            fill="${isSuspect ? D.matchGrad : D.idleGrad}"
+            stroke="${isSuspect ? '#ffd060' : '#3a5575'}" stroke-width="${isSuspect ? 3 : 1.5}"
+            ${isSuspect ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${cardX + 60}" y="${cardY + 18}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="12"
+            fill="${isSuspect ? '#ffd060' : '#80a0c0'}" font-weight="bold" letter-spacing="2">COUNT</text>
+      <text x="${cardX + 60}" y="${cardY + 47}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="24" font-weight="bold"
+            fill="${overThreshold ? '#ffd060' : (isSuspect ? '#ffd060' : '#80f0a0')}">${count} / ${THRESHOLD}</text>
+    </g>`;
+
+  // Top banner
+  const bannerHtml = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 180}" y="14" width="360" height="42" rx="21"
+            fill="${isSuspect ? D.bannerGold : D.bannerCyan}"
+            stroke="${isSuspect ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${isSuspect ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="19"
+            fill="${isSuspect ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${banner}
+      </text>
+    </g>`;
+  const sub = subtitle ? `
+    <text x="${W/2}" y="80" text-anchor="middle"
+          font-family="'JetBrains Mono', monospace" font-size="14"
+          fill="#80a0c0" font-style="italic">${subtitle}</text>` : '';
+
+  // Total SVG height grows with the dict block.
+  const finalH = susY + 40;
+  return `<svg viewBox="0 0 ${W} ${finalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${bannerHtml}
+    ${sub}
+    ${counterCard}
+    ${windowRect}
+    ${axisLine}
+    ${ticks.join('')}
+    ${dots}
+    ${nowMarker}
+    ${dictBlock}
+    ${historyHeader}
+    ${chipsHtml}
+    ${summaryHtml}
+    ${drops}
+    ${susHtml}
+  </svg>`;
+}
+
+// ─── Reverse-sentence SVG — character row with slice highlight ───────
+// Two-row layout: top = state BEFORE this step's operation, bottom =
+// state AFTER. The slice that just got reversed is highlighted in
+// cyan (or gold on the final step). Vertical "swap" arrows under the
+// highlighted slice make the reversal visually obvious.
+//
+//   args:
+//     after     : the string AFTER this step (always shown)
+//     before    : the string BEFORE this step (omit for the initial
+//                 frame where there is no prior state)
+//     hlLo, hlHi: range [hlLo, hlHi) within the row that was reversed
+//                 — bottom row highlight + connecting swap arrows.
+//     opLabel   : short banner text describing the op
+//     done      : true on the final "fixed!" frame → gold theming
+function _reverseSentenceSvg({ before, after, hlLo, hlHi, opLabel, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 30, CELL_H = 40;
+  const n = after.length;
+  const W = Math.max(900, n * CELL + 80);
+  const rowsTop = before ? 90 : 130;
+  const rowGap = 90;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+
+  const renderRow = (s, y, hi) => {
+    return [...s].map((ch, i) => {
+      const isSpace = ch === ' ';
+      const isHl = hi && i >= hlLo && i < hlHi;
+      const stroke = isHl ? (done ? '#ffd060' : '#39ff80') : (isSpace ? '#2a4060' : '#3a5575');
+      const fill   = isHl ? (done ? D.matchGrad : D.curGrad) : (isSpace ? '#0a1320' : D.idleGrad);
+      const filter = isHl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+      const txtFill = isHl ? (done ? '#fff0c0' : '#c8f8d0') : (isSpace ? '#3a5575' : '#e8f0fa');
+      return `
+        <g style="animation: ${D.animPop} 260ms ${i * 18}ms both;">
+          <rect x="${left + i * CELL}" y="${y}" width="${CELL - 3}" height="${CELL_H}" rx="5"
+                fill="${fill}" stroke="${stroke}" stroke-width="${isHl ? 2.4 : 1}" ${filter}/>
+          <text x="${left + i * CELL + (CELL - 3) / 2}" y="${y + 27}" text-anchor="middle"
+                font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold"
+                fill="${txtFill}">${isSpace ? '·' : ch}</text>
+        </g>`;
+    }).join('');
+  };
+
+  // Swap arrows: i-th cell of the slice ↔ (mirror) cell. Only draw a
+  // few on hover-style arrows (first ↔ last, mid-pair, etc.) to keep
+  // the view legible.
+  let swapArrows = '';
+  if (before && hlHi > hlLo) {
+    const sliceLen = hlHi - hlLo;
+    const numPairs = Math.min(sliceLen / 2, 4);   // cap visible arrows
+    const pairs = [];
+    for (let p = 0; p < Math.floor(sliceLen / 2); p++) {
+      const a = hlLo + p;
+      const b = hlHi - 1 - p;
+      if (a >= b) break;
+      pairs.push([a, b]);
+    }
+    // Pick evenly-spaced pairs so we don't render too many arrows.
+    const step = Math.max(1, Math.floor(pairs.length / numPairs));
+    const picked = pairs.filter((_, idx) => idx % step === 0).slice(0, numPairs);
+    const topY    = rowsTop + CELL_H;
+    const botY    = rowsTop + rowGap;
+    const midY    = (topY + botY) / 2;
+    swapArrows = picked.map(([a, b], pi) => {
+      const xa = left + a * CELL + (CELL - 3) / 2;
+      const xb = left + b * CELL + (CELL - 3) / 2;
+      return `
+        <g style="animation: ${D.animFade} 400ms ${200 + pi * 80}ms both;">
+          <path d="M ${xa} ${topY + 4} C ${xa} ${midY}, ${xb} ${midY}, ${xb} ${botY - 6}"
+                stroke="#39ff80" stroke-width="2" fill="none" opacity="0.65"
+                marker-end="${D.arrowCyan}"
+                stroke-dasharray="6 3"/>
+          <path d="M ${xb} ${topY + 4} C ${xb} ${midY}, ${xa} ${midY}, ${xa} ${botY - 6}"
+                stroke="#39ff80" stroke-width="2" fill="none" opacity="0.65"
+                marker-end="${D.arrowCyan}"
+                stroke-dasharray="6 3"/>
+        </g>`;
+    }).join('');
+  }
+
+  const beforeLabel = before ? `
+    <text x="${left - 14}" y="${rowsTop + 26}" text-anchor="end"
+          font-family="'JetBrains Mono', monospace" font-size="14"
+          fill="#80a0c0" font-weight="bold">לפני</text>` : '';
+  const afterLabel = `
+    <text x="${left - 14}" y="${(before ? rowsTop + rowGap : rowsTop) + 26}" text-anchor="end"
+          font-family="'JetBrains Mono', monospace" font-size="14"
+          fill="${done ? '#ffd060' : '#80f0a0'}" font-weight="bold">${done ? 'תוקן' : 'אחרי'}</text>`;
+
+  // Header banner
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 220}" y="10" width="440" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="38" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="19"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + opLabel : opLabel}
+      </text>
+    </g>`;
+
+  const H = (before ? rowsTop + rowGap : rowsTop) + CELL_H + 30;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${beforeLabel}
+    ${afterLabel}
+    ${before ? renderRow(before, rowsTop, false) : ''}
+    ${swapArrows}
+    ${renderRow(after, before ? rowsTop + rowGap : rowsTop, true)}
+  </svg>`;
+}
+
+// ─── Powerset SVG — binary decision tree growing step-by-step ────────
+// arr: the input array (small — kept ≤ 3 for visual clarity).
+// activeNodes: array of node-ids (strings like "" / "0" / "01") that
+//              have been DECIDED at this step. The leaves whose path
+//              is in activeNodes are accumulated into the result list.
+// highlightId: which node is being "decided right now" (current edge).
+// `done` (boolean): final step — all leaves resolved, show full result.
+function _powersetTreeSvg(arr, activeIds, highlightId, done) {
+  const n = arr.length;
+  // Wider viewBox so the auto-layout has room for leaves with longer
+  // labels and the bigger fonts below.
+  const W = 900, H = 440;
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+
+  // Layout: tree at top (rows 0..n), legend & accumulator at bottom.
+  const treeTop = 60;
+  const rowH = 78;
+  const leafY = treeTop + n * rowH;
+
+  // Compute x of every node by its id (root="", left="0", right="1", "00","01"...).
+  // Width allocated to a depth-d node = W / 2^d (shrinks geometrically).
+  function xOf(id) {
+    const depth = id.length;
+    const slot = parseInt(id || '0', 2) || 0;     // bits as integer
+    const denom = 1 << depth;                      // 2^depth slots at this level
+    const slotW = W / denom;
+    return slotW * slot + slotW / 2;
+  }
+
+  // Build all node ids reachable up to depth n. Root is the empty
+  // string ''; left child = id + '0' (skip), right child = id + '1'
+  // (include). padStart gives the canonical depth-d binary string —
+  // earlier attempts collapsed "000" to "0" via a stray regex.
+  const allNodes = [''];
+  for (let d = 1; d <= n; d++) {
+    for (let k = 0; k < (1 << d); k++) {
+      allNodes.push(k.toString(2).padStart(d, '0'));
+    }
+  }
+
+  // Edges: parent → child. A child id is parent + '0' or '1'.
+  const edges = [];
+  for (const id of allNodes) {
+    if (id.length === n) continue;
+    edges.push({ from: id, to: id + '0', bit: '0' });
+    edges.push({ from: id, to: id + '1', bit: '1' });
+  }
+
+  const isActive = (id) => activeIds.includes(id);
+  const isHighlight = (id) => id === highlightId;
+
+  // Gradual growth: don't draw idle nodes/edges at all until they
+  // become active. Only the active set is rendered each step — the
+  // tree "grows" naturally as activeIds expands across steps.
+  const drawnNodeIds = new Set(activeIds.concat(highlightId ? [highlightId] : []));
+  const drawnEdges = edges.filter(e => drawnNodeIds.has(e.to));
+
+  // Render edges (only those whose child is in the active set this step)
+  const edgesHtml = drawnEdges.map(e => {
+    const x1 = xOf(e.from), x2 = xOf(e.to);
+    const y1 = treeTop + e.from.length * rowH;
+    const y2 = treeTop + e.to.length * rowH;
+    const active = isActive(e.to);
+    const hl = isHighlight(e.to);
+    const color = hl ? '#ffd060' : (active ? '#39ff80' : '#2a4060');
+    const w = hl ? 3 : (active ? 2 : 1.2);
+    const filter = hl ? `filter="${D.glowGold}"` : '';
+    return `
+      <g style="animation: ${D.animFade} 280ms ${e.to.length * 80}ms both;">
+        <line x1="${x1}" y1="${y1 + 18}" x2="${x2}" y2="${y2 - 22}"
+              stroke="${color}" stroke-width="${Math.max(w, 1.6)}" ${filter}/>
+        <rect x="${(x1 + x2) / 2 - 22}" y="${(y1 + y2) / 2 - 12}" width="44" height="22" rx="11"
+              fill="#0a1828" stroke="${e.bit === '1' ? '#39ff80' : '#3a5575'}" stroke-width="1"
+              opacity="0.92"/>
+        <text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 + 4}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="17"
+              fill="${e.bit === '1' ? '#80f0a0' : '#a0b8d0'}" font-weight="bold">
+          ${e.bit === '1' ? `+${arr[e.from.length]}` : '−'}
+        </text>
+      </g>`;
+  }).join('');
+
+  // Render only the nodes that have been visited / are highlighted.
+  const nodesHtml = allNodes.filter(id => drawnNodeIds.has(id)).map(id => {
+    const x = xOf(id);
+    const y = treeTop + id.length * rowH;
+    const active = isActive(id);
+    const hl = isHighlight(id);
+    const isLeaf = id.length === n;
+
+    // Subset content at this node = bits of id used as inclusion mask of arr.
+    const subset = id.split('').map((b, i) => b === '1' ? arr[i] : null).filter(v => v !== null);
+    const label = isLeaf
+      ? `[${subset.join(',')}]`
+      : (id === '' ? '∅' : `(${subset.join(',') || '−'})`);
+
+    const stroke = hl ? '#ffd060' : (active ? '#39ff80' : '#2a4060');
+    const fill   = hl ? D.matchGrad : (active ? D.curGrad : D.idleGrad);
+    const filter = hl ? `filter="${D.glowGold}"` : (active ? `filter="${D.glowCyan}"` : '');
+    const fontSize = isLeaf ? 18 : 17;
+    const tw = Math.max(56, label.length * fontSize * 0.62 + 22);
+    const th = 34;
+
+    return `
+      <g style="animation: ${D.animPop} 300ms ${id.length * 100}ms both;">
+        <rect x="${x - tw / 2}" y="${y - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"
+              fill="${fill}" stroke="${stroke}" stroke-width="${hl || active ? 2.2 : 1.2}" ${filter}/>
+        <text x="${x}" y="${y + 6}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="${fontSize}" font-weight="bold"
+              fill="${hl ? '#fff0c0' : (active ? '#c8f8d0' : '#90a8c0')}">${label}</text>
+      </g>`;
+  }).join('');
+
+  // Bottom accumulator: list of resolved leaves (subsets).
+  const resolvedLeaves = activeIds.filter(id => id.length === n);
+  const accY = leafY + 70;
+  const accLabel = `<text x="${W / 2}" y="${accY - 10}" text-anchor="middle"
+                          font-family="'JetBrains Mono', monospace" font-size="19"
+                          fill="#a0c0e0" font-weight="bold" letter-spacing="2">
+                       SUBSETS COLLECTED  (${resolvedLeaves.length} / ${1 << n})
+                    </text>`;
+  const chipW = Math.min(130, (W - 40) / Math.max(1, resolvedLeaves.length));
+  const chipsLeft = (W - resolvedLeaves.length * chipW) / 2;
+  const chips = resolvedLeaves.map((id, i) => {
+    const subset = id.split('').map((b, k) => b === '1' ? arr[k] : null).filter(v => v !== null);
+    const txt = `[${subset.join(',')}]`;
+    return `
+      <g style="animation: ${D.animSlide} 260ms ${i * 50}ms both;">
+        <rect x="${chipsLeft + i * chipW}" y="${accY + 8}" width="${chipW - 10}" height="44" rx="8"
+              fill="${D.chipGrad}" stroke="#39ff80" stroke-width="1.8"/>
+        <text x="${chipsLeft + i * chipW + (chipW - 10) / 2}" y="${accY + 37}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="20" font-weight="bold"
+              fill="#a8e0b8">${txt}</text>
+      </g>`;
+  }).join('');
+
+  // Header banner
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 180}" y="8" width="360" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="36" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="20"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? `✓ DONE — 2^${n} = ${1 << n} subsets` : `Decision tree — depth ${n}`}
+      </text>
+    </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${accY + 70}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${edgesHtml}
+    ${nodesHtml}
+    ${accLabel}
+    ${chips}
+  </svg>`;
+}
+
+// ─── Trace-vizualisation helpers ──────────────────────────────────────
+// Renders an SVG snapshot for a single step of the Two-Sum algorithm.
+// Visual layers:
+//   • <defs> — gradients (cell fill, found glow), filters (drop-shadow,
+//             glow halo), arrow marker. Defined once so all elements
+//             share the same look.
+//   • Array row — top, with [index] above each cell. Current cell has
+//                 a cyan glow; the matched cell on FOUND has a gold glow.
+//   • need label — top center; flips from cyan→gold on FOUND.
+//   • Hash table — bottom, key=value pairs as rounded chips, growing
+//                  left-to-right in insertion order. Matched chip glows.
+//   • Connector — only on FOUND. Curved gold arrow from current cell
+//                 down to the matched chip — the "this is your match"
+//                 reveal.
+// Animation: a unique <style> block per render adds CSS keyframes that
+// fade/scale-in the cells when the SVG mounts. Since CodeMirror swaps
+// the SVG element entirely between steps, "remount" is effectively
+// "play the entry animation", giving the illusion of a transition.
+function _twoSumSvg(arr, cur, seen, need, found, matchIdx) {
+  const W = 720, H = 320, CELL = 78;
+  const arrLeft = (W - arr.length * CELL) / 2;
+  const arrY = 80;
+  const seenY = 220;
+
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+
+  const cells = arr.map((v, i) => {
+    const x = arrLeft + i * CELL;
+    const isCur   = i === cur;
+    const isMatch = found && i === matchIdx;
+    const stroke  = isCur ? '#39ff80' : (isMatch ? '#ffd060' : '#3a5575');
+    const fill    = isCur ? D.curGrad : (isMatch ? D.matchGrad : D.idleGrad);
+    const filter  = isCur ? `filter="${D.glowCyan}"` : (isMatch ? `filter="${D.glowGold}"` : '');
+    return `
+      <g style="animation: ${D.animPop} 360ms ${i * 40}ms both;">
+        <text x="${x + (CELL - 10) / 2}" y="${arrY - 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="14"
+              fill="#7090b0" font-weight="bold">[${i}]</text>
+        <rect x="${x}" y="${arrY}" width="${CELL - 10}" height="60" rx="8"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isCur || isMatch ? 3 : 1.5}" ${filter}/>
+        <text x="${x + (CELL - 10) / 2}" y="${arrY + 38}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+              fill="#e8f0fa">${v}</text>
+      </g>`;
+  }).join('');
+
+  const seenKeys = Object.keys(seen);
+  const seenW = 110;
+  const seenLeft = (W - seenKeys.length * seenW) / 2;
+  const seenRow = seenKeys.length === 0
+    ? `<text x="${W / 2}" y="${seenY + 38}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="#5a7090" font-style="italic"
+            style="animation: ${D.animFade} 260ms both;">
+         seen = { }
+       </text>`
+    : seenKeys.map((k, i) => {
+        const x = seenLeft + i * seenW;
+        const isMatch = found && Number(k) === Number(arr[matchIdx]);
+        const stroke  = isMatch ? '#ffd060' : '#3a5575';
+        const fill    = isMatch ? D.matchGrad : D.chipGrad;
+        const filter  = isMatch ? `filter="${D.glowGold}"` : '';
+        return `
+          <g style="animation: ${D.animPop} 320ms ${i * 60}ms both;">
+            <rect x="${x}" y="${seenY}" width="${seenW - 12}" height="56" rx="10"
+                  fill="${fill}" stroke="${stroke}" stroke-width="${isMatch ? 3 : 1.5}" ${filter}/>
+            <text x="${x + (seenW - 12) / 2}" y="${seenY + 28}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="19" font-weight="bold"
+                  fill="${isMatch ? '#fff0c0' : '#a8e0b8'}">${k} → ${seen[k]}</text>
+            <text x="${x + (seenW - 12) / 2}" y="${seenY + 46}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="11"
+                  fill="${isMatch ? '#c0a060' : '#5a7090'}">val → idx</text>
+          </g>`;
+      }).join('');
+
+  const seenLabel = `<text x="${W / 2}" y="${seenY - 12}" text-anchor="middle"
+                           font-family="'JetBrains Mono', monospace" font-size="16"
+                           fill="#80a0c0" font-weight="bold" letter-spacing="2">SEEN (hash map)</text>`;
+
+  const needFill = found ? '#ffd060' : '#80d4ff';
+  const needBg   = found ? D.bannerGold : D.bannerCyan;
+  const needLabel = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 120}" y="10" width="240" height="38" rx="19"
+            fill="${needBg}" stroke="${needFill}" stroke-width="2"
+            filter="${found ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="35" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="20"
+            fill="${needFill}" font-weight="bold" letter-spacing="1">
+        ${found ? `✓  FOUND  need = ${need}` : `need = ${need}`}
+      </text>
+    </g>`;
+
+  let connector = '';
+  if (found && matchIdx != null) {
+    const curX = arrLeft + cur * CELL + (CELL - 10) / 2;
+    const curBottom = arrY + 60;
+    const matchKey = arr[matchIdx];
+    const chipIdx = seenKeys.findIndex(k => Number(k) === Number(matchKey));
+    if (chipIdx >= 0) {
+      const chipX = seenLeft + chipIdx * seenW + (seenW - 12) / 2;
+      const chipTop = seenY;
+      const midY = (curBottom + chipTop) / 2;
+      connector = `
+        <path d="M ${curX} ${curBottom} C ${curX} ${midY}, ${chipX} ${midY}, ${chipX} ${chipTop - 4}"
+              stroke="#ffd060" stroke-width="3" fill="none"
+              marker-end="${D.arrowGold}"
+              filter="${D.glowGold}"
+              stroke-dasharray="8 4"
+              style="animation: ${D.animDash} 1.2s linear infinite;"/>
+        <text x="${(curX + chipX) / 2}" y="${midY - 6}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="14"
+              fill="#ffd060" font-weight="bold"
+              style="animation: ${D.animFade} 600ms 300ms both;">
+          match!
+        </text>`;
+    }
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${needLabel}
+    ${cells}
+    ${seenLabel}
+    ${seenRow}
+    ${connector}
+  </svg>`;
+}
+
+/**
+ * IQ — algorithms questions.
+ * Algorithmic / programming interview questions. Solutions are written
+ * in **Python only** (pseudo-code as a fallback when language is not
+ * the point) — by deliberate scope choice. Keep new questions
+ * consistent.
+ */
+
+export const QUESTIONS = [
+  // ───────────────────────────────────────────────────────────────
+  // #8001 — All subsets / powerset
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'subsets-powerset',
+    difficulty: 'medium',
+    title: 'כל תתי-הקבוצות של מערך (Powerset)',
+    intro:
+`בהינתן מערך של מספרים שלמים **ללא כפילויות**, החזר מערך של
+**כל** תתי-הקבוצות האפשריות (כולל הקבוצה הריקה). הסדר בין
+תתי-הקבוצות והסדר בתוך כל תת-קבוצה — חופשיים.
+
+**דוגמה:**
+\`\`\`
+Input:  arr = [1, 2, 3]
+Output: [[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]]
+\`\`\`
+
+עבור מערך באורך \`n\` יש בדיוק \`2^n\` תתי-קבוצות, כי לכל איבר
+שתי אפשרויות בלתי-תלויות: "בפנים" או "בחוץ".`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n·2ⁿ)' },
+          { label: 'Space', value: 'O(n·2ⁿ)' },
+        ],
+        trace: {
+          title: 'Powerset — עץ ההחלטות עבור arr=[1, 2, 3]',
+          steps: [
+            {
+              code: 'root: ∅ — אף איבר לא נבחר עדיין',
+              explain: 'כל ענף שמאלה (\`−\`) = "דלג", כל ענף ימינה (\`+\`) = "כלול". בעומק \`n\` כל עלה הוא תת-קבוצה אחת.',
+              viz: _powersetTreeSvg([1,2,3], [''], '', false),
+            },
+            {
+              code: 'depth 1: החלטה על arr[0] = 1',
+              explain: 'מתפצלים לשני סניפים: "בלי 1" ו"עם 1". מ-\`1\` צומת נהיו \`2\`.',
+              viz: _powersetTreeSvg([1,2,3], ['','0','1'], '1', false),
+            },
+            {
+              code: 'depth 2: החלטה על arr[1] = 2',
+              explain: 'כל אחד מ-2 הצמתים מתפצל ל-2 ילדים. עכשיו \`4\` צמתים. הספירה הוקרית מתחילה.',
+              viz: _powersetTreeSvg([1,2,3], ['','0','1','00','01','10','11'], '11', false),
+            },
+            {
+              code: 'depth 3: החלטה על arr[2] = 3 (העומק האחרון)',
+              explain: 'כל צומת ברמה 2 מתפצל בפעם האחרונה. \`8\` עלים = \`2³\` = כל תתי-הקבוצות.',
+              viz: _powersetTreeSvg([1,2,3],
+                ['','0','1','00','01','10','11','000','001','010','011','100','101','110','111'],
+                '111', false),
+            },
+            {
+              code: 'איסוף העלים → התוצאה הסופית',
+              explain: '8 עלים = \`2ⁿ\` תתי-קבוצות. שמאל-לימין: \`[], [3], [2], [2,3], [1], [1,3], [1,2], [1,2,3]\`. כל מסלול שורש→עלה מקודד בחירה.',
+              viz: _powersetTreeSvg([1,2,3],
+                ['','0','1','00','01','10','11','000','001','010','011','100','101','110','111'],
+                '', true),
+            },
+          ],
+        },
+        approaches: [
+          {
+            name: 'Backtracking',
+            time: 'O(n·2ⁿ)', space: 'O(n)',
+            summary: 'עץ החלטה בעומק n; בכל איבר — "פנים" או "חוץ". \`pop()\` הוא ה-undo.',
+            code:
+`def subsets(arr):
+    out = []
+    def rec(i, cur):
+        if i == len(arr):
+            out.append(cur.copy())
+            return
+        rec(i + 1, cur)         # דלג
+        cur.append(arr[i])      # כלול
+        rec(i + 1, cur)
+        cur.pop()               # undo
+    rec(0, [])
+    return out`,
+          },
+          {
+            name: 'Iterative',
+            time: 'O(n·2ⁿ)', space: 'O(n·2ⁿ)',
+            summary: 'מתחילים מ-\`[[]]\`; בכל איבר חדש — מכפילים את התוצאה הקיימת.',
+            code:
+`def subsets(arr):
+    out = [[]]
+    for x in arr:
+        out += [s + [x] for s in out]
+    return out`,
+          },
+          {
+            name: 'Bitmask',
+            time: 'O(n·2ⁿ)', space: 'O(n·2ⁿ)',
+            summary: 'כל \`mask ∈ [0, 2ⁿ)\` מקודד תת-קבוצה ייחודית; הביט ה-i דולק ⇔ \`arr[i]\` בפנים.',
+            code:
+`def subsets(arr):
+    n = len(arr)
+    out = []
+    for mask in range(1 << n):
+        out.append([arr[i] for i in range(n) if mask & (1 << i)])
+    return out`,
+          },
+        ],
+        starterCode:
+`def subsets(arr):
+    """Return all subsets of arr (powerset). No duplicates."""
+    # TODO: ממשו backtracking / iterative / bitmask — לבחירתכם
+    pass
+
+
+# בדיקה ידנית:
+# print(subsets([1, 2, 3]))
+# צריך להחזיר 8 תתי-קבוצות, כולל הריקה.
+`,
+        question:
+`ממשו פונקציה \`subsets(arr)\` בפייתון. אילו גישות עומדות לרשותכם?
+איזו מהן הכי טבעית? מה הסיבוכיות?`,
+        hints: [
+          'כמה אפשרויות יש לכל איבר במערך? איך זה קובע את גודל התוצאה?',
+          'Backtracking: DFS עם החלטה בינארית בכל איבר ("פנים"/"חוץ"). \\\`pop()\\\` הוא ה-undo.',
+          'ב-leaf של ה-DFS: \\\`out.append(current.copy())\\\`. בלי copy — כל הצמתים יצביעו על אותה רשימה ויסיימו ריקים.',
+        ],
+        answer:
+`**שלוש גישות שקולות בסיבוכיות** — כולן \`Θ(n · 2ⁿ)\` זמן ומקום (השוואה צמודה בקלפים מעלה).
+
+**סיבוכיות:** הגבול התחתון של הבעיה הוא \`n · 2ⁿ\` כי זה גודל הפלט עצמו — **אי-אפשר טוב יותר**. כל גישה שתציע תפגוש את הקיר הזה.
+
+---
+
+**שלבי החשיבה:**
+
+1. **Backtracking** — בכל איבר יש *שתי אפשרויות*: "אני בפנים" או "אני בחוץ". זה עץ בינארי בעומק \`n\` — \`2^n\` עלים = \`2^n\` תתי-קבוצות. ה-\`copy()\` חיוני כי אחרת כל הצמתים של ה-DFS משתפים את אותה רשימה.
+2. **Iterative** — נצבר את הפתרון איטרטיבית. בכל איבר חדש: לכל תת-קבוצה שכבר ראינו נוצרת *זוגית* — אחת בלי האיבר, ואחת איתו. הגודל מוכפל בכל מעבר.
+3. **Bitmask** — קידוד טבעי כשמדובר באוסף בלי תלות בסדר: כל מספר \`mask\` בטווח \`[0, 2^n)\` מקודד תת-קבוצה ייחודית. הביט ה-i דולק ⇔ \`arr[i]\` בתוך. בלי רקורסיה ובלי סטאק.`,
+        interviewerMindset:
+`המראיין בודק שני דברים:
+
+1. **שאתה רואה את "החלטה בינארית לכל איבר".** אם אתה מנסה להמציא לולאות מקוננות לפי גודל תת-הקבוצה — הפסדת. הניסוח הנכון הוא רקורסיבי/בינארי.
+2. **שאתה מודע לסיבוכיות.** הרבה אומרים "סיבוכיות מעריכית, יקר!" — אבל \`n · 2^n\` היא הגבול התחתון של גודל הפלט. **אי-אפשר** לעשות יותר טוב. להגיד את זה במפורש = ניקוד.
+
+**בונוס**: לדעת לקפוץ בין שלוש הגישות מראה גמישות. גישת הביטמסק בייחוד אהובה במראיינים מעולם הסיסטם, כי היא מתאימה לסריקות paralel-ידידותיות.`,
+        expectedAnswers: [
+          'powerset', '2^n', 'backtrack', 'recursion', 'bitmask',
+          'iterative', 'O(n*2^n)', 'O(n 2^n)',
+          'append', 'rec(', 'mask',
+        ],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 1)',
+    tags: ['algorithms', 'recursion', 'backtracking', 'bitmask', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8002 — Suspicious-IP rate detector (sliding window)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'suspicious-ip-rate-detector',
+    difficulty: 'medium',
+    title: 'זיהוי כתובת IP חשודה — Rate Limiter',
+    intro:
+`אתה מקבל בקשות (\`requests\`) מהמון כתובות \`IP\` שונות.
+כתובת שיכולה להחשב כחשודה — כתובת ששולחת **מעל 10 בקשות בדקה**.
+איך תממש מערכת שבודקת ויודעת להתריע על כתובת חשודה?
+
+**הנחות מהשקף המקורי:**
+- לרשותך פונקציית \`time\` שמדגמת את הזמן הנוכחי.
+- ניתן להניח שאת הבקשות אתה קורא מבאפר אינסופי (stream).`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1) amortized' },
+          { label: 'Space', value: 'O(IPs × 10)'  },
+        ],
+        trace: {
+          title: 'Rate-limiter — 192.168.1.1 מ-t=0 עד t=100s',
+          steps: [
+            {
+              code: 't = 0s   — הגלאי מתחיל לעקוב אחר 192.168.1.1',
+              explain: 'מצב ראשוני: ה-deque ריק, אין בקשות ב-window, המונה 0/10. סף: יותר מ-10 בקשות תוך 60 שניות → חשוד.',
+              viz: _rateLimiterSvg({
+                now: 0, requests: [], suspect: false,
+                subtitle: 'monitoring 192.168.1.1 — empty deque',
+                bannerOverride: 'idle — empty deque',
+              }),
+            },
+            {
+              code: 't = 5s   — בקשה #1 נכנסת',
+              explain: 'הבקשה הראשונה מגיעה. נדחפת לסוף ה-deque. אין מה לפנות עדיין — היא היחידה.',
+              viz: _rateLimiterSvg({
+                now: 5, requests: [5], justArrived: [5],
+                subtitle: 'enqueue 5s · count 1/10',
+              }),
+            },
+            {
+              code: 't = 12s  — בקשה #2',
+              explain: 'בקשה שנייה. ה-deque גדל ל-2 איברים. שתיהן עדיין בתוך 60 שניות מ-now.',
+              viz: _rateLimiterSvg({
+                now: 12, requests: [5, 12], justArrived: [12],
+                subtitle: 'count 2/10',
+              }),
+            },
+            {
+              code: 't = 20s  — בקשה #3',
+              explain: 'count = 3.',
+              viz: _rateLimiterSvg({
+                now: 20, requests: [5, 12, 20], justArrived: [20],
+                subtitle: 'count 3/10',
+              }),
+            },
+            {
+              code: 't = 26s  — בקשה #4',
+              explain: 'count = 4.',
+              viz: _rateLimiterSvg({
+                now: 26, requests: [5, 12, 20, 26], justArrived: [26],
+                subtitle: 'count 4/10',
+              }),
+            },
+            {
+              code: 't = 30s  — בקשה #5',
+              explain: 'count = 5. עדיין בטוח מתחת לסף.',
+              viz: _rateLimiterSvg({
+                now: 30, requests: [5, 12, 20, 26, 30], justArrived: [30],
+                subtitle: 'count 5/10',
+              }),
+            },
+            {
+              code: 't = 36s  — בקשה #6',
+              explain: 'count = 6.',
+              viz: _rateLimiterSvg({
+                now: 36, requests: [5, 12, 20, 26, 30, 36], justArrived: [36],
+                subtitle: 'count 6/10',
+              }),
+            },
+            {
+              code: 't = 42s  — בקשה #7',
+              explain: 'count = 7. הקצב מואץ.',
+              viz: _rateLimiterSvg({
+                now: 42, requests: [5, 12, 20, 26, 30, 36, 42], justArrived: [42],
+                subtitle: 'count 7/10',
+              }),
+            },
+            {
+              code: 't = 47s  — בקשה #8',
+              explain: 'count = 8.',
+              viz: _rateLimiterSvg({
+                now: 47, requests: [5, 12, 20, 26, 30, 36, 42, 47], justArrived: [47],
+                subtitle: 'count 8/10',
+              }),
+            },
+            {
+              code: 't = 51s  — בקשה #9',
+              explain: 'count = 9. עוד שתיים — וייסגר עליו.',
+              viz: _rateLimiterSvg({
+                now: 51, requests: [5, 12, 20, 26, 30, 36, 42, 47, 51], justArrived: [51],
+                subtitle: 'count 9/10',
+              }),
+            },
+            {
+              code: 't = 55s  — בקשה #10',
+              explain: 'count = 10. **בגבול הסף בדיוק**. הסף הוא "יותר מ-10", אז עוד בקשה אחת נוספת תפעיל את הדגל.',
+              viz: _rateLimiterSvg({
+                now: 55, requests: [5, 12, 20, 26, 30, 36, 42, 47, 51, 55], justArrived: [55],
+                subtitle: 'count 10/10 — על הסף',
+              }),
+            },
+            {
+              code: 't = 58s  — בקשה #11   →   SUSPECT!',
+              explain: 'count עברה ל-11. **\`11 > 10\` → הדגל נדלק.** הצבע מתחלף לזהוב; ה-IP מסומן כחשוד. הסימון "דביק" — לא יוסר גם אם הקצב יירד.',
+              viz: _rateLimiterSvg({
+                now: 58, requests: [5, 12, 20, 26, 30, 36, 42, 47, 51, 55, 58],
+                justArrived: [58], suspect: true,
+                subtitle: 'threshold breached — flag latched',
+              }),
+            },
+            {
+              code: 't = 70s  — חלף זמן, אין בקשה חדשה',
+              explain: 'הזמן התקדם ל-70. החלון הוא כעת \`(10, 70]\`. הבקשה ב-\`t=5\` כבר ישנה מ-60 שניות → **יורדת מראש ה-deque**. count מתעדכן ל-10. הדגל נשאר.',
+              viz: _rateLimiterSvg({
+                now: 70, requests: [12, 20, 26, 30, 36, 42, 47, 51, 55, 58],
+                justDropped: [5], suspect: true,
+                subtitle: 'popleft: 5s expired (5 ≤ 70-60)',
+              }),
+            },
+            {
+              code: 't = 80s  — עוד התקדמות זמן',
+              explain: 'החלון הוא \`(20, 80]\`. הבקשות \`t=12\` ו-\`t=20\` ישנות מדי ונופלות. count = 8. עדיין SUSPECT (sticky).',
+              viz: _rateLimiterSvg({
+                now: 80, requests: [26, 30, 36, 42, 47, 51, 55, 58],
+                justDropped: [12, 20], suspect: true,
+                subtitle: 'popleft: 12s, 20s expired',
+              }),
+            },
+            {
+              code: 't = 100s — שקט; ה-deque מתכווץ אבל הדגל נשאר',
+              explain: 'אין יותר בקשות; הזמן ממשיך. החלון \`(40, 100]\` מותיר רק \`42, 47, 51, 55, 58\` — חמש בקשות. ה-deque מתרוקן בהדרגה אבל **הדגל לא מתאפס**: ברגע ש-IP זוהה כחשוד, הוא נשאר ברשימה.',
+              viz: _rateLimiterSvg({
+                now: 100, requests: [42, 47, 51, 55, 58],
+                justDropped: [26, 30, 36], suspect: true,
+                subtitle: 'count back to 5 — but flag stays',
+              }),
+            },
+          ],
+        },
+        starterCode:
+`from collections import defaultdict, deque
+
+class IpRateDetector:
+    WINDOW = 60.0       # שניות
+    THRESHOLD = 10      # מעל 10 בקשות בחלון → חשוד
+
+    def __init__(self):
+        # TODO: מבנה נתונים פר-IP
+        pass
+
+    def observe(self, ip, t):
+        """מחזיר True אם ה-IP חשוד אחרי הוספת הבקשה הנוכחית."""
+        # TODO
+        pass
+`,
+        question:
+`ממשו את הגלאי. עבור כל בקשה נכנסת \`(ip, t)\` החזירו אם הכתובת
+**חשודה** באותו רגע (כלומר ראינו ממנה > 10 בקשות בדקה האחרונה).`,
+        hints: [
+          'הזרם אינסופי. איך תספרו "X בקשות בדקה האחרונה" בלי לסרוק את כל ההיסטוריה?',
+          'Sliding window: מבנה נתונים פר-IP שמחזיק רק את ה-60 שניות האחרונות. \\\`deque\\\` נותן \\\`popleft\\\` ב-O(1).',
+          'בכל בקשה: (1) נקו את ה-deque מטים שגדולים מ-60 שנ\' (\\\`while q[0] < now-60: popleft()\\\`). (2) \\\`append(now)\\\`. (3) \\\`len(q) > 10?\\\` → suspect.',
+        ],
+        answer:
+`**Sliding window per-IP.** מבנה נתונים: \`dict[ip] → deque(timestamps)\`.
+
+\`\`\`python
+from collections import defaultdict, deque
+
+class IpRateDetector:
+    WINDOW = 60.0       # שניות
+    THRESHOLD = 10      # מעל 10 בקשות בחלון = חשוד
+
+    def __init__(self):
+        self.q = defaultdict(deque)
+
+    def observe(self, ip, t):
+        """מחזיר True אם ה-IP חשוד אחרי הוספת הבקשה הנוכחית."""
+        dq = self.q[ip]
+        # נקה את כל הבקשות הישנות
+        cutoff = t - self.WINDOW
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        # הוסף את הבקשה הנוכחית
+        dq.append(t)
+        return len(dq) > self.THRESHOLD
+\`\`\`
+
+**סיבוכיות:**
+- **זמן** — אמורטייז \`O(1)\` לבקשה: כל בקשה נכנסת ונפלטת מהתור פעם אחת בלבד.
+- **מקום** — \`O(IPs · 10)\` במצב יציב: לכל IP חי, עד 10 timestamps. כשהפעילות פוחתת — התור מתרוקן (אבל לא נמחק). לניקוי תקופתי של IPs רדומים — להוסיף סוויפ ש-\`pop\` ערכים ריקים.
+
+**שאלת המשך נפוצה:** "מה אם יש מיליון IPs?" — תשובה: ה-state רוחבי ב-IPs (לא טרי לעוד IP). אם מתקרב לאילוץ זיכרון, אפשר לעבור ל-**Token Bucket** או ל-**Count-Min Sketch** עם דיוק מוגבל ⇄ זיכרון קבוע.
+
+---
+
+**שלבי החשיבה:**
+
+1. **לכל IP מבנה נתונים נפרד** — אחרת ה-window גלובלי יערבב בקשות של כל ה-IPs ולא נדע מי החשוד.
+2. **\`deque\` ולא \`list\`** — \`list.pop(0)\` הוא \`O(n)\` כי הוא מזיז את כל האיברים. \`deque.popleft()\` הוא \`O(1)\` כי מבנה ה-double-ended רשום מצביעים בשני הקצוות.
+3. **לנקות לפני שמודדים** — בכל בקשה נכנסת, *קודם* זורקים את הישנות (מעבר ל-60 שנ׳), *ואז* בודקים את האורך. אחרת ספירה ישנה תכלול בקשות שכבר לא רלוונטיות.`,
+        interviewerMindset:
+`שלושה שלבים שהמראיין רוצה לראות:
+
+1. **בחירת מבנה הנתונים הנכון** — תור פר-IP. אם אתה מציע "מערך גלובלי של בקשות" — הפסדת על סיבוכיות.
+2. **המודעות שכל פעולה היא \`O(1)\` אמורטייז.** הניקיון של "להוציא ישנים" נראה כמו לולאה — אבל סך כל הפעולות חסום ע"י מספר הבקשות. להגיד "אמורטייז" במפורש.
+3. **חשיבה הנדסית מעבר לקוד** — מה קורה במיליון IPs רדומים? איך מנקים? איך מתאימים לדקה זזה (sliding) לעומת קופץ (fixed window)?
+
+**עצה:** אם אתה לא יודע בעל-פה — תאר את האלגוריתם במילים קודם, ואז כתוב. רוב המראיינים מעדיפים שיחה ברורה על קוד מוכן.`,
+        expectedAnswers: [
+          'deque', 'queue', 'sliding window', 'תור', 'popleft',
+          '60', 'cutoff', 'window', 'defaultdict', 'dict',
+          'amortized', 'אמורטייז', 'O(1)',
+          'token bucket', 'count-min',
+        ],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 2)',
+    tags: ['algorithms', 'rate-limiter', 'sliding-window', 'system-design', 'data-structures', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8003 — Reverse words in a sentence, in-place
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'reverse-sentence-in-place',
+    difficulty: 'medium',
+    title: 'היפוך משפט במקום — בזיכרון קבוע',
+    intro:
+`אתה עובד על מערכת שמקבלת משפט, מחלצת ממנו מידע, ואז מעבירה את
+המשפט לרכיב הבא. **באג** במערכת גורם לכך שהמשפט יוצא בסדר הפוך של מילים:
+
+\`\`\`
+מערכת מקבלת:  "welcome to tech interview"
+מערכת פולטת:  "interview tech to welcome"
+\`\`\`
+
+עליך **לתקן** את הפלט (להחזיר את הסדר המקורי), אבל יש מגבלות:
+
+- אסור להשתמש בזיכרון נוסף — **\`O(1)\`** זיכרון נוסף.
+- אסור רקורסיה / מחסנית (גם זה זיכרון).
+- אתה רשאי להניח שמותר לך לערוך את המחרוזת במקום (mutable buffer).`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        trace: {
+          title: 'Two-pointer reverse — "welcome" → "emoclew"',
+          steps: [
+            {
+              code: 'initial: i = 0, j = 6   (n = 7)',
+              explain: 'מציבים מצביע אחד בכל קצה של ה-buffer. הלולאה תיעצר רק כש-\`i >= j\`.',
+              viz: _twoPointerSvg({ state: 'welcome', i: 0, j: 6 }),
+            },
+            {
+              code: 'swap a[0] ↔ a[6]   "w"↔"e"',
+              explain: 'מחליפים את הקצוות. \`i++, j--\` — מצמצמים את הטווח פנימה.',
+              viz: _twoPointerSvg({ state: 'eelcomw', i: 1, j: 5, swapped: true }),
+            },
+            {
+              code: 'swap a[1] ↔ a[5]   "e"↔"m"',
+              explain: 'הזוג הפנימי הבא. שוב swap, שוב צמצום.',
+              viz: _twoPointerSvg({ state: 'emlcoew', i: 2, j: 4, swapped: true }),
+            },
+            {
+              code: 'swap a[2] ↔ a[4]   "l"↔"o"',
+              explain: 'הזוג האחרון לפני שהמצביעים נפגשים.',
+              viz: _twoPointerSvg({ state: 'emoclew', i: 3, j: 3, swapped: true }),
+            },
+            {
+              code: 'i = 3, j = 3   →   stop',
+              explain: 'המצביעים נפגשו באמצע — סיימנו ב-3 פעולות swap בלבד, **O(n)** זמן ו-**O(1)** מקום נוסף. התוצאה: \`"emoclew"\`.',
+              viz: _twoPointerSvg({ state: 'emoclew', i: 3, j: 3, done: true }),
+            },
+          ],
+        },
+        starterCode:
+`def reverse_in_place(buf, lo, hi):
+    """הופך את buf[lo:hi] במקום. buf — list של תווים (mutable)."""
+    # TODO: שני מצביעים, swap, O(1) זיכרון נוסף
+    pass
+
+
+# בדיקה:
+# a = list("cisco")
+# reverse_in_place(a, 0, len(a))
+# assert ''.join(a) == "ocsic"
+`,
+        question:
+`**Building block.** כתבו פונקציה \`reverse_in_place(buf, lo, hi)\` שהופכת
+את התווים בטווח \`[lo, hi)\` של buffer (תווים), במקום, בלי זיכרון נוסף.
+
+דוגמה: \`reverse_in_place(list("cisco"), 0, 5)\` → \`"ocsic"\`.`,
+        hints: [
+          'איך אפשר להפוך תווים בלי לבנות buffer חדש באורך n?',
+          'Two pointers: \\\`i\\\` מהקצה השמאלי, \\\`j\\\` מהימני — מתקדמים זה אל זה.',
+          '\\\`while i < j: buf[i], buf[j] = buf[j], buf[i]; i += 1; j -= 1\\\`. תנאי עצירה \\\`i < j\\\` (לא \\\`!=\\\`).',
+        ],
+        answer:
+`**Two-pointer in-place.** סיבוכיות זמן \`O(n)\`, מקום \`O(1)\`.
+
+\`\`\`python
+def reverse_in_place(buf, lo, hi):
+    """הופך את buf[lo:hi] במקום. buf חייב להיות mutable (list of chars)."""
+    i, j = lo, hi - 1
+    while i < j:
+        buf[i], buf[j] = buf[j], buf[i]
+        i += 1
+        j -= 1
+\`\`\`
+
+**הערה — בפייתון:** מחרוזות immutable, אז עובדים על \`list(s)\` ובסוף \`''.join\`. בשפות כמו C / C++ אפשר ישירות על \`char[]\`.
+
+---
+
+**שלבי החשיבה:**
+
+1. **שני מצביעים שמתקדמים זה כלפי זה** — \`i\` מהשמאל, \`j\` מהימין. כל איטרציה מחליפה ערכים ומכווצת את הטווח באמצע.
+2. **\`while i < j\`** — לא \`!=\`. אם \`i\` ו-\`j\` חלפו אחד את השני, כבר עברנו על כל הזוגות. עם \`!=\` היינו ממשיכים לחלופין ומשחזרים את ההיפוך.
+3. **\`O(1)\` נוסף** — שני אינדקסים בלבד. לא יוצרים מערך עזר; פועלים ישירות על ה-buffer שקיבלנו.`,
+        expectedAnswers: [
+          'two pointer', 'two-pointer', 'i, j', 'swap', 'in-place', 'במקום',
+          'i < j', 'lo, hi - 1',
+        ],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        trace: {
+          title: 'Reverse-sentence — "interview tech to welcome" → "welcome to tech interview"',
+          steps: [
+            {
+              code: 'הקלט הבאגי — סדר המילים הפוך',
+              explain: 'המערכת הוציאה את המשפט כשמילותיו בסדר הפוך. צריך להחזיר את הסדר הנכון תוך שימוש *רק* בפונקציית היפוך-תווים, ובלי זיכרון נוסף.',
+              viz: _reverseSentenceSvg({
+                after: 'interview tech to welcome',
+                opLabel: 'INPUT — buggy: סדר המילים הפוך',
+              }),
+            },
+            {
+              code: 'reverse_in_place(buf, 0, n)  ← הופכים את כל המחרוזת',
+              explain: 'הפיכה אחת על כל ה-buffer הופכת גם את **סדר המילים** וגם את **התווים בכל מילה**. הסדר הגלובלי חזר להיות הנכון; כל מילה הפוכה פנימית.',
+              viz: _reverseSentenceSvg({
+                before: 'interview tech to welcome',
+                after:  'emoclew ot hcet weivretni',
+                hlLo: 0, hlHi: 25,
+                opLabel: 'STEP 1 — reverse כל המחרוזת',
+              }),
+            },
+            {
+              code: 'reverse_in_place(buf, 0, 7)   ← "emoclew" → "welcome"',
+              explain: 'עכשיו מבטלים את ההיפוך הפנימי של *כל מילה בנפרד*. המילה הראשונה: \`emoclew\` חוזרת ל-\`welcome\`.',
+              viz: _reverseSentenceSvg({
+                before: 'emoclew ot hcet weivretni',
+                after:  'welcome ot hcet weivretni',
+                hlLo: 0, hlHi: 7,
+                opLabel: 'STEP 2a — reverse המילה הראשונה',
+              }),
+            },
+            {
+              code: 'reverse_in_place(buf, 8, 10)  ← "ot" → "to"',
+              explain: 'המילה השנייה — \`ot\` חוזרת ל-\`to\`. אותו טריק.',
+              viz: _reverseSentenceSvg({
+                before: 'welcome ot hcet weivretni',
+                after:  'welcome to hcet weivretni',
+                hlLo: 8, hlHi: 10,
+                opLabel: 'STEP 2b — reverse המילה השנייה',
+              }),
+            },
+            {
+              code: 'reverse_in_place(buf, 11, 15) ← "hcet" → "tech"',
+              explain: 'המילה השלישית — \`hcet\` → \`tech\`.',
+              viz: _reverseSentenceSvg({
+                before: 'welcome to hcet weivretni',
+                after:  'welcome to tech weivretni',
+                hlLo: 11, hlHi: 15,
+                opLabel: 'STEP 2c — reverse המילה השלישית',
+              }),
+            },
+            {
+              code: 'reverse_in_place(buf, 16, 25) ← "weivretni" → "interview"',
+              explain: 'המילה האחרונה — \`weivretni\` → \`interview\`. הקלט המקורי שוחזר במלואו, בזיכרון נוסף **O(1)** ובשימוש *יחיד* בפונקציית reverse-in-place.',
+              viz: _reverseSentenceSvg({
+                before: 'welcome to tech weivretni',
+                after:  'welcome to tech interview',
+                hlLo: 16, hlHi: 25,
+                opLabel: 'reverse המילה האחרונה — תוקן!',
+                done: true,
+              }),
+            },
+          ],
+        },
+        starterCode:
+`def reverse_in_place(buf, lo, hi):
+    # מסעיף א — כבר ממומש כאן לנוחות
+    i, j = lo, hi - 1
+    while i < j:
+        buf[i], buf[j] = buf[j], buf[i]
+        i += 1
+        j -= 1
+
+
+def fix(sentence):
+    """בהינתן 'interview tech to welcome' — להחזיר את 'welcome to tech interview'.
+    הגבלה: זיכרון נוסף O(1), ולהשתמש רק ב-reverse_in_place."""
+    # TODO: שתי הפיכות — את הכל, ואז כל מילה
+    pass
+
+
+# assert fix("interview tech to welcome") == "welcome to tech interview"
+`,
+        question:
+`**התיקון המלא.** בהינתן הפלט הבאגי (\`"interview tech to welcome"\`),
+החזר את המשפט המקורי (\`"welcome to tech interview"\`), עם זיכרון קבוע
+ושימוש **רק** בפונקציה \`reverse_in_place\` מסעיף א.`,
+        hints: [
+          'אם הופכים את כל המחרוזת אות-בתו, מה משתנה? מה נשאר מקולקל?',
+          'שתי הפיכות סדרתיות: הראשונה על כל המחרוזת, השנייה על כל מילה בנפרד.',
+          'הפיכה ראשונה הופכת *גם* סדר מילים *וגם* תווים בכל מילה. הפיכה שנייה (על כל מילה) מבטלת את האותיות — נשאר רק סדר המילים שכבר הפוך פעם → תוקן.',
+        ],
+        answer:
+`**Reverse-twice trick.** הופכים את כל המחרוזת, ואז הופכים כל מילה.
+
+\`\`\`python
+def fix(sentence):
+    buf = list(sentence)        # רק העתקה למבנה mutable; הזיכרון הנוסף = O(n) על המחרוזת עצמה
+    n = len(buf)
+    # שלב 1: הפוך הכל
+    reverse_in_place(buf, 0, n)
+    # שלב 2: הפוך כל מילה
+    word_start = 0
+    for i in range(n + 1):
+        if i == n or buf[i] == ' ':
+            reverse_in_place(buf, word_start, i)
+            word_start = i + 1
+    return ''.join(buf)
+\`\`\`
+
+**מעקב על "interview tech to welcome":**
+
+| שלב | מצב |
+|---|---|
+| התחלה | \`interview tech to welcome\` |
+| אחרי reverse הכל | \`emoclew ot hcet weivretni\` |
+| אחרי reverse כל מילה | \`welcome to tech interview\` |
+
+**סיבוכיות:** זמן \`O(n)\`, מקום נוסף \`O(1)\` (לא כולל ה-buffer של המחרוזת עצמה — בפייתון חייב list, ב-C היה in-place מלא).
+
+**למה זה עובד?** הפיכת המחרוזת כולה הפוכה גם את **סדר המילים** וגם את **התווים בתוך כל מילה**. הפיכה שנייה של כל מילה מבטלת את ההיפוך הפנימי בלבד — והסדר הגלובלי נשאר הפוך מהמקור הבאגי = הסדר המקורי הנכון.
+
+---
+
+**שלבי החשיבה:**
+
+1. **לזהות שני "סוגי היפוך"** — היפוך-של-תווים-בתוך-מילה והיפוך-של-סדר-מילים. הבאג עושה רק את השני; אנחנו רוצים לבטל רק אותו.
+2. **לבטל בלי כלי ייעודי** — אין לנו "swap words"; יש לנו רק "swap chars". הטריק: שני היפוכי-תווים עם טווחים שונים = היפוך-מילים. הפעולה הראשונה (כל המחרוזת) הופכת *את שניהם*; השנייה (כל מילה לחוד) מבטלת את הראשון מהשניים. סדר ההיפוכים חשוב — לא הפוך.
+3. **בלי \`split\`** — \`split()\` יוצר רשימה חדשה (\`O(n)\` מקום נוסף). זיהוי מילות הקצה תוך כדי מעבר עם \`word_start\` שומר על המגבלה \`O(1)\`.`,
+        interviewerMindset:
+`זו השאלה הקלאסית **"reverse words in a string"** של מיקרוסופט/אמזון. המראיין רוצה:
+
+1. **שתכיר את הטריק "reverse twice"** — הוא הקפיצה התובנתית של השאלה. אם לא מכיר, ימליצו לך לחשוב על "מה קורה כשהופכים את כל המחרוזת?".
+2. **שתעבוד \`O(1)\` זיכרון אמיתי.** מועמדים רבים מציעים פתרון עם \`split + reverse + join\` שזה \`O(n)\` זיכרון נוסף. זו תשובה לגיטימית אם השאלה לא דורשת \`O(1)\` — אבל פה היא דורשת.
+3. **שתבחין בנקודות-קצה:** מחרוזת ריקה, רווחים בקצוות, מילה אחת בלבד. ה-loop עם \`i == n\` בתור תנאי "סוף מילה" מטפל בזה אלגנטית.
+
+**גוצ'ה לפייתון:** מחרוזות immutable. אם המראיין מקפיד — תזכיר שלכן עובדים על \`list\`, ושב-C/C++ הפתרון יהיה in-place מוחלט.`,
+        expectedAnswers: [
+          'reverse twice', 'reverse', 'whole string', 'each word',
+          'הפוך הכל', 'כל מילה', 'word_start',
+          'split', 'join',
+        ],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 3)',
+    tags: ['algorithms', 'strings', 'two-pointer', 'in-place', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8004 — Two Sum
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'two-sum',
+    difficulty: 'easy',
+    title: 'Two Sum — שני אינדקסים שסכומם target',
+    intro:
+`נתון מערך של מספרים שלמים (לא בהכרח חיוביים) וערך מטרה.
+עליכם לכתוב פונקציה שמחזירה את האינדקסים \`i, j\` המקיימים:
+
+\`\`\`
+nums[i] + nums[j] == target
+\`\`\`
+
+ניתן להניח שקיימים לפחות 2 מספרים כאלה (פתרון יחיד).
+
+**דוגמאות:**
+\`\`\`
+Input:  nums=[2, 6, 11, 15], target=8   →  Output: [0, 1]   # 2 + 6 = 8
+Input:  nums=[7, 8, 1, -3, 1], target=-2 → Output: [3, 4]   # -3 + 1 = -2
+Input:  nums=[30, 21, 5], target=26     →  Output: [1, 2]   # 21 + 5 = 26
+Input:  nums=[7, 8], target=15          →  Output: [0, 1]
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n²)' },
+          { label: 'Space', value: 'O(1)'  },
+        ],
+        starterCode:
+`def two_sum_brute(nums, target):
+    """גישה נאיבית: שתי לולאות מקוננות. החזר [i, j] כשיש פתרון."""
+    # TODO
+    pass
+
+
+# print(two_sum_brute([2, 6, 11, 15], 8))   # [0, 1]
+`,
+        question:
+`**גישה נאיבית.** מהי הדרך הפשוטה ביותר? מה הסיבוכיות?`,
+        hints: [
+          'מה הפתרון הכי נאיבי שאפשר לחשוב עליו לבעיה הזו?',
+          'שתי לולאות מקוננות: \\\`i\\\` חיצונית, \\\`j > i\\\` פנימית. סיבוכיות O(n²), מקום O(1).',
+          'החזירו מיד כשמוצאים: \\\`if nums[i] + nums[j] == target: return [i, j]\\\`. ההנחה היא שקיים פתרון יחיד.',
+        ],
+        answer:
+`**Brute force.** \`O(n²)\` זמן, \`O(1)\` מקום.
+
+\`\`\`python
+def two_sum_brute(nums, target):
+    n = len(nums)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if nums[i] + nums[j] == target:
+                return [i, j]
+    return None     # לא אמור להגיע — לפי ההנחה יש פתרון
+\`\`\`
+
+תשובה לגיטימית כפתרון ראשון, אבל חייבים להזכיר במפורש שהיא \`O(n²)\` ולשאול את המראיין: "מותר לי להניח שיש פתרון יחיד? מותר לי לעשות O(n) זיכרון נוסף?"
+
+---
+
+**שלבי החשיבה:**
+
+1. **לולאה חיצונית על כל \`i\`** — כל איבר הוא מועמד ל"חצי הראשון" של הזוג.
+2. **לולאה פנימית רק על \`j > i\`** — כך לא בודקים זוג פעמיים, ולא בוחנים איבר עם עצמו. החיסכון: חצי מהבדיקות, אבל הסיבוכיות עדיין \`O(n²)\`.
+3. **חוזרים מיד** — לא צוברים, לא ממשיכים אחרי שמצאנו. לפי ההנחה, יש פתרון יחיד.`,
+        expectedAnswers: ['O(n^2)', 'O(n²)', 'nested', 'מקוננות', 'brute'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(n)' },
+        ],
+        approaches: [
+          {
+            name: 'Brute force — O(n²)',
+            time: 'O(n²)', space: 'O(1)',
+            summary: 'שתי לולאות מקוננות; בדוק כל זוג אינדקסים i<j.',
+            code:
+`def two_sum_brute(nums, target):
+    n = len(nums)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if nums[i] + nums[j] == target:
+                return [i, j]`,
+          },
+          {
+            name: 'Hash map — O(n)',
+            time: 'O(n)', space: 'O(n)',
+            summary: 'מעבר אחד; שומר \`value → index\` ובודק את **המשלים** \`target - x\` לפני שמוסיף.',
+            code:
+`def two_sum(nums, target):
+    seen = {}                       # value → index
+    for j, x in enumerate(nums):
+        need = target - x
+        if need in seen:
+            return [seen[need], j]
+        seen[x] = j`,
+          },
+        ],
+        trace: {
+          title: 'Two Sum — nums=[3, 7, 1, 11, 2, 9], target=11',
+          steps: [
+            {
+              code: 'j=0, x=3,  need = 11-3 = 8',
+              explain: 'מתחילים. \`seen\` ריק. \`8\` לא נראה — מוסיפים \`seen[3]=0\` וממשיכים.',
+              viz: _twoSumSvg([3,7,1,11,2,9], 0, {3:0}, 8, false, null),
+            },
+            {
+              code: 'j=1, x=7,  need = 11-7 = 4',
+              explain: '\`4\` לא נראה — מוסיפים \`seen[7]=1\`.',
+              viz: _twoSumSvg([3,7,1,11,2,9], 1, {3:0,7:1}, 4, false, null),
+            },
+            {
+              code: 'j=2, x=1,  need = 11-1 = 10',
+              explain: '\`10\` לא נראה — מוסיפים \`seen[1]=2\`.',
+              viz: _twoSumSvg([3,7,1,11,2,9], 2, {3:0,7:1,1:2}, 10, false, null),
+            },
+            {
+              code: 'j=3, x=11, need = 11-11 = 0',
+              explain: '\`0\` לא נראה — מוסיפים \`seen[11]=3\`.',
+              viz: _twoSumSvg([3,7,1,11,2,9], 3, {3:0,7:1,1:2,11:3}, 0, false, null),
+            },
+            {
+              code: 'j=4, x=2,  need = 11-2 = 9',
+              explain: '\`9\` לא נראה — מוסיפים \`seen[2]=4\`. **בדיוק לפני המציאה.**',
+              viz: _twoSumSvg([3,7,1,11,2,9], 4, {3:0,7:1,1:2,11:3,2:4}, 9, false, null),
+            },
+            {
+              code: 'j=5, x=9,  need = 11-9 = 2  ✓',
+              explain: '\`2\` נמצא ב-\`seen\` ב-index 4. מחזירים **[4, 5]**. סך הכל: מעבר יחיד.',
+              viz: _twoSumSvg([3,7,1,11,2,9], 5, {3:0,7:1,1:2,11:3,2:4}, 2, true, 4),
+            },
+          ],
+        },
+        starterCode:
+`def two_sum(nums, target):
+    """O(n) זמן, O(n) מקום — Hash map."""
+    # TODO: dict מ-ערך לאינדקס; לחפש את המשלים (target - x) לפני שמוסיפים את x
+    pass
+
+
+# print(two_sum([2, 6, 11, 15], 8))      # [0, 1]
+# print(two_sum([7, 8, 1, -3, 1], -2))   # [3, 4]
+`,
+        question:
+`**גישה אופטימלית.** איך מורידים ל-\`O(n)\` זמן? איזה זיכרון נוסף נדרש?`,
+        hints: [
+          'לכל איבר \\\`x\\\` במערך — מה ה-complement (\\\`target - x\\\`) שצריך כדי להשלים לזוג?',
+          'Hash map: \\\`seen\\\` ממפה ערך לאינדקס שלו, וכך בדיקת complement היא O(1).',
+          'בדקו את ה-complement ב-\\\`seen\\\` *לפני* שמוסיפים את \\\`x\\\` — אחרת איבר עם \\\`2x = target\\\` יזהה את עצמו. \\\`if need in seen: return [seen[need], j]; seen[x] = j\\\`.',
+        ],
+        answer:
+`**Hash map בעבר אחד** — השוואה עם brute force בקלפים מעלה, ומעקב צעד-צעד מתחת.
+
+**מה ההיגיון?** במקום לחפש *זוג*, מחפשים את **המשלים** היחיד \`target - x\` של כל איבר \`x\` שאנחנו רואים. אם המשלים כבר ראינו — מצאנו. אחרת — זוכרים את \`x\` למקרה שאיבר עתידי יהיה המשלים שלו.
+
+**עוברים פעם אחת** — והסדר המוחזר תמיד \`[smaller_index, larger_index]\` כפי שהבדיקות אוהבות.
+
+**נקודות-קצה שכדאי לדבר עליהן:**
+- **כפילויות** (לדוגמה \`nums=[7,8], target=15\`): עובד — אחרי שראינו את \`7\` הוא ב-\`seen\`, וכשרואים את \`8\` המשלים שלו \`7\` נמצא שם.
+- **שלילי \`target\`** (\`[-3, 1]\` ל-\`target=-2\`): עובד — אין הנחה על סימן.
+- **\`x == target/2\`** עם איבר יחיד כזה: לא ייתפס — אבל גם אין פתרון. נכון.
+
+---
+
+**שלבי החשיבה:**
+
+1. **לוקחים את \`target\` הקבוע** — לכל \`x\` יש משלים יחיד \`target - x\`. במקום לחפש זוגות, מחפשים *משלים בודד* — הפכנו O(n²) ל-O(n).
+2. **לזכור כל איבר עם האינדקס שלו** — \`dict\` ממפה ערך לאינדקס. ב-\`O(1)\` ממוצע בודקים אם המשלים הראינו.
+3. **לבדוק לפני שמוסיפים את \`x\`** — אחרת איבר עם \`target = 2x\` יתאים לעצמו (אינדקס יחיד). הסדר הזה מבטיח שני אינדקסים שונים.`,
+        interviewerMindset:
+`Two Sum היא **שאלת ה-warm-up** הקלאסית. המראיין רוצה לראות:
+
+1. **שאתה לא קופץ ישר לפתרון** — שב ושאל: "האם המערך ממוין? יש כפילויות? יש פתרון יחיד? מותר לי \`O(n)\` זיכרון נוסף?". כל שאלה כזו = ניקוד.
+2. **שאתה מציג קודם פתרון נאיבי**, אומר את הסיבוכיות שלו, ואז משפר. **לדלג** ישר לפתרון האופטימלי = יהירות (וגם פספוס הזדמנות לדבר).
+3. **שאתה מבין למה גרסת המעבר היחיד עובדת** — שזו הראייה הקריטית של "המשלים שלי אולי כבר ראיתי, אבל גם אם לא — כשאני יהיה המשלים של מישהו אחר, אני אכן ב-seen". זה ה"מבט קדימה-אחורה" הסימטרי.
+
+**גוצ'ות מפורסמות:**
+- ב-LeetCode השאלה הזו כל-כך פופולרית שהיא **משנה את הסיפור** של מועמדים — תהיה מוכן.
+- מי שמציע מיון ואחרי two-pointer — סיבוכיות \`O(n log n)\` — תשובה לגיטימית, אבל זוכר שאיבדת את האינדקסים המקוריים, אז צריך תרגום בחזרה. עדיף hash.`,
+        expectedAnswers: [
+          'hash', 'dict', 'O(n)', 'seen', 'complement', 'משלים',
+          'target - x', 'enumerate',
+        ],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 4)',
+    tags: ['algorithms', 'array', 'hash-map', 'two-pointer', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8005 — Multiply with 4-op limited ISA (assembly puzzle)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'multiply-with-inc-dec-clr-jump',
+    difficulty: 'hard',
+    title: 'כפל ב-INC/DEC/CLR/JUMP בלבד — מעבד 8×4-ביט',
+    intro:
+`נתון מעבד ובו **8 רגיסטרים של 4 ביט** כל אחד. יש ארבע פעולות
+שניתן לבצע על רגיסטר \`Rx\` כלשהו:
+
+| הוראה | משמעות |
+|---|---|
+| \`Rx INC\` | הגדל את הערך ב-\`Rx\` באחד |
+| \`Rx DEC\` | הקטן את הערך ב-\`Rx\` באחד |
+| \`Rx CLR\` | אפס את הערך ב-\`Rx\` |
+| \`LABEL Rx JUMP\` | קפוץ ל-\`LABEL\` אם הערך ב-\`Rx\` שונה מאפס |
+
+(זו שאלת אסמבלר/פסודו-קוד — אין שפה ספציפית).`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'verilog',
+        editorLabel: 'Assembly',
+        editorHint: 'כתבו את הקוד בפסודו-אסמבלר. השתמשו רק ב-INC / DEC / CLR / JUMP.',
+        complexities: [
+          { label: 'Operations', value: 'Θ(R1·R2)' },
+        ],
+        trace: {
+          title: 'Multiply-ISA — R1=3, R2=2 → R3=6',
+          steps: [
+            {
+              code: 'init: R1=3 (a), R2=2 (b), R3=R4=R5=0',
+              explain: 'מצב התחלתי. R1, R2 הקלט; R3 ירכז את התוצאה; R4 temp לעותק של R1; R5 sentinel (לא בשימוש בגרסה זו).',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 2, R3: 0, R4: 0, R5: 0 },
+                instr: 'init  ;  R1=a, R2=b',
+                phase: 'init',
+                formula: 'מטרה: R3 = R1 · R2',
+              }),
+            },
+            {
+              code: 'R2 DEC          ; outer iteration #1',
+              explain: 'יורדים מ-R2 פעם אחת — סופרים את האיטרציה הראשונה של ה"כפל ע"י חיבור חוזר".',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 1, R3: 0, R4: 0, R5: 0 },
+                changes: { R2: -1 },
+                instr: 'R2 DEC',
+                phase: 'outer',
+              }),
+            },
+            {
+              code: 'R1 DEC; R4 INC; R3 INC   ; iter 1 of copy_lp',
+              explain: 'בלולאת ה-copy הפנימית: מורידים 1 מ-R1, מעבירים אותו ל-R4 (העותק), ובו-זמנית מוסיפים 1 ל-R3 (הצבירה).',
+              viz: _registersSvg({
+                state: { R1: 2, R2: 1, R3: 1, R4: 1, R5: 0 },
+                changes: { R1: -1, R3: +1, R4: +1 },
+                instr: 'copy_lp: R1 DEC, R4 INC, R3 INC',
+                phase: 'copy',
+              }),
+            },
+            {
+              code: '... continue copy_lp     ; iter 2',
+              explain: 'אותו דבר עוד פעם — R1 פוחת, R4 ו-R3 עולים.',
+              viz: _registersSvg({
+                state: { R1: 1, R2: 1, R3: 2, R4: 2, R5: 0 },
+                changes: { R1: -1, R3: +1, R4: +1 },
+                instr: 'copy_lp: R1 DEC, R4 INC, R3 INC',
+                phase: 'copy',
+              }),
+            },
+            {
+              code: '... continue copy_lp     ; iter 3 — R1 reaches 0',
+              explain: 'איטרציה שלישית. R1 הגיע ל-0 → ה-JUMP על R1 לא יקפוץ, יוצאים מהלולאה. עד עכשיו: R4=3 (עותק של R1 המקורי), R3=3 (הוספנו R1 ל-R3).',
+              viz: _registersSvg({
+                state: { R1: 0, R2: 1, R3: 3, R4: 3, R5: 0 },
+                changes: { R1: -1, R3: +1, R4: +1 },
+                instr: 'copy_lp: R1 DEC, R4 INC, R3 INC   → R1 = 0, exit',
+                phase: 'copy',
+              }),
+            },
+            {
+              code: 'restore: R4 DEC; R1 INC  ; restoring R1 from R4',
+              explain: 'עכשיו לולאת ה-restore: מעבירים את R4 בחזרה ל-R1 (כי בלי mov אי-אפשר אחרת).',
+              viz: _registersSvg({
+                state: { R1: 1, R2: 1, R3: 3, R4: 2, R5: 0 },
+                changes: { R1: +1, R4: -1 },
+                instr: 'restore: R4 DEC, R1 INC',
+                phase: 'restore',
+              }),
+            },
+            {
+              code: '... continue restore     ; iter 2',
+              explain: 'עוד צעד שחזור.',
+              viz: _registersSvg({
+                state: { R1: 2, R2: 1, R3: 3, R4: 1, R5: 0 },
+                changes: { R1: +1, R4: -1 },
+                instr: 'restore: R4 DEC, R1 INC',
+                phase: 'restore',
+              }),
+            },
+            {
+              code: '... continue restore     ; R1 fully restored',
+              explain: 'R4 הגיע ל-0 → יוצאים. R1 חזר לערכו המקורי (3) — כעת מוכן ללולאה החיצונית הבאה. R3=3 (הוספה אחת של R1).',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 1, R3: 3, R4: 0, R5: 0 },
+                changes: { R1: +1, R4: -1 },
+                instr: 'restore: R4 DEC, R1 INC   → R4 = 0, exit',
+                phase: 'restore',
+              }),
+            },
+            {
+              code: 'R2 DEC          ; outer iteration #2',
+              explain: 'איטרציה שנייה של הלולאה החיצונית. R2 → 0.',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 0, R3: 3, R4: 0, R5: 0 },
+                changes: { R2: -1 },
+                instr: 'R2 DEC',
+                phase: 'outer',
+              }),
+            },
+            {
+              code: 'copy_lp ×3        ; (compressed)',
+              explain: 'אותה לולאת copy שלוש פעמים: R1 יורד מ-3 ל-0, R3 עולה מ-3 ל-6, R4 עולה ל-3. סך הכל: R3 קיבל R1 פעם נוספת.',
+              viz: _registersSvg({
+                state: { R1: 0, R2: 0, R3: 6, R4: 3, R5: 0 },
+                changes: { R1: -3, R3: +3, R4: +3 },
+                instr: 'copy_lp executed 3 times',
+                phase: 'copy',
+              }),
+            },
+            {
+              code: 'restore ×3        ; (compressed)',
+              explain: 'R1 משוחזר מ-R4 (3→0). R3 לא משתנה — הוא כבר מחזיק את התוצאה.',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 0, R3: 6, R4: 0, R5: 0 },
+                changes: { R1: +3, R4: -3 },
+                instr: 'restore executed 3 times',
+                phase: 'restore',
+              }),
+            },
+            {
+              code: 'outer R2 JUMP   ; R2=0 → no jump → end',
+              explain: 'R2 הגיע ל-0 → ה-JUMP לא קופץ. הלולאה החיצונית מסתיימת. **R3 = 6 = 3·2** ✓',
+              viz: _registersSvg({
+                state: { R1: 3, R2: 0, R3: 6, R4: 0, R5: 0 },
+                instr: 'end:  R3 = a · b',
+                phase: 'done',
+                formula: 'R3 = 6  =  3 × 2  ✓',
+                done: true,
+              }),
+            },
+          ],
+        },
+        starterCode:
+`; R1 = a, R2 = b. הפלט הצפוי: R3 = a * b
+; פעולות מותרות: Rx INC | Rx DEC | Rx CLR | LABEL Rx JUMP
+; (JUMP קופץ אם Rx != 0)
+
+R3 CLR
+R4 CLR                ; R4 ישמש כעותק זמני של R1
+
+outer:
+    ; TODO: סיים את הלולאה כאשר R2 הגיע ל-0
+    ; TODO: phase1 — העבר R1 → R4 וגם R3 += R1
+    ; TODO: phase2 — שחזר R1 מ-R4
+
+end:
+`,
+        question:
+`ממשו \`R3 = R1 * R2\` באמצעות הפעולות הנ"ל בלבד. **שאלת המשך:**
+האם ניתן לוותר על חלק מהפעולות ולממש אותן באמצעות האחרות?`,
+        hints: [
+          'איך עושים כפל בלי הוראת MUL? לאיזו פעולה אחרת זה שקול?',
+          'חיבור חוזר: לולאה חיצונית של R2 פעמים, פנימית מוסיפה R1 ל-R3. **בעיה:** אין MOV — איך משמרים את R1?',
+          'בלולאה הפנימית: \\\`DEC R1; INC R3; INC R4\\\` — מפרקים את R1 *תוך כדי* בניית עותק ב-R4 וצבירה ב-R3. אחר כך לולאת restore משחזרת R1 מ-R4. **CLR מיותר** (אפשר להחליף בלולאת DEC עד 0).',
+        ],
+        answer:
+`**הפתרון הקלאסי. סיבוכיות \`Θ(R1 · R2)\`.**
+
+\`\`\`
+; R1, R2 = קלט. R3 = פלט. R4 = עזר (R1 backup).
+; הנחה: R3, R4 מאופסים בכניסה (אחרת CLR בתחילה).
+
+R3 CLR
+R4 CLR
+
+outer:
+    R2 JUMP_IF_ZERO end       ; אין JZ ישיר → מודלים אותו: ראה הערה
+    R2 DEC
+
+inner_copy_and_add:
+    ; פירוק R1 → העתק ל-R4 וגם הוסף ל-R3, עד ש-R1 = 0
+    R1 JUMP_IF_ZERO restore   ; (כשהוא 0, לסיים)
+    R1 DEC
+    R3 INC
+    R4 INC
+    inner_copy_and_add R1 JUMP
+
+restore:
+    ; שחזור R1 מ-R4 (עד ש-R4 = 0)
+    R4 JUMP_IF_ZERO outer
+    R4 DEC
+    R1 INC
+    restore R4 JUMP
+
+end:
+\`\`\`
+
+**איך מבצעים "JUMP אם אפס" כשיש רק "JUMP אם לא-אפס"?** הטריק: משתמשים ברגיסטר שאנחנו יודעים שהוא לא-אפס כדי "לדלג" ל-end. כלומר משכפלים את הזרימה:
+
+\`\`\`
+; "JZ R2 end" ⇄
+    outer_body R2 JUMP        ; אם R2 != 0 — לתוך הלולאה
+    end_uncond R5 JUMP        ; (R5 != 0 מובטח — קודם R5 INC) → קפיצה לא-מותנית
+\`\`\`
+
+או — שומרים רגיסטר עזר ב-1 כל ההרצה.
+
+**שאלת ההמשך — ויתור על פעולות:**
+
+- ✅ **\`CLR\` מיותר** — שווה ל-\`DEC\` בלולאה עד שהרגיסטר באפס. עולה זמן (עד 15 צעדים על 4 ביט), אבל אין צורך בהוראה נפרדת בקבוצה. **הוויתור הקל ביותר.**
+- ❌ **\`DEC\` הכרחי** — בלעדיו אי-אפשר להפחית מערך. \`INC\` היחיד = הסתובבות ב-16 (כי 4-bit), אבל גם זה לא נותן זרימת בקרה.
+- ❌ **\`INC\` הכרחי** — בלי הגדלה אי-אפשר לחשב כפל ישיר.
+- ❌ **\`JUMP\` הכרחי** — בלי בקרת זרימה אין לולאות = אין כפל ע"י חיבור חוזר.
+
+**מסקנה:** ניתן לוותר רק על \`CLR\` (מינימליסטים יאמרו ש"מערכת מינימלית" = \`INC\`, \`DEC\`, \`JUMP\`-מותנה).
+
+---
+
+**שלבי החשיבה:**
+
+1. **כפל = חיבור חוזר** — \`R1 * R2\` = להוסיף את \`R1\` אל \`R3\` סך הכל \`R2\` פעמים. שתי לולאות מקוננות: חיצונית סופרת את \`R2\`, פנימית מוסיפה את \`R1\`.
+2. **אין \`MOV\`** — כדי לא לאבד את \`R1\` בלולאה הפנימית, מפרקים אותו (\`DEC\`) ובמקביל בונים *גם* את \`R3\` *וגם* עותק \`R4\`. בסוף — לולאה שנייה משחזרת את \`R1\` מתוך \`R4\` באותו טריק הפוך.
+3. **\`JUMP\` לא-מותנה** — בנוי באמצעות רגיסטר שמובטח להיות לא-אפס (\`R5 INC\`), שעליו \`JUMP\` תמיד יקפוץ. זה ה"אהה" של ה-ISA המוגבל.`,
+        interviewerMindset:
+`שאלה זו בודקת **מחשבה ארכיטקטונית עם מגבלות**. שלוש מלכודות שמועמדים נופלים בהן:
+
+1. **"איך עושים JMP לא-מותנה?"** — מי שאומר "אין כזה" ועוצר — הפסיד. הפתרון: רגיסטר עם 0 מובטח (אז JUMP-IF-NONZERO עליו לא יקפוץ — שווה ל-skip), או רגיסטר עם ערך לא-אפס מובטח (אז יקפוץ תמיד — שווה ל-JMP).
+2. **"לא אבדנו את R1?"** — מועמדים מנסים "להעתיק" עם הוראה שלא קיימת (\`MOV\`). פתרון: לפרק את R1 תוך הגדלת R3 וגם של עותק R4, ואז לשחזר את R1 מ-R4. שני "מעברי-פירוק" — זו תובנת המפתח.
+3. **"\`CLR\` באמת מיותר?"** — שאלת המשך נפוצה. תשובה טובה: כן, אבל **רק בזמן ריצה**. בהיבט סינתזה/ASIC, \`CLR\` הוא "פעולה במחזור אחד" ובלעדיו צריך 15 מחזורים. אז ויתור עליו = הפסד ביצועים אבל לא ביכולת.`,
+        expectedAnswers: [
+          'INC', 'DEC', 'CLR', 'JUMP',
+          'R4', 'backup', 'עזר', 'copy', 'restore', 'שחזור',
+          'unconditional', 'לא מותנה', 'לא-מותנה',
+          'מיותר', 'redundant', 'omit', 'ויתור',
+        ],
+      },
+      {
+        label: 'ב',
+        question:
+`האם הקוד שכתבת עובד נכון גם עבור **מספרים שליליים** בייצוג
+**משלים ל-2** (כלומר R1 או R2 עשויים להיות בין -8 ל-7)?`,
+        hints: [
+          'מה ההוראות \\\`DEC\\\` ו-\\\`JUMP if != 0\\\` "יודעות" על ערך-מספרי לעומת ייצוג-בייטים?',
+          'במשלים ל-2 על 4 ביט: \\\`-1 = 1111\\\` שגם שווה ל-15 בלי-סימן. מה זה אומר על לולאה שיורדת עד 0?',
+          'הקוד יבצע \\\`R2_unsigned\\\` איטרציות. עבור R2=-1, זה 15 איטרציות (לא 1). **התוצאה נשארת נכונה מודולו 16** (כפל-מודולרי = משלים-ל-2), אבל הביצועים מתפוצצים.',
+        ],
+        answer:
+`**לא — הקוד שגוי על מספרים שליליים.** הסיבה: הוא **לא מודע לסימן**.
+
+**דוגמה.** R1 = 2, R2 = -1 = \`1111\` (=15 בלי-סימן).
+תוצאה צפויה (משלים ל-2): \`R3 = 2 * (-1) = -2 = 1110\` (=14 בלי-סימן).
+תוצאה בפועל: הקוד יבצע 15 איטרציות של "להוסיף 2 ל-R3" = \`R3 = 30 mod 16 = 14\`. **במקרה זה** התוצאה במשלים ל-2 נכונה! \`14 = -2\` ב-4 ביט.
+
+**בדיקה רחבה יותר.** הסיבה שזה עבד היא **פלא חשבוני**: כפל מודולו \`2^4\` תואם כפל במשלים ל-2 כל עוד התוצאה בטווח. במשלים ל-2, \`a * b mod 2^n\` שווה ל-\`a * b\` כל עוד אין גלישה.
+
+**אבל יש מלכודת.** עבור R1 שלילי, מה קורה? R1 שלילי \`= R1_unsigned\` ערך גדול. הלולאה הפנימית מפרקת אותו תוך \`R1_unsigned\` שלבים — וזה **לוקח הרבה זמן** (~15 שלבים פנימיים לכל איטרציה חיצונית), אבל מתמטית התוצאה עדיין נכונה מודולו 16.
+
+**מסקנה:**
+
+| תכונה | מצב |
+|---|---|
+| **קורקטיות** (בתוצאה) | ✅ נכון תמיד מודולו \`2^4\` — וזה אכן המשלים-ל-2 הנכון |
+| **ביצועים** | ❌ ערכים שליליים מבוצעים בזמן בלתי-נכון: -1 נדרש 15 שלבים, לא 1 |
+| **גלישה (overflow)** | ⚠️ אם התוצאה לא נכנסת ב-4 ביט (לדוגמה 3*3=9 שלא נכנס בטווח -8..7), התוצאה תיגלוש — וזה צפוי בכפל 4×4 → 8 ביט |
+
+**הקוד שלך מבחינה אריתמטית עובד**, אבל **לא יעיל** עבור ערכים שליליים, ו**גולש** באופן צפוי על כפל גדול. במעבד אמיתי היו בודקים את הסימן מראש והופכים ל-abs לפני הלולאה — חסכון משמעותי בזמן.`,
+        interviewerMindset:
+`זו שאלת המשך **חישוב מודולרי**. המראיין רוצה לראות:
+
+1. **שאתה מבחין בין "סימן" ל"ערך בלי-סימן"** — הלולאה שלך לא יודעת על סימן. היא רואה \`R2 = 15\` ועושה 15 איטרציות, גם אם המתכנת חושב על זה כ-\`-1\`.
+2. **שאתה מכיר את הפלא: כפל במשלים-ל-2 = כפל בלי-סימן מודולו \`2^n\`.** זה לא קסם — זה תוצאה ישירה של איך משלים ל-2 בנוי. שווה לדעת.
+3. **שאתה מתחיל לחשוב על ביצועים אחרי שווידאת קורקטיות.** "נכון אבל איטי" זו תשובה שונה מ-"שגוי". הראשונה ראויה לציון מעבר. השנייה — לא.
+
+**אם אתה רוצה לזרוק "wow":** הצע אופטימיזציה — "נבדוק תחילה את הסימן של R2, נקח \`abs\` שלו (= INC עד 0 אם שלילי), נריץ את הלולאה, ואז נשלים את הסימן של התוצאה". זה דורש להבחין שלילי-vs-חיובי, מה שדורש בדיקה של ה-MSB. שאל אם זה רלוונטי לפני שאתה צולל.`,
+        expectedAnswers: [
+          'משלים ל-2', "two's complement", "twos complement", '2s complement',
+          'overflow', 'גלישה', 'sign', 'סימן',
+          'modulo', 'מודולו', '2^4', '16',
+          'abs', 'absolute',
+          'unsigned', 'לא יעיל', 'ביצועים',
+        ],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 5)',
+    tags: ['algorithms', 'isa', 'assembly', 'two-complement', 'puzzle', 'pseudo-code'],
+  },
+];

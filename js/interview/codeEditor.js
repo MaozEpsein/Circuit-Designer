@@ -1,14 +1,15 @@
 /**
  * codeEditor.js — lazy CodeMirror 6 wrapper for the INTERVIEW panel.
  *
- * Why lazy: CodeMirror is only relevant for the handful of Verilog
- * questions. We import it dynamically (from esm.sh) the first time a
- * Verilog editor is requested, so users who never open a Verilog
+ * Why lazy: CodeMirror is only relevant for the handful of Verilog /
+ * Python questions. We import it dynamically (from esm.sh) the first
+ * time a code editor is requested, so users who never open such a
  * question pay zero bytes for the editor.
  *
  * Public API:
- *   await createVerilogEditor({ container, initialDoc, onChange })
+ *   await createVerilogEditor({ container, initialDoc, onChange, language })
  *     → { getValue, setValue, destroy, dom, focus }
+ *   `language` (optional, default 'verilog'): 'verilog' | 'python'.
  */
 
 const ESM = 'https://esm.sh';
@@ -17,13 +18,14 @@ let _libPromise = null;
 function _loadLib() {
   if (_libPromise) return _libPromise;
   _libPromise = (async () => {
-    const [cmMod, stateMod, viewMod, langMod, cmdMod, vlogMod, themeMod] = await Promise.all([
+    const [cmMod, stateMod, viewMod, langMod, cmdMod, vlogMod, pyMod, themeMod] = await Promise.all([
       import(`${ESM}/codemirror@6.0.1`),
       import(`${ESM}/@codemirror/state@6`),
       import(`${ESM}/@codemirror/view@6`),
       import(`${ESM}/@codemirror/language@6`),
       import(`${ESM}/@codemirror/commands@6`),
       import(`${ESM}/@codemirror/legacy-modes@6/mode/verilog`),
+      import(`${ESM}/@codemirror/legacy-modes@6/mode/python`),
       import(`${ESM}/@codemirror/theme-one-dark@6`),
     ]);
     return {
@@ -34,6 +36,7 @@ function _loadLib() {
       StreamLanguage: langMod.StreamLanguage,
       indentWithTab: cmdMod.indentWithTab,
       verilog:       vlogMod.verilog,
+      python:        pyMod.python,
       oneDark:       themeMod.oneDark,
     };
   })();
@@ -49,18 +52,25 @@ function _loadLib() {
  * keep its cached typed-answer in sync so the value survives renders
  * that detach/reattach the editor.
  */
-export async function createVerilogEditor({ container, initialDoc = '', onChange } = {}) {
+export async function createVerilogEditor({ container, initialDoc = '', onChange, language = 'verilog' } = {}) {
   const lib = await _loadLib();
+  // Pick the highlighter mode for the requested language. Defaults to
+  // verilog for backward compatibility — questions that don't specify
+  // a `language` still behave as before.
+  const langMode = (language === 'python') ? lib.python : lib.verilog;
 
   const themeExt = lib.EditorView.theme({
     '&': {
       height: '320px',
-      fontSize: '13px',
+      // Bumped from 13px → 22px so Hebrew-speaking users on a 0.8x
+      // body-zoom monitor don't squint at the CodeMirror buffer.
+      // Matches the prose-text scale used elsewhere in the panel.
+      fontSize: '22px',
       borderRadius: '4px',
     },
     '.cm-scroller': {
       fontFamily: "'JetBrains Mono', 'Consolas', monospace",
-      lineHeight: '1.5',
+      lineHeight: '1.55',
     },
     '.cm-gutters': {
       backgroundColor: '#10131a',
@@ -84,7 +94,7 @@ export async function createVerilogEditor({ container, initialDoc = '', onChange
       // take precedence.
       lib.keymap.of([lib.indentWithTab]),
       lib.basicSetup,
-      lib.StreamLanguage.define(lib.verilog),
+      lib.StreamLanguage.define(langMode),
       // Soft-wrap long lines so the user doesn't get horizontal scroll
       // inside the narrow interview panel.
       lib.EditorView.lineWrapping,

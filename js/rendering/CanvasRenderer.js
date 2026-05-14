@@ -44,8 +44,24 @@ export function init(canvasEl) {
 }
 
 export function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  // Two related-but-distinct sizes:
+  //   * canvas.width / height   — backing-store (pixel buffer) size.
+  //   * canvas.style.width/height — CSS display size.
+  // If the two disagree the browser stretches the buffer to fit the
+  // display, which silently scales every drawn pixel and breaks the
+  // 1:1 mapping between e.clientX and our internal coordinates. The
+  // drag math is correct but the *displayed* node sits a fraction of
+  // its rendered position away from the cursor.
+  //
+  // Use the element's measured display size (CSS pixels) for both
+  // dimensions; that guarantees no stretch regardless of scrollbars,
+  // sidebars, or zoom-level CSS quirks.
+  const cssW = canvas.clientWidth  || window.innerWidth;
+  const cssH = canvas.clientHeight || window.innerHeight;
+  canvas.width  = cssW;
+  canvas.height = cssH;
+  W = cssW;
+  H = cssH;
 }
 
 // ── Initial offset (design mode — no auto-center) ───────────
