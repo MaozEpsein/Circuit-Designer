@@ -1003,6 +1003,113 @@ function _twoSumSvg(arr, cur, seen, need, found, matchIdx) {
   </svg>`;
 }
 
+// ─── Dutch-flag SVG — 3-way partition with low/mid/high pointers ────
+// Renders a row of colored circles with three labeled pointer arrows.
+// Colors map: 'R'→red, 'Y'→yellow, 'G'→green. The pointer arrows are
+// labelled `low`, `mid`, `high` and glow when a swap just happened at
+// their position.
+function _dutchFlagSvg({ arr, low, mid, high, swapped, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 70, R = 26;
+  const n = arr.length;
+  const W = Math.max(720, n * CELL + 80);
+  const rowY = 140;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+
+  const colorOf = { R: '#ff6060', Y: '#ffd060', G: '#80f0a0' };
+
+  // Balls
+  const balls = arr.map((c, i) => {
+    const cx = left + i * CELL + CELL / 2;
+    const isLow = i === low, isMid = i === mid, isHigh = i === high;
+    const focused = isLow || isMid || isHigh;
+    const ringStroke = (done && i < low) ? '#ff6060'
+                     : (done && i > high) ? '#80f0a0'
+                     : focused ? (done ? '#ffd060' : '#39ff80') : '#3a5575';
+    const ringW = focused ? 3 : 1.5;
+    const filter = focused ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    return `
+      <g style="animation: ${D.animPop} 280ms ${i * 30}ms both;">
+        <text x="${cx}" y="${rowY - 42}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#7090b0" font-weight="bold">[${i}]</text>
+        <circle cx="${cx}" cy="${rowY}" r="${R}"
+                fill="${colorOf[c] || '#888'}"
+                stroke="${ringStroke}" stroke-width="${ringW}" ${filter}/>
+      </g>`;
+  }).join('');
+
+  // Pointer arrows above each labeled position. We stack them when
+  // pointers collide so labels don't overlap.
+  const ptrColor = done ? '#ffd060' : '#80f0a0';
+  const ptr = (label, idx, yOff) => {
+    if (idx < 0 || idx >= n) return '';
+    const cx = left + idx * CELL + CELL / 2;
+    return `
+      <g style="animation: ${D.animFade} 320ms 200ms both;">
+        <text x="${cx}" y="${rowY - 70 + yOff}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="18"
+              fill="${ptrColor}" font-weight="bold">${label}</text>
+        <path d="M ${cx} ${rowY - 60 + yOff} L ${cx - 6} ${rowY - 46 + yOff} L ${cx + 6} ${rowY - 46 + yOff} z"
+              fill="${ptrColor}"/>
+      </g>`;
+  };
+  // If two pointers share a position, stagger them vertically.
+  const yOf = { low: 0, mid: 0, high: 0 };
+  if (low === mid)  yOf.mid = -22;
+  if (mid === high) yOf.high = (low === mid ? -44 : -22);
+  if (low === high && low !== mid) yOf.high = -22;
+  const pointers = ptr('low', low, yOf.low)
+                 + ptr('mid', mid, yOf.mid)
+                 + ptr('high', high, yOf.high);
+
+  // Swap arc below the row, if any swap happened this step.
+  let swap = '';
+  if (swapped && swapped.length === 2) {
+    const [a, b] = swapped;
+    const xa = left + a * CELL + CELL / 2;
+    const xb = left + b * CELL + CELL / 2;
+    const arcY = rowY + R + 24;
+    swap = `
+      <g style="animation: ${D.animFade} 480ms both;">
+        <path d="M ${xa} ${rowY + R + 4} C ${xa} ${arcY + 20}, ${xb} ${arcY + 20}, ${xb} ${rowY + R + 4}"
+              stroke="${ptrColor}" stroke-width="2.5" fill="none"
+              stroke-dasharray="6 4"
+              filter="${done ? D.glowGold : D.glowCyan}"
+              style="animation: ${D.animDash} 1.2s linear infinite;"/>
+        <text x="${(xa + xb) / 2}" y="${arcY + 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="15"
+              fill="${ptrColor}" font-weight="bold">swap</text>
+      </g>`;
+  }
+
+  // Title banner
+  const bannerText = done ? 'sorted: red ◀ yellow ◀ green' : `low=${low}, mid=${mid}, high=${high}`;
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 220}" y="14" width="440" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="19"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + bannerText : bannerText}
+      </text>
+    </g>`;
+
+  const H = rowY + R + (swap ? 80 : 30);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${pointers}
+    ${balls}
+    ${swap}
+  </svg>`;
+}
+
 /**
  * IQ — algorithms questions.
  * Algorithmic / programming interview questions. Solutions are written
@@ -1778,35 +1885,68 @@ def two_sum_brute(nums, target):
         ],
         trace: {
           title: 'Two Sum — nums=[3, 7, 1, 11, 2, 9], target=11',
+          // Full source rendered in the side panel of the full-screen
+          // view. Line numbers below are 1-indexed against this string.
+          source:
+`def two_sum(nums, target):
+    seen = {}                       # value → index
+    for j, x in enumerate(nums):
+        need = target - x
+        if need in seen:
+            return [seen[need], j]
+        seen[x] = j
+    return None`,
+          sourceLang: 'python',
+          // Source line numbers (1-indexed against trace.source):
+          //   1: def two_sum(nums, target):
+          //   2:     seen = {}                       # value → index
+          //   3:     for j, x in enumerate(nums):
+          //   4:         need = target - x
+          //   5:         if need in seen:
+          //   6:             return [seen[need], j]      ← only on found
+          //   7:         seen[x] = j                     ← only on not-found
+          //   8:     return None                         ← only if loop exhausts
           steps: [
             {
               code: 'j=0, x=3,  need = 11-3 = 8',
-              explain: 'מתחילים. \`seen\` ריק. \`8\` לא נראה — מוסיפים \`seen[3]=0\` וממשיכים.',
+              explain: 'מתחילים. \`seen\` ריק. הלולאה מעדכנת \`j, x\` (שורה 3), מחושב \`need\` (שורה 4), נבדק (שורה 5) → לא בפנים. שורה 6 מדולגת. נשמר \`seen[3]=0\` (שורה 7).',
+              executed: [3, 4, 5, 7],
+              focusLine: 7,
               viz: _twoSumSvg([3,7,1,11,2,9], 0, {3:0}, 8, false, null),
             },
             {
               code: 'j=1, x=7,  need = 11-7 = 4',
-              explain: '\`4\` לא נראה — מוסיפים \`seen[7]=1\`.',
+              explain: '\`4\` לא נראה — שוב נדלגים על \`return\` ושומרים \`seen[7]=1\`.',
+              executed: [3, 4, 5, 7],
+              focusLine: 7,
               viz: _twoSumSvg([3,7,1,11,2,9], 1, {3:0,7:1}, 4, false, null),
             },
             {
               code: 'j=2, x=1,  need = 11-1 = 10',
-              explain: '\`10\` לא נראה — מוסיפים \`seen[1]=2\`.',
+              explain: '\`10\` לא נראה — אותו מסלול. \`seen[1]=2\`.',
+              executed: [3, 4, 5, 7],
+              focusLine: 7,
               viz: _twoSumSvg([3,7,1,11,2,9], 2, {3:0,7:1,1:2}, 10, false, null),
             },
             {
               code: 'j=3, x=11, need = 11-11 = 0',
-              explain: '\`0\` לא נראה — מוסיפים \`seen[11]=3\`.',
+              explain: '\`0\` לא נראה — \`seen[11]=3\`.',
+              executed: [3, 4, 5, 7],
+              focusLine: 7,
               viz: _twoSumSvg([3,7,1,11,2,9], 3, {3:0,7:1,1:2,11:3}, 0, false, null),
             },
             {
               code: 'j=4, x=2,  need = 11-2 = 9',
-              explain: '\`9\` לא נראה — מוסיפים \`seen[2]=4\`. **בדיוק לפני המציאה.**',
+              explain: '\`9\` לא נראה — \`seen[2]=4\`. **בדיוק לפני המציאה.**',
+              executed: [3, 4, 5, 7],
+              focusLine: 7,
               viz: _twoSumSvg([3,7,1,11,2,9], 4, {3:0,7:1,1:2,11:3,2:4}, 9, false, null),
             },
             {
               code: 'j=5, x=9,  need = 11-9 = 2  ✓',
-              explain: '\`2\` נמצא ב-\`seen\` ב-index 4. מחזירים **[4, 5]**. סך הכל: מעבר יחיד.',
+              explain: 'הפעם \`2\` ב-\`seen\` (\`seen[2]=4\`) → התנאי בשורה 5 אמיתי, אנחנו לוקחים את שורה 6 ומחזירים \`[4, 5]\`. שורה 7 כבר לא רצה.',
+              executed: [3, 4, 5, 6],
+              focusLine: 6,
               viz: _twoSumSvg([3,7,1,11,2,9], 5, {3:0,7:1,1:2,11:3,2:4}, 2, true, 4),
             },
           ],
@@ -2164,5 +2304,628 @@ end:
     ],
     source: 'PP - שאלות קוד (slide 5)',
     tags: ['algorithms', 'isa', 'assembly', 'two-complement', 'puzzle', 'pseudo-code'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8006 — Rand3() from BinaryRand() (rejection sampling)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'rand3-from-binaryrand',
+    difficulty: 'medium',
+    title: 'Rand3() מ-BinaryRand() — דגימת דחייה',
+    intro:
+`נתונה הפונקציה \`BinaryRand()\` שמחזירה \`0\` או \`1\` בהסתברות שווה
+(\`½\` לכל אחד). עליכם לממש \`Rand3()\` שמחזירה \`0\`, \`1\` או \`2\`
+בהסתברות שווה (\`⅓\` לכל אחד).
+
+**אסור** להשתמש בפעולת **כפל**, חילוק או \`%\` — רק חיבור/חיסור/השוואות
+ולוגיקה. (מי שמכיר את ה"טריק" של \`bit1 * 2 + bit0\` — זה לא הולך כאן.)`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time (avg)',  value: 'O(1)' },
+          { label: 'Time (worst)', value: '∞ (rejection)' },
+          { label: 'Space',       value: 'O(1)' },
+        ],
+        starterCode:
+`def BinaryRand():
+    """Black box — returns 0 or 1 with probability 1/2 each."""
+    import random
+    return random.randint(0, 1)
+
+
+def Rand3():
+    """Return 0, 1, or 2 with equal probability. No *, /, or %."""
+    # TODO
+    pass
+`,
+        question:
+`ממשו את \`Rand3()\`. מה היתרון של שתי קריאות ל-\`BinaryRand\`? למה נדרשת לולאת \`while\`?`,
+        hints: [
+          'אם תקרא ל-BinaryRand פעמיים, כמה תוצאות שונות אפשריות? באיזו הסתברות כל אחת?',
+          'שתי קריאות → 4 צירופים שווי-הסתברות (00, 01, 10, 11). הקבוצה הראשונה מכילה 3 — צייר התאמה ל-0/1/2 ו"זרוק" את הרביעי.',
+          'אם הצירוף הוא הרביעי (e.g. שני בודדים), חזור על התהליך. זה "rejection sampling" — מקבל בממוצע אחרי \`4/3 ≈ 1.33\` ניסיונות (כלומר \`~2.67\` קריאות ל-BinaryRand).',
+        ],
+        answer:
+`**Rejection sampling.** שתי קריאות עצמאיות ל-BinaryRand יוצרות 4 תוצאות שווי-הסתברות. שלוש מהן מקבילות ל-{0,1,2}; הרביעית נדחית.
+
+\`\`\`python
+def Rand3():
+    while True:
+        a = BinaryRand()
+        b = BinaryRand()
+        # 00 → 0, 01 → 1, 10 → 2, 11 → reject and retry
+        if a == 0 and b == 0: return 0
+        if a == 0 and b == 1: return 1
+        if a == 1 and b == 0: return 2
+        # else: 11 — retry
+\`\`\`
+
+**ניתוח הסתברות.** הסתברות לקבל תוצאה תקפה בניסיון אחד: \`3/4\`.
+מספר הניסיונות עד הצלחה: התפלגות גיאומטרית עם \`p = 3/4\` ⇒
+\`E[ניסיונות] = 1/p = 4/3\` ⇒ ~\`2.67\` קריאות ל-BinaryRand בממוצע.
+
+**הסתברות לכל פלט.** P(0) = P(00) = ¼ + ¼·P(0|reject) = ¼ + ¼·⅓... בעצם פשוט:
+מתוך 3 התוצאות התקפות, כל אחת בסבירות שווה ⇒ \`P(0) = P(1) = P(2) = ⅓\`. ✓
+
+**איזה תוצאות פשוטות לא יעבדו?**
+- \`a + b\` מחזיר {0, 1, 2} אבל בסבירות \`{¼, ½, ¼}\` — לא אחיד.
+- \`(a ‖ b) + ...\` רוב הגרסאות נכשלות באותה בעיה.
+
+---
+
+**שלבי החשיבה:**
+
+1. **שני biased-bits = 4 צירופים שווי-הסתברות** — תמיד הצעד הראשון לקחת מטבע עם 2 ערכים והמיר אותו לטריאלי.
+2. **הסר עודף — לא תזניק** — אסור להניח \`P(0) = P(00 + 11)\` כי 11 צריך להיות "מחוץ למשחק", לא נכלל באף תוצאה.
+3. **למה while?** בלי לולאה, יש סבירות חיובית להחזיר ערך לא-תקין. הצורך לסיים בלולאה הוא ההכרח של rejection sampling — לוקח זמן בלתי-חסום בגרוע ביותר, אבל O(1) בממוצע.`,
+        interviewerMindset:
+`שאלת ראיון "סוס עבודה" שבודקת שתי דברים:
+
+1. **שאתה מבחין שלמטבע 2-מצבי אי-אפשר להמיר ישירות ל-3-מצבי שווה.** ה-3 אינו חזקה של 2. רק שילוב + רידוד יכול להגיע ל-3 הסתברויות שוות. מועמד שמנסה \`if BinaryRand(): return 0; else: return random.choice([1,2])\` או דומה — נכשל.
+
+2. **שאתה מבין שזמן ריצה לא-חסום הוא לגיטימי.** "מה אם זה רץ לעד?" — תשובה: ההסתברות לכך היא \`(1/4)^k → 0\`. הצפי O(1). הצגת הניתוח של \`E = 4/3\` היא ההוכחה שהפתרון אופטימלי בהינתן ה-API.
+
+**שאלת המשך נפוצה:** "ממש \`RandN()\` לכל N." — תשובה: קח \`⌈log₂(N)⌉\` ביטים, אם הערך < N → return, אחרת retry. אותה רעיון.`,
+        expectedAnswers: ['while', 'rejection', 'דחייה', 'reject', 'retry', '4/3', '2.67', 'two calls', 'שתי קריאות'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 6)',
+    tags: ['algorithms', 'probability', 'rejection-sampling', 'rand3', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8007 — Dutch National Flag (3-way partition, in-place)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'dutch-national-flag',
+    difficulty: 'medium',
+    title: 'מיון 3-צבעים במקום — Dutch National Flag',
+    intro:
+`נתון מערך של כדורים בשלושה צבעים — **אדום**, **צהוב**, **ירוק**.
+עליכם לסדר את המערך כך שכל האדומים יהיו **בהתחלה**, אחריהם הצהובים,
+ובסוף הירוקים — **בלי זיכרון נוסף** (\`O(1)\` מקום).
+
+\`\`\`
+Input:  [R, Y, G, R, Y, R, G, R, G, Y]   (10 כדורים, מעורבבים)
+Output: [R, R, R, R, Y, Y, Y, G, G, G]
+\`\`\`
+
+זוהי הבעיה הקלאסית **Dutch National Flag** של אדסגר דייקסטרה (1976) —
+\`O(n)\` זמן ב-pass יחיד.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def sort_balls(arr):
+    """Sort balls in-place: all 'R' first, then 'Y', then 'G'.
+    No extra memory; one pass."""
+    # TODO: שלושה מצביעים — low, mid, high
+    pass
+
+
+# arr = list("RYGRYRGRGY")
+# sort_balls(arr)
+# assert ''.join(arr) == "RRRRYYYGGG"
+`,
+        question:
+`ממשו את \`sort_balls(arr)\` ב-Python. השתמשו ב-3 מצביעים בלבד. מהי המשמעות של כל מצביע?`,
+        hints: [
+          'מה אם נשתמש בשתי לולאות נפרדות — אחת לאדומים, אחת לירוקים? למה זה לא \`O(n)\` בpass יחיד?',
+          'שלושה מצביעים: \`low\` (גבול בין אדומים-לצהובים), \`mid\` (איבר נוכחי), \`high\` (גבול בין צהובים-לירוקים). הרעיון: \`mid\` סורק; כשהוא רואה אדום — swap עם \`low\`. ירוק — swap עם \`high\`. צהוב — לא נוגעים.',
+          'אחרי swap עם \`low\` → גם \`low\` וגם \`mid\` עולים (כי שני הצדדים תקינים).\nאחרי swap עם \`high\` → רק \`high\` יורד (לא \`mid\`!) — כי לא בדקנו עדיין מה הגיע ל-\`mid\` מ-\`high\`. צהוב — רק \`mid\` עולה.',
+        ],
+        trace: {
+          title: 'Dutch National Flag — arr=[R,Y,G,R,Y,R,G,R,G,Y]',
+          source:
+`def sort_balls(arr):
+    low, mid, high = 0, 0, len(arr) - 1
+    while mid <= high:
+        if arr[mid] == 'R':
+            arr[low], arr[mid] = arr[mid], arr[low]
+            low += 1
+            mid += 1
+        elif arr[mid] == 'G':
+            arr[mid], arr[high] = arr[high], arr[mid]
+            high -= 1
+        else:                                # 'Y'
+            mid += 1`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: low=0, mid=0, high=9   (n=10)',
+              explain: 'שלושה מצביעים — \`low\` ו-\`mid\` בקצה השמאלי, \`high\` בימני. הלולאה רצה כל עוד \`mid <= high\`.',
+              executed: [1, 2, 3], focusLine: 2,
+              viz: _dutchFlagSvg({ arr: ['R','Y','G','R','Y','R','G','R','G','Y'], low: 0, mid: 0, high: 9 })
+            },
+            { code: 'arr[0]=R → swap(low, mid), low++, mid++',
+              explain: 'אדום במקום הנכון — swap עצמי (low==mid), שני המצביעים מתקדמים.',
+              executed: [3, 4, 5, 6, 7], focusLine: 5,
+              viz: _dutchFlagSvg({ arr: ['R','Y','G','R','Y','R','G','R','G','Y'], low: 1, mid: 1, high: 9, swapped: [0,0] })
+            },
+            { code: 'arr[1]=Y → mid++   (no swap)',
+              explain: 'צהוב — כבר במרכז, אין מה לעשות. רק \`mid\` עולה.',
+              executed: [3, 11, 12], focusLine: 12,
+              viz: _dutchFlagSvg({ arr: ['R','Y','G','R','Y','R','G','R','G','Y'], low: 1, mid: 2, high: 9 })
+            },
+            { code: 'arr[2]=G → swap(mid, high), high--',
+              explain: 'ירוק — swap עם הגבול הימני, \`high\` יורד. **mid לא עולה!** כי לא בדקנו עדיין מה הגיע מ-\`high\` ל-\`mid\`.',
+              executed: [3, 8, 9, 10], focusLine: 9,
+              viz: _dutchFlagSvg({ arr: ['R','Y','Y','R','Y','R','G','R','G','G'], low: 1, mid: 2, high: 8, swapped: [2,9] })
+            },
+            { code: 'arr[2]=Y → mid++',
+              explain: 'נחקרים שוב את \`mid=2\` — הפעם הוא צהוב. \`mid\` עולה.',
+              executed: [3, 11, 12], focusLine: 12,
+              viz: _dutchFlagSvg({ arr: ['R','Y','Y','R','Y','R','G','R','G','G'], low: 1, mid: 3, high: 8 })
+            },
+            { code: 'arr[3]=R → swap(low, mid), low++, mid++',
+              explain: 'אדום באמצע — swap עם \`low=1\` (היה צהוב). אדום הולך שמאלה, צהוב נעלה.',
+              executed: [3, 4, 5, 6, 7], focusLine: 5,
+              viz: _dutchFlagSvg({ arr: ['R','R','Y','Y','Y','R','G','R','G','G'], low: 2, mid: 4, high: 8, swapped: [1,3] })
+            },
+            { code: 'arr[4]=Y → mid++',
+              explain: 'צהוב — \`mid\` עולה ל-5.',
+              executed: [3, 11, 12], focusLine: 12,
+              viz: _dutchFlagSvg({ arr: ['R','R','Y','Y','Y','R','G','R','G','G'], low: 2, mid: 5, high: 8 })
+            },
+            { code: 'arr[5]=R → swap(low=2, mid=5), low++, mid++',
+              explain: 'עוד אדום — swap עם \`low=2\` (היה צהוב).',
+              executed: [3, 4, 5, 6, 7], focusLine: 5,
+              viz: _dutchFlagSvg({ arr: ['R','R','R','Y','Y','Y','G','R','G','G'], low: 3, mid: 6, high: 8, swapped: [2,5] })
+            },
+            { code: 'arr[6]=G → swap(mid=6, high=8), high--',
+              explain: 'ירוק — swap עם \`high=8\` (היה ירוק! swap עצמי-בערך). \`high\` יורד ל-7.',
+              executed: [3, 8, 9, 10], focusLine: 9,
+              viz: _dutchFlagSvg({ arr: ['R','R','R','Y','Y','Y','G','R','G','G'], low: 3, mid: 6, high: 7, swapped: [6,8] })
+            },
+            { code: 'arr[6]=G → swap(mid=6, high=7), high--',
+              explain: 'עדיין ירוק ב-\`mid=6\` (לא התקדמנו אחרי הצעד הקודם). swap עם \`high=7\` שהיה R.',
+              executed: [3, 8, 9, 10], focusLine: 9,
+              viz: _dutchFlagSvg({ arr: ['R','R','R','Y','Y','Y','R','G','G','G'], low: 3, mid: 6, high: 6, swapped: [6,7] })
+            },
+            { code: 'arr[6]=R → swap(low=3, mid=6), low++, mid++',
+              explain: 'אדום ב-\`mid=6\` — swap עם \`low=3\` (היה צהוב).',
+              executed: [3, 4, 5, 6, 7], focusLine: 5,
+              viz: _dutchFlagSvg({ arr: ['R','R','R','R','Y','Y','Y','G','G','G'], low: 4, mid: 7, high: 6, swapped: [3,6] })
+            },
+            { code: 'mid > high → loop exits ✓',
+              explain: 'הלולאה מסיימת: \`mid=7 > high=6\`. המערך ממויין: \`[R,R,R,R | Y,Y,Y | G,G,G]\`. הכל ב-pass יחיד, O(1) מקום נוסף.',
+              executed: [], focusLine: 2,
+              viz: _dutchFlagSvg({ arr: ['R','R','R','R','Y','Y','Y','G','G','G'], low: 4, mid: 7, high: 6, done: true })
+            },
+          ],
+        },
+        answer:
+`**3-way partition (Dijkstra).** מצביע אחד סורק (\`mid\`); שני אחרים שומרים על הגבולות בין שלוש הקבוצות.
+
+**אינווריאנט:**
+- \`arr[0..low-1]\` = אדומים בלבד (כבר במקום)
+- \`arr[low..mid-1]\` = צהובים (כבר במקום)
+- \`arr[mid..high]\` = לא-בדוק עדיין (זה האזור שעובדים עליו)
+- \`arr[high+1..n-1]\` = ירוקים בלבד (כבר במקום)
+
+**טיפול לפי מה ש-\`mid\` רואה:**
+- **R**: swap עם \`low\`, אחר כך \`low++\` ו-\`mid++\` (האדום עכשיו ב-low, מה שהיה ב-low הוא צהוב/בדוק → גם הוא נופל לקטע "סדור").
+- **Y**: כבר במקום הנכון. \`mid++\`.
+- **G**: swap עם \`high\`, \`high--\`. **\`mid\` לא עולה!** — מה שהגיע מ-high הוא לא-בדוק עדיין.
+
+**מתי הלולאה עוצרת?** כש-\`mid > high\` — כל הקטע "לא-בדוק" התרוקן.`,
+        interviewerMindset:
+`שתי טעויות שהמראיין מחכה להן:
+
+1. **לעלות mid אחרי swap עם high.** זו הטעות הקלאסית. אחרי swap עם high, מה שהגיע ל-mid עדיין לא נבדק — חייב לחזור עליו. מועמדים שלא רואים את ההבחנה הזו יקבלו תוצאה שגויה למערכים מסוימים.
+2. **לולאות נפרדות לכל צבע (counting sort)** — עובד ב-\`O(n)\`, אבל **דורש שני passes** (סופרים + כותבים) או \`O(k)\` מקום נוסף (3 שדות). הראיון שואל **pass יחיד** עם \`O(1)\` מקום — DNF היא התשובה.
+
+**שאלת המשך נפוצה:** "ומה אם יש N צבעים?" — תשובה: זו כבר בעיית מיון רגילה (\`O(n log n)\` עם quicksort הכללי). DNF היא תכונה מיוחדת של \`k=3\` — שלושה מצביעים מספיקים.`,
+        expectedAnswers: ['low', 'mid', 'high', 'swap', '3-way', 'partition', 'Dijkstra', 'dutch'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 7)',
+    tags: ['algorithms', 'array', 'in-place', 'two-pointer', '3-way-partition', 'dijkstra', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8008 — Valid parentheses (stack), part ב adds '||'
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'valid-parentheses',
+    difficulty: 'easy',
+    title: 'סוגריים תקינים — בסיסי + מצב המתקדם עם ||',
+    intro:
+`נתון ביטוי שמכיל סוגי סוגריים: \`(\`, \`)\`, \`[\`, \`]\`, \`{\`, \`}\`.
+ביטוי **תקין** אם כל סוגר נסגר ב**אותו סוג** ובסדר הנכון של קינון.
+
+\`\`\`
+"([]){}"     → תקין
+"([)]"       → לא תקין    (חוצים זה את זה)
+"(("         → לא תקין    (לא נסגר)
+"]"          → לא תקין    (סגירה בלי פתיחה)
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(n)' },
+        ],
+        starterCode:
+`def is_valid(s):
+    """Returns True iff parentheses in s are balanced and correctly nested.
+    Allowed: ( ) [ ] { }."""
+    # TODO: stack — push opens, pop on close, match the pair
+    pass
+
+
+# print(is_valid("([]){}"))    # True
+# print(is_valid("([)]"))      # False
+# print(is_valid("]"))         # False
+`,
+        question:
+`ממשו את \`is_valid(s)\`. איזה מבנה נתונים הופך את הבעיה לטריוויאלית?`,
+        hints: [
+          'מה הסדר הטבעי של "הסוגר האחרון שנפתח" → "הראשון שצריך להיסגר"?',
+          'LIFO — סטאק. בכל פתיחה דוחפים, בכל סגירה — מציצים ובודקים שזה התאמה.',
+          'בסוף, הסטאק צריך להיות **ריק**. אחרת — נשארו פתיחות לא-סגורות. גם פספוס pop (סטאק ריק בסגירה) → לא תקין.',
+        ],
+        answer:
+`**Stack-based.** \`O(n)\` זמן, \`O(n)\` מקום (גרוע ביותר — כל הקלט הוא פתיחות).
+
+\`\`\`python
+def is_valid(s):
+    pairs = {')': '(', ']': '[', '}': '{'}
+    stack = []
+    for c in s:
+        if c in '([{':
+            stack.append(c)
+        elif c in ')]}':
+            if not stack or stack[-1] != pairs[c]:
+                return False
+            stack.pop()
+        # ignore non-bracket chars (or raise if strict)
+    return not stack
+\`\`\`
+
+**שלושה תרחישי כשל:**
+1. **סגירה בלי פתיחה** — \`stack\` ריק כשרואים סוגר סוגר ⇒ \`False\`.
+2. **חוסר התאמה** — top של הסטאק לא תואם לסוגר הסוגר ⇒ \`False\`.
+3. **פתיחות שלא נסגרו** — בסוף הסטאק לא ריק ⇒ \`False\`.
+
+**שלבי החשיבה:**
+
+1. **למה stack?** — הקינון של סוגריים מקיים LIFO באופן טבעי. הסוגר האחרון שפתחנו הוא הראשון שחייב להיסגר.
+2. **מילון \`pairs\`** ממפה סוגר→פותח — חוסך 6 if-ים נפרדים.
+3. **בדוק \`stack\` ריק לפני pop** — אחרת \`stack.pop()\` יזרוק \`IndexError\` על \`"]"\`.`,
+        interviewerMindset:
+`Valid Parentheses היא **שאלת ה-easy הסטנדרטית** למשרות "junior" — והיא מסננת מועמדים בצורה אכזרית:
+
+1. **מועמד שמשתמש בלולאה nested או counter** — נכשל ב-\`"([)]"\` (אותו מספר פתיחות וסגירות מכל סוג, אבל הסדר חוצה). חייב stack.
+2. **מועמד ששוכח לבדוק stack-ריק לפני pop** — קוד שמתפוצץ ב-\`"]"\`. עלות סיגנל אדום למראיין.
+3. **מועמד ששוכח לבדוק שהסטאק ריק בסוף** — מחזיר True על \`"(("\` שזה תקלה.
+
+מועמד טוב כותב את ההגדרות-מילון ראש לפני שכותב לולאה. זה מראה תכנון.`,
+        expectedAnswers: ['stack', 'סטאק', 'push', 'pop', 'LIFO', 'append', 'pairs', 'dict'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(n)' },
+        ],
+        starterCode:
+`def is_valid_v2(s):
+    """Same as before, plus a fourth bracket: '|'.
+    There is NO distinction between left | and right | — the same
+    char serves as both. Two consecutive | with valid content in
+    between count as a pair: "|abc|" ok, "||" ok (empty inside),
+    "|" or "|||" not balanced."""
+    # TODO
+    pass
+`,
+        question:
+`כעת מוסיפים סוג רביעי: \`|\` שמשמש גם כפותח וגם כסוגר (אין הבחנה). למשל \`|[]|\` חוקי, \`|||\` לא. ממשו.`,
+        hints: [
+          'כש-\`|\` מופיע, איך נדע אם זו פתיחה או סגירה?',
+          'נסה: אם \`|\` נמצא בראש הסטאק — זו סגירה. אחרת — פתיחה. (פעולת toggle לפי המצב הנוכחי).',
+          'הלוגיקה חייבת **לא** להתבלבל עם הסוגריים האחרים: \`|[|]|\` — האם הראשון נסגר ע"י השני? לא, השני מתחיל בלוק חדש. בעצם זה לא תקין כי [ נסגר ב-| במקום ב-].',
+        ],
+        answer:
+`**הרחבת ה-stack לוגיקה.** הסוגר \`|\` מתפקד כ-toggle: כשהוא ב-top של הסטאק → סגירה (pop). אחרת → פתיחה (push).
+
+\`\`\`python
+def is_valid_v2(s):
+    pairs = {')': '(', ']': '[', '}': '{'}
+    opens = '([{'
+    stack = []
+    for c in s:
+        if c == '|':
+            # If '|' is on top, this one closes it. Otherwise opens.
+            if stack and stack[-1] == '|':
+                stack.pop()
+            else:
+                stack.append('|')
+        elif c in opens:
+            stack.append(c)
+        elif c in pairs:
+            if not stack or stack[-1] != pairs[c]:
+                return False
+            stack.pop()
+    return not stack
+\`\`\`
+
+**מקרי קצה:**
+- \`"|abc|"\` → push, push abc(ignored), see |, top is |, pop. סטאק ריק → True.
+- \`"|[]|"\` → push |, push [, pop ] (matches), see |, top is |, pop. True.
+- \`"|[|]|"\` → push |, push [, see |, top is [ (not |), push |. now stack=[|, [, |]. ] arrives, top is |, mismatch → False. ✓
+- \`"||"\` → push |, top is |, pop. ריק → True.
+- \`"|||"\` → push, pop, push. סטאק לא ריק → False.
+
+**שלבי החשיבה:**
+
+1. **קלט דו-משמעי** — \`|\` הוא ה-context-dependent. צריך לחפש סימן שיודיע מי הוא: ה-top של הסטאק.
+2. **ה-top של הסטאק "אומר" לי** — אם הקודם שלי הוא \`|\`, אז אני סוגר אותו. אחרת — אני פותח חדש.
+3. **שאר הלוגיקה לא משתנה** — \`[, ]\` ו-others נשארים זהים. \`|\` לא יכול לסגור \`[\` כי \`pairs[]\` לא מכיל אותו.`,
+        interviewerMindset:
+`שאלת המשך טריקית. השדרוג מ-\`|\` חושף את גמישות הסטאק:
+
+1. **המראיין רוצה לראות שאתה מטפל ב-context-dependence**. סטטוס "פתיחה/סגירה" של אותו תו תלוי בהיסטוריה — וזה בדיוק מה שסטאק נותן.
+2. **מועמד שמנסה לספור \`|\` (אם זוגי = תקין)** — נופל מיד ב-\`"|[|]|"\` (4 \`|\`-ים, זוגיים, אבל הביטוי לא תקין).
+3. **שווה לציין שעם 2 סוגי toggle כאלה הבעיה הופכת context-free-non-LR**. (יותר תיאורטי, אבל סימן לעומק.)
+
+**יישום בעולם האמיתי:** \`||\` כ-OR ב-Verilog/SystemVerilog — לפעמים מופיע בעורכי טקסט סוגרים עם syntax-highlighting.`,
+        expectedAnswers: ['toggle', 'top', 'pop', 'stack', '|'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 8)',
+    tags: ['algorithms', 'stack', 'parsing', 'string', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8009 — Single number via XOR
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'single-number-xor',
+    difficulty: 'easy',
+    title: 'המספר היחיד — XOR trick',
+    intro:
+`נתון מערך מספרים שלמים שבו **כל מספר מופיע פעמיים — חוץ מאחד שמופיע פעם יחידה**. מצאו את המספר הזה.
+
+\`\`\`
+Input:  nums = [2, 1, 2, 3, 4, 3, 1]
+Output: 4
+\`\`\`
+
+**אילוץ:** סיבוכיות זמן \`O(n)\` ומקום נוסף \`O(1)\`.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Hash set — O(n) זמן, O(n) מקום',
+            time: 'O(n)', space: 'O(n)',
+            summary: 'הוסף/הסר לפי הופעות; בסוף נשאר רק היחיד.',
+            code:
+`def single_number_set(nums):
+    seen = set()
+    for x in nums:
+        if x in seen: seen.remove(x)
+        else:         seen.add(x)
+    return seen.pop()`,
+          },
+          {
+            name: 'XOR — O(n) זמן, O(1) מקום',
+            time: 'O(n)', space: 'O(1)',
+            summary: '\`a ⊕ a = 0\`, \`a ⊕ 0 = a\`. XOR של כל המערך = הערך היחיד שנשאר.',
+            code:
+`def single_number(nums):
+    result = 0
+    for x in nums:
+        result ^= x
+    return result
+
+# או חד-שורה:
+# from functools import reduce; return reduce(operator.xor, nums)`,
+          },
+        ],
+        starterCode:
+`def single_number(nums):
+    """Each number appears twice except one. Find it.
+    Constraint: O(n) time, O(1) extra space."""
+    # TODO: XOR trick
+    pass
+
+
+# print(single_number([2, 1, 2, 3, 4, 3, 1]))  # 4
+`,
+        question:
+`ממשו את הפונקציה. למה XOR? איך מסכים בקלות לכך שזה מחזיר את התשובה הנכונה?`,
+        hints: [
+          'יש פעולה בינארית עם תכונה מיוחדת: \`a ⊕ a = ?\`',
+          '\`a ⊕ a = 0\`, \`a ⊕ 0 = a\`, ו-XOR קומוטטיבי+אסוציאטיבי. מה קורה אם אכפיל XOR על כל המערך?',
+          'כל זוג מבטל את עצמו (\`a ⊕ a = 0\`). היחיד נשאר. \`reduce(^, nums) = unique\`. שורת קוד אחת.',
+        ],
+        answer:
+`**אלגנטיות בטהרה.** XOR של כל איברי המערך = האיבר היחיד.
+
+**למה זה עובד? שלוש תכונות של XOR:**
+1. **אידמפוטנטיות עצמית:** \`a ⊕ a = 0\` (אותם ביטים מבטלים)
+2. **אלמנט זהות:** \`a ⊕ 0 = a\`
+3. **קומוטטיביות+אסוציאטיביות:** \`a ⊕ b ⊕ c = c ⊕ a ⊕ b\` (כל סדר טוב)
+
+**הוכחה:** אחרי שמסדרים את XOR של כל המערך בסדר הנוח —
+\`(2⊕2) ⊕ (1⊕1) ⊕ (3⊕3) ⊕ 4 = 0 ⊕ 0 ⊕ 0 ⊕ 4 = 4\`. ✓
+
+**איך זה עובד בייצוג ביטים?**
+\`\`\`
+2 = 010    XOR ביטוויז = "1 אם בדיוק אחד מהביטים דולק"
+1 = 001    שני מופעים של אותו מספר → כל ביט מבטל את עצמו ל-0
+3 = 011
+4 = 100   ←  הביט במקום 4 דולק רק פעם אחת בכל המערך
+\`\`\`
+
+**שלבי החשיבה:**
+
+1. **בחיפוש "מה מופיע פעם אחת"** — חפש פעולה שמבדילה בין "פעמיים" ל-"פעם אחת".
+2. **\`a ⊕ a = 0\`** היא הפעולה — ביטים זוגיים נעלמים, ביט בודד שורד.
+3. **בלי קשר לסדר** — אסוציאטיביות + קומוטטיביות של XOR אומרות שאפשר לבצע על המערך כפי שהוא, בלי צורך בסידור מקדים.
+
+**הרחבות נפוצות:**
+- "כל מספר פעמיים חוץ מאחד שמופיע 3 פעמים" → פתרון עם ספירת ביטים mod 3.
+- "שני מספרים שמופיעים פעם אחת" → XOR של הכל = \`a ⊕ b\`; בחר ביט שדולק; חלק את המערך לפי הביט; XOR בכל חלק.`,
+        interviewerMindset:
+`Single Number היא **שאלת "האם אתה מכיר את ה-bit-trick"**. הציפייה של המראיין:
+
+1. **שתציע פתרון hash-set ראשון, ותאמר "אני יודע שזה O(n) מקום — לפחות יש לי משהו לעבוד עליו."** הראית שאתה מכיר tradeoff.
+2. **שתעבור ל-XOR אחרי שאלה רומזת** ("יש דרך לזה ב-O(1) מקום?"). אז ההצגה: "כל מספר מופיע 2 פעמים → \`a XOR a = 0\` → XOR של הכל = היחיד".
+3. **שתסביר את 3 התכונות של XOR** — לא להגיד "XOR" כשם פעולה, אלא להראות שהוא **אינווולוטיבי** (a XOR a = 0) + קומוטטיבי.
+
+**מועמד מצוין:** מציע מיד שהפתרון מתרחב לכל שפה — \`reduce\` ב-Python, \`accumulate\` ב-C++, \`fold\` ב-Haskell.`,
+        expectedAnswers: ['XOR', '^=', '^', 'reduce', 'a ^ a', '0', 'אינווולוטי'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 9)',
+    tags: ['algorithms', 'xor', 'bit-manipulation', 'array', 'O(1)-space', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8010 — Min merges to make array a palindrome (two pointers)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'min-merges-palindrome',
+    difficulty: 'medium',
+    title: 'מינימום מיזוגים ליצירת פלינדרום',
+    intro:
+`נתון מערך של מספרים **שלמים וחיוביים**. **מיזוג** = החלפת איבר ושכנו
+(הצמוד אליו) בסכומם. מצאו את **מספר המיזוגים המינימלי** הדרוש כדי
+שהמערך יהפוך פלינדרום.
+
+\`\`\`
+arr = [10, 11, 32, 27]   →  3   (יש למזג את כל המערך לאיבר יחיד = 80)
+arr = [22, 15, 22]       →  0   (כבר פלינדרום)
+arr = [2, 6, 1, 8]       →  1   (מיזוג 2+6 → [8, 1, 8] = פלינדרום)
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def min_merges(arr):
+    """Return min number of merge operations (combining two adjacent
+    elements into their sum) to make arr a palindrome."""
+    # TODO: two pointers from both ends
+    pass
+
+
+# print(min_merges([10, 11, 32, 27]))   # 3
+# print(min_merges([22, 15, 22]))       # 0
+# print(min_merges([2, 6, 1, 8]))       # 1
+`,
+        question:
+`ממשו את \`min_merges(arr)\`. למה שני מצביעים? מה ההיגיון של "המצביע הקטן יותר זז" עם מיזוג מקומי?`,
+        hints: [
+          'אם \`arr[i] == arr[j]\` — מעולה, אלה כבר בני-זוג בפלינדרום. \`i++\`, \`j--\`. בלי מיזוג.',
+          'אם \`arr[i] < arr[j]\` — חייב למזג את \`arr[i]\` עם השכן הימני: \`arr[i+1] += arr[i]; i++; merges++\`. מקסום הצד הקטן.',
+          'אם \`arr[i] > arr[j]\` — סימטרי: \`arr[j-1] += arr[j]; j--; merges++\`. המצביעים נפגשים תוך \`O(n)\` צעדים.',
+        ],
+        answer:
+`**Two pointers greedy.** \`O(n)\` זמן, \`O(1)\` מקום (תוך-מקום על המערך).
+
+\`\`\`python
+def min_merges(arr):
+    i, j = 0, len(arr) - 1
+    merges = 0
+    while i < j:
+        if arr[i] == arr[j]:
+            i += 1
+            j -= 1
+        elif arr[i] < arr[j]:
+            # merge arr[i] into arr[i+1] — left side too small
+            arr[i + 1] += arr[i]
+            i += 1
+            merges += 1
+        else:                       # arr[i] > arr[j]
+            arr[j - 1] += arr[j]
+            j -= 1
+            merges += 1
+    return merges
+\`\`\`
+
+**למה זה אופטימלי?** טיעון "exchange argument":
+- אם \`arr[i] < arr[j]\` — אסור להגדיל את \`arr[j]\` (כי הוא כבר גדול מ-\`arr[i]\`, אז זה רק יחמיר). חייב להגדיל את צד שמאל = למזג את \`arr[i]\` עם השכן.
+- אין טעם לדלג על מיזוגים — כל זוג שלא תואם חייב להתאחד בצד אחד.
+
+**ניתוח טווח עבור הדוגמאות:**
+
+| arr            | פלינדרום? | מיזוגים | תיאור |
+|----------------|----------|---------|------|
+| [22, 15, 22]   | ✓ כן     | 0       | ה-מצביעים ביושר נפגשים באמצע |
+| [2, 6, 1, 8]   | לא       | 1       | 2<8 → arr[1]+=2 → [_, 8, 1, 8] = פלינדרום מ-i=1 |
+| [10,11,32,27]  | לא       | 3       | מיזוג ימני שלוש פעמים → 80 |
+
+**שלבי החשיבה:**
+
+1. **דמוי "Two Sum" ממוין** — שני מצביעים מהקצוות, פנימה. אבל הפעם הזיווג אינו השוואה (\`==\`) — שני הצדדים יכולים להישאר עצמאיים אם זהים.
+2. **גרידיות עובדת כי חד-כיווני** — ברגע ש-\`arr[i]\` או \`arr[j]\` מתעדכן, הוא רק יכול לגדול. אז לא יקרה שתכריח מיזוג מיותר.
+3. **התעדכון בתוך המערך** — אל תיצור עותק. כל הפתרון על אותו buffer ב-O(1) זיכרון.`,
+        interviewerMindset:
+`שאלת "מערך + סימטריה" שבודקת שלושה דברים:
+
+1. **שאתה מזהה אסטרטגיית two-pointers** — כל בעיה עם "פלינדרום" או "סימטריה" קוראת ל-two-pointers מהקצוות. אם המועמד מתחיל לחשב כל אפשרות (DP) — איבד נקודה.
+
+2. **שאתה מסביר למה גרידיות עובדת.** הטיעון: ברגע שצד אחד קטן יותר — חייבים להגדיל אותו (אי-אפשר להקטין את הגדול). זה נכון בכל צעד, ולכן בחירה גרידית מעולמית.
+
+3. **שאתה לא נופל ב-edge cases:**
+   - מערך באורך 1 → 0 מיזוגים (פלינדרום טריוויאלי).
+   - מערך באורך 2 שווה → 0; שונה → 1 (מיזוג היחיד).
+   - מערך עם איבר אחד גדול ושאר קטנים → ייתכן \`n-1\` מיזוגים.
+
+**שאלת המשך נפוצה:** "אם המספרים יכולים להיות שליליים?" — תשובה: הגרידיות שוברת (איבר שלילי יכול להחליש את הסכום). דורש DP.`,
+        expectedAnswers: ['two pointer', 'i < j', 'merge', 'arr[i+1]', 'merges', 'i++', 'j--'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 10)',
+    tags: ['algorithms', 'array', 'two-pointer', 'greedy', 'palindrome', 'in-place', 'python'],
   },
 ];

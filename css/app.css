@@ -3608,6 +3608,28 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 }
 #interview-panel.hidden { display: none; }
 
+/* Maximize button → expand the panel to fill the viewport. The button
+   text flips between ⛶ הגדל and ⤢ הקטן so a single click toggles. */
+#interview-panel.iv-panel-maximized {
+  top: 4px !important;
+  right: 4px !important;
+  bottom: 4px !important;
+  left: 4px !important;
+  width: auto !important;
+  max-width: none !important;
+  z-index: 10000;
+}
+.iv-btn-maximize {
+  background: #1a2a18 !important;
+  border-color: #3a8050 !important;
+  color: #80f0a0 !important;
+  font-weight: bold !important;
+}
+.iv-btn-maximize:hover {
+  background: #2a3a28 !important;
+  border-color: #50a060 !important;
+}
+
 /* Custom resize grip in the top-left corner. Dragging it moves the
    panel's top edge (smaller `top`) and grows its width (`width`).
    Bottom + right edges stay anchored so the panel always reaches them. */
@@ -4279,6 +4301,40 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
   background: linear-gradient(180deg, #1a1408 0%, #0a1520 60%) !important;
 }
 
+/* Virtual "מועדפים" tab — gold theme to stand out from the regular
+   green/cyan topic tabs. */
+.iv-tab.iv-tab-favorites {
+  border-color: #6a5020;
+  color: #f0c060;
+}
+.iv-tab.iv-tab-favorites:hover {
+  background: #1a1408;
+  color: #ffd060;
+}
+.iv-tab.iv-tab-favorites.iv-tab-active {
+  background: #2a1c10;
+  border-color: #ffd060;
+  color: #fff0c0;
+}
+.iv-tab.iv-tab-favorites .iv-tab-count {
+  background: #2a1c10;
+  border-color: #6a5020;
+  color: #ffd060;
+}
+
+/* Origin chip on favourite cards — shows which topic the question
+   came from so the user has context outside its native tab. */
+.iv-card-origin {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #80a0c0;
+  padding: 2px 8px;
+  background: #0a1828;
+  border: 1px solid #2a4060;
+  border-radius: 10px;
+  margin-inline-start: auto;
+}
+
 /* Schematic SVG container — light bg behind dark-stroke schematics */
 .iv-schematic {
   background: #0a1830;
@@ -4881,3 +4937,164 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 .iv-diff-swatch.iv-diff-same { background: #1a3040; }
 .iv-diff-swatch.iv-diff-del  { background: rgba(255, 80, 80, 0.35); border-right: 3px solid #ff6060; }
 .iv-diff-swatch.iv-diff-add  { background: rgba(80, 220, 120, 0.35); border-right: 3px solid #39ff80; }
+
+/* ── Trace full-screen modal (code + viz side-by-side) ───────────── */
+.iv-trace-fs {
+  position: fixed; inset: 0; z-index: 10001;
+  display: flex; align-items: center; justify-content: center;
+}
+.iv-trace-fs-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(2, 6, 12, 0.85);
+  backdrop-filter: blur(6px);
+}
+.iv-trace-fs-box {
+  position: relative;
+  background: #06101a;
+  border: 1px solid #2a8a4a;
+  border-radius: 10px;
+  width: min(1700px, 96vw);
+  height: min(1000px, 94vh);
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  overflow: hidden;
+}
+.iv-trace-fs-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  background: #102a1a;
+  border-bottom: 1px solid #2a8a4a;
+}
+.iv-trace-fs-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px; font-weight: bold; color: #80f0a0;
+  letter-spacing: 0.5px;
+}
+.iv-trace-fs-meta {
+  display: flex; align-items: center; gap: 14px;
+}
+.iv-trace-fs-counter {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px; color: #80c0e0;
+  padding: 4px 14px;
+  background: #0a2030;
+  border: 1px solid #2a6080;
+  border-radius: 14px;
+  font-weight: bold;
+}
+.iv-trace-fs-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) 1.5fr;
+  gap: 1px;
+  background: #1a3040;
+  overflow: hidden;
+  min-height: 0;
+}
+.iv-trace-fs-code {
+  background: #06101a;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.iv-trace-fs-code-head {
+  padding: 8px 14px;
+  background: #0a1828;
+  border-bottom: 1px solid #1a3040;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: bold;
+  color: #80c0e0; letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.iv-trace-fs-code-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+.iv-tfs-line {
+  display: flex;
+  align-items: flex-start;
+  font-size: 18px;
+  line-height: 1.55;
+  padding-right: 8px;
+}
+.iv-tfs-line pre {
+  margin: 0;
+  padding: 0 12px;
+  flex: 1;
+  white-space: pre;
+  color: #c0d8e8;
+}
+.iv-tfs-num {
+  width: 32px; flex-shrink: 0;
+  text-align: right;
+  padding-right: 10px;
+  color: #4a6080;
+  font-size: 14px;
+  user-select: none;
+}
+.iv-tfs-arrow {
+  width: 18px; flex-shrink: 0;
+  color: transparent;
+  font-weight: bold;
+}
+/* Soft-highlight: lines in the active block / iteration. */
+.iv-tfs-line.iv-tfs-range {
+  background: rgba(80, 220, 120, 0.06);
+}
+.iv-tfs-line.iv-tfs-range pre {
+  color: #c8f8d0;
+}
+/* Focus highlight: THE one line currently executing. */
+.iv-tfs-line.iv-tfs-focus {
+  background: rgba(80, 220, 120, 0.18);
+  border-right: 3px solid #39ff80;
+  box-shadow: 0 0 14px rgba(80, 220, 120, 0.2) inset;
+}
+.iv-tfs-line.iv-tfs-focus pre {
+  color: #c8f8d0;
+  font-weight: 600;
+}
+.iv-tfs-line.iv-tfs-focus .iv-tfs-num { color: #80f0a0; font-weight: bold; }
+.iv-tfs-line.iv-tfs-focus .iv-tfs-arrow {
+  color: #39ff80;
+  text-shadow: 0 0 6px rgba(80, 220, 120, 0.7);
+}
+
+.iv-trace-fs-viz {
+  background: #0a1320;
+  padding: 18px 22px;
+  overflow: auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.iv-trace-fs-viz svg { max-width: 100%; max-height: 100%; height: auto; }
+
+.iv-trace-fs-narration {
+  padding: 12px 20px;
+  background: #0a1828;
+  border-top: 1px solid #1a3040;
+}
+.iv-trace-fs-codeline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  color: #80c0e0;
+  margin-bottom: 6px;
+  text-align: left;
+  direction: ltr;
+}
+.iv-trace-fs-explain {
+  font-size: 20px;
+  line-height: 1.6;
+  color: #c8d8f0;
+}
+.iv-trace-fs-controls {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px;
+  background: #0a1828;
+  border-top: 1px solid #1a3040;
+}
+.iv-trace-fs-controls .iv-btn { font-size: 18px; }
+.iv-trace-fs .iv-trace-keys {
+  background: #0a1828;
+  padding: 6px 16px 12px;
+}

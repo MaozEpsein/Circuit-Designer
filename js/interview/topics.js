@@ -46,14 +46,14 @@ export const TOPICS = [
   {
     id: 'timing-cdc',
     tabNumber: 5,
-    label: 'תזמון ו-CDC',
+    label: 'תזמון וסנכרון',
     icon: '⏲',
     description: 'Setup / hold, clock skew, מטא-יציבות, סינכרונייזרים, מעבר בין תחומי שעון.',
   },
   {
     id: 'dft',
     tabNumber: 6,
-    label: 'DFT וטסט',
+    label: 'תכן לבדיקה',
     icon: '⌬',
     description: 'Scan chains, BIST, JTAG, מודלים של תקלות, fault coverage.',
   },
@@ -73,6 +73,19 @@ export const TOPICS = [
     label: 'חידות',
     icon: '★',
     description: 'חידות מתמטיקה/לוגיקה הנפוצות בראיונות טכניים.',
+  },
+  // Virtual topic — aggregates the bookmarked questions across every
+  // real topic. Has no IQ/<id>/index.js folder; the panel special-cases
+  // it in _renderCatalog. `tabNumber: 0` keeps it out of the 4-digit
+  // serial scheme (serials always come from the source topic of the
+  // question, not from here).
+  {
+    id: 'favorites',
+    tabNumber: 0,
+    label: 'מועדפים',
+    icon: '⭐',
+    description: 'כל השאלות שסימנת ב-★ — מכל הלשוניות.',
+    virtual: true,
   },
 ];
 

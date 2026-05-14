@@ -45,6 +45,7 @@ export class InterviewPanel {
         <span>💼 INTERVIEW PREP</span>
         <div class="iv-header-actions">
           <button class="iv-btn iv-btn-mindset-index" data-act="show-mindset-index" title="כל הראש-של-המראיין בכל השלבים">🎯 הראש של המראיין</button>
+          <button class="iv-btn iv-btn-maximize" data-act="toggle-maximize" title="הגדל / הקטן את הפאנל למסך מלא">⛶ הגדל</button>
           <button class="iv-x" data-act="close" title="Close">CLOSE</button>
         </div>
       </div>
@@ -83,6 +84,11 @@ export class InterviewPanel {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this._traceMove(+1); return; }
       if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); this._traceMove(-1); return; }
       if (e.key === 'r' || e.key === 'R')                  { e.preventDefault(); this._traceReset();  return; }
+      if ((e.key === 'f' || e.key === 'F') && part.trace?.source) {
+        e.preventDefault();
+        this._openTraceFullscreen();
+        return;
+      }
     });
     this._wireResizeGrip(el);
   }
@@ -92,6 +98,7 @@ export class InterviewPanel {
     if (!t) return;
     const act = t.dataset.act;
     if (act === 'close')              { this.hide(); return; }
+    if (act === 'toggle-maximize')    { this._toggleMaximize(); return; }
     if (act === 'show-mindset-index') { this.view = 'mindset-index'; this.mindsetFilter = null; this.render(); return; }
     if (act === 'back-from-mindset')  { this.view = this.engine.active ? 'question' : 'catalog'; this.render(); return; }
     // Mindset-index has its own topic-filter tabs (data-mindset-topic) so
@@ -103,7 +110,16 @@ export class InterviewPanel {
       return;
     }
     if (t.dataset.topic)              { this.activeTopic = t.dataset.topic; if (this.view === 'mindset-index') this.view = 'catalog'; this.render(); return; }
-    if (act === 'open-question')      { this.engine.enter(this.activeTopic, t.dataset.question); this.view = 'question'; return; }
+    if (act === 'open-question') {
+      // Card may carry a `data-source-topic` (used when opened from
+      // the virtual favourites tab where activeTopic is 'favorites'
+      // but the question lives in a real topic).
+      const sourceTopic = t.dataset.sourceTopic || this.activeTopic;
+      this.engine.enter(sourceTopic, t.dataset.question);
+      this.activeTopic = sourceTopic;
+      this.view = 'question';
+      return;
+    }
     if (act === 'back-to-catalog')    { this.engine.exit(); this.view = 'catalog'; this.render(); return; }
     if (act === 'hint')               { this.engine.revealHint(); return; }
     if (act === 'show-answer')        { this.engine.showAnswer(); return; }
@@ -127,6 +143,8 @@ export class InterviewPanel {
     if (act === 'trace-prev')         { this._traceMove(-1); return; }
     if (act === 'trace-next')         { this._traceMove(+1); return; }
     if (act === 'trace-reset')        { this._traceReset(); return; }
+    if (act === 'trace-fullscreen')   { this._openTraceFullscreen(); return; }
+    if (act === 'close-trace-fs')     { this._closeTraceFullscreen(); return; }
   }
 
   _traceKey() {
@@ -297,6 +315,124 @@ export class InterviewPanel {
       }
     };
     document.addEventListener('keydown', escHandler);
+  }
+
+  // ── Full-screen trace view (code + viz side-by-side) ───────────────
+  _openTraceFullscreen() {
+    const part = this.engine.currentPart();
+    if (!part?.trace?.source) return;
+    this._traceFsOpen = true;
+    this._renderTraceFullscreen();
+    // Document-level keydown so arrow keys / R / ESC work even when
+    // focus isn't inside the panel (the modal lives in document.body).
+    this._traceFsEsc = (e) => {
+      if (e.key === 'Escape') { this._closeTraceFullscreen(); return; }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this._traceMove(+1); this._renderTraceFullscreen(); return; }
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); this._traceMove(-1); this._renderTraceFullscreen(); return; }
+      if (e.key === 'r' || e.key === 'R')                  { e.preventDefault(); this._traceReset();  this._renderTraceFullscreen(); return; }
+    };
+    document.addEventListener('keydown', this._traceFsEsc);
+  }
+
+  _closeTraceFullscreen() {
+    this._traceFsOpen = false;
+    const m = document.getElementById('iv-trace-fs');
+    if (m) m.remove();
+    if (this._traceFsEsc) {
+      document.removeEventListener('keydown', this._traceFsEsc);
+      this._traceFsEsc = null;
+    }
+  }
+
+  /** Re-render the modal in place (called after every step change). */
+  _renderTraceFullscreen() {
+    if (!this._traceFsOpen) return;
+    const part = this.engine.currentPart();
+    const trace = part?.trace;
+    if (!trace?.source) { this._closeTraceFullscreen(); return; }
+    const total = trace.steps.length;
+    const tKey = `${this.engine.questionId}:${this.engine.partIndex}`;
+    this._traceStep ||= {};
+    if (this._traceStep[tKey] == null) this._traceStep[tKey] = this._traceStepLoad();
+    const idx = Math.max(0, Math.min(total - 1, this._traceStep[tKey]));
+    const cur = trace.steps[idx];
+    const pct = total > 1 ? ((idx / (total - 1)) * 100) : 100;
+
+    // Highlight source lines per step. Two distinct concepts:
+    //   - `executed`  : explicit list of line numbers that ran THIS
+    //                   step. Includes only lines Python actually
+    //                   visited (skips e.g. the `return` in iterations
+    //                   that didn't return). Get a soft tint.
+    //   - `focusLine` : the one line whose effect IS the step. Gets a
+    //                   strong tint + an arrow.
+    // Legacy `lineRange:[lo,hi]` is supported for older trace data:
+    // it's expanded to the contiguous range [lo..hi].
+    const executed = Array.isArray(cur.executed)
+      ? new Set(cur.executed)
+      : (cur.lineRange ? new Set(_range(cur.lineRange[0], cur.lineRange[1])) : new Set());
+    const focusLine = cur.focusLine;
+    const lines = trace.source.split('\n');
+    const codeHtml = lines.map((line, i) => {
+      const n = i + 1;
+      const inRange = executed.has(n);
+      const isFocus = n === focusLine;
+      const cls = isFocus ? 'iv-tfs-line iv-tfs-focus'
+                : inRange ? 'iv-tfs-line iv-tfs-range'
+                : 'iv-tfs-line';
+      const arrow = isFocus ? '<span class="iv-tfs-arrow">▶</span>' : '<span class="iv-tfs-arrow"> </span>';
+      return `<div class="${cls}">${arrow}<span class="iv-tfs-num">${n}</span><pre>${_esc(line) || ' '}</pre></div>`;
+    }).join('');
+
+    let host = document.getElementById('iv-trace-fs');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'iv-trace-fs';
+      host.className = 'iv-trace-fs';
+      document.body.appendChild(host);
+      host.addEventListener('click', (e) => {
+        if (e.target.closest('[data-act="close-trace-fs"]')) this._closeTraceFullscreen();
+        if (e.target.closest('[data-act="trace-prev"]'))     { this._traceMove(-1); this._renderTraceFullscreen(); }
+        if (e.target.closest('[data-act="trace-next"]'))     { this._traceMove(+1); this._renderTraceFullscreen(); }
+        if (e.target.closest('[data-act="trace-reset"]'))    { this._traceReset(); this._renderTraceFullscreen(); }
+      });
+    }
+    host.innerHTML = `
+      <div class="iv-trace-fs-backdrop" data-act="close-trace-fs"></div>
+      <div class="iv-trace-fs-box" dir="rtl">
+        <div class="iv-trace-fs-head">
+          <div class="iv-trace-fs-title">▶ ${_esc(trace.title || 'מעקב הרצה')}</div>
+          <div class="iv-trace-fs-meta">
+            <span class="iv-trace-fs-counter" dir="ltr">${idx + 1} / ${total}</span>
+            <button class="iv-btn iv-x" data-act="close-trace-fs">CLOSE  ⎋</button>
+          </div>
+        </div>
+        <div class="iv-trace-fs-body">
+          <div class="iv-trace-fs-code" dir="ltr">
+            <div class="iv-trace-fs-code-head">${_esc(trace.sourceLang || 'code')}</div>
+            <div class="iv-trace-fs-code-body">${codeHtml}</div>
+          </div>
+          <div class="iv-trace-fs-viz" dir="ltr">${cur.viz || ''}</div>
+        </div>
+        <div class="iv-trace-fs-narration" dir="rtl">
+          ${cur.code    ? `<div class="iv-trace-fs-codeline">${_esc(cur.code)}</div>` : ''}
+          ${cur.explain ? `<div class="iv-trace-fs-explain">${_renderInline(cur.explain)}</div>` : ''}
+        </div>
+        <div class="iv-trace-fs-controls">
+          <button class="iv-btn" data-act="trace-prev" ${idx === 0 ? 'disabled' : ''}>◀ קודם</button>
+          <div class="iv-trace-progress"><div class="iv-trace-progress-bar" style="width:${pct}%"></div></div>
+          <button class="iv-btn iv-btn-primary" data-act="trace-next" ${idx === total - 1 ? 'disabled' : ''}>הבא ▶</button>
+          <button class="iv-btn iv-btn-link" data-act="trace-reset">↺ אפס</button>
+        </div>
+        <div class="iv-trace-keys" dir="rtl">⌨ <kbd>←</kbd> קודם · <kbd>→</kbd> הבא · <kbd>R</kbd> אפס · <kbd>Esc</kbd> סגור</div>
+      </div>`;
+  }
+
+  _toggleMaximize() {
+    if (!this.root) return;
+    const on = !this.root.classList.contains('iv-panel-maximized');
+    this.root.classList.toggle('iv-panel-maximized', on);
+    const btn = this.root.querySelector('[data-act="toggle-maximize"]');
+    if (btn) btn.textContent = on ? '⤢ הקטן' : '⛶ הגדל';
   }
 
   _handleLoadSkeleton() {
@@ -571,28 +707,71 @@ export class InterviewPanel {
       });
   }
 
+  /** Count of bookmarked questions across ALL topics — used for the
+   *  "מועדפים" virtual tab badge. */
+  _countAllBookmarks() {
+    let n = 0;
+    for (const t of TOPICS) {
+      if (t.virtual) continue;
+      for (const q of this.engine.listQuestions(t.id)) {
+        if (this.engine.isBookmarked?.(t.id, q.id)) n++;
+      }
+    }
+    return n;
+  }
+
+  /** Collect every bookmarked question from every real topic, paired
+   *  with its source topic id and its 0-based index inside that topic
+   *  (so serials and `engine.enter()` calls stay correct). */
+  _favoriteEntries() {
+    const out = [];
+    for (const t of TOPICS) {
+      if (t.virtual) continue;
+      const list = this.engine.listQuestions(t.id);
+      list.forEach((q, i) => {
+        if (this.engine.isBookmarked?.(t.id, q.id)) {
+          out.push({ q, sourceTopic: t.id, indexInTopic: i });
+        }
+      });
+    }
+    return out;
+  }
+
   _renderCatalog() {
+    const favCount = this._countAllBookmarks();
     const tabsHtml = TOPICS.map(t => {
-      const total = this.engine.totalForTopic(t.id);
-      const done  = this.engine.countByStatus(t.id, 'mastered');
       const isActive = t.id === this.activeTopic;
+      // Virtual `favorites` tab counts bookmarks instead of mastered.
+      const total = t.virtual ? favCount : this.engine.totalForTopic(t.id);
+      const done  = t.virtual ? favCount : this.engine.countByStatus(t.id, 'mastered');
       return `
-        <button class="iv-tab${isActive ? ' iv-tab-active' : ''}" data-topic="${t.id}" title="${_esc(t.description)}">
-          <span class="iv-tab-num">${t.tabNumber}</span>
+        <button class="iv-tab${isActive ? ' iv-tab-active' : ''}${t.virtual ? ' iv-tab-favorites' : ''}" data-topic="${t.id}" title="${_esc(t.description)}">
+          ${t.virtual ? '' : `<span class="iv-tab-num">${t.tabNumber}</span>`}
           <span class="iv-tab-icon">${t.icon}</span>${_esc(t.label)}
-          <span class="iv-tab-count">${done}/${total}</span>
+          <span class="iv-tab-count">${t.virtual ? favCount : `${done}/${total}`}</span>
         </button>`;
     }).join('');
 
-    const list = this.engine.listQuestions(this.activeTopic);
-    const cards = list.length === 0
-      ? `<div class="iv-empty" dir="rtl">
-           עדיין אין שאלות לנושא הזה.<br/>
-           הוסף קבצים לתיקייה <code dir="ltr">IQ/${_esc(this.activeTopic)}/</code> לפי הפורמט שמתואר ב-<code dir="ltr">IQ/README.md</code>.
-         </div>`
-      : `<div class="iv-cards">${list.map((q, i) => this._renderCard(q, i)).join('')}</div>`;
-
     const topic = TOPICS.find(t => t.id === this.activeTopic);
+    let cards;
+
+    if (topic?.virtual && this.activeTopic === 'favorites') {
+      const entries = this._favoriteEntries();
+      cards = entries.length === 0
+        ? `<div class="iv-empty" dir="rtl">
+             אין כרגע שאלות במועדפים.<br/>
+             היכנס לכל שאלה ולחץ <span style="color:#ffd060">☆ סמן כמועדף</span> כדי שהיא תופיע כאן.
+           </div>`
+        : `<div class="iv-cards">${entries.map(e => this._renderCard(e.q, e.indexInTopic, e.sourceTopic)).join('')}</div>`;
+    } else {
+      const list = this.engine.listQuestions(this.activeTopic);
+      cards = list.length === 0
+        ? `<div class="iv-empty" dir="rtl">
+             עדיין אין שאלות לנושא הזה.<br/>
+             הוסף קבצים לתיקייה <code dir="ltr">IQ/${_esc(this.activeTopic)}/</code> לפי הפורמט שמתואר ב-<code dir="ltr">IQ/README.md</code>.
+           </div>`
+        : `<div class="iv-cards">${list.map((q, i) => this._renderCard(q, i)).join('')}</div>`;
+    }
 
     return `
       <div class="iv-tabs">${tabsHtml}</div>
@@ -619,7 +798,9 @@ export class InterviewPanel {
     // stacked, like before the filter feature was added.
     const tabsHtml = [
       `<button class="iv-mindset-tab${!filter ? ' iv-mindset-tab-active' : ''}" data-mindset-topic="">הכל</button>`,
-      ...TOPICS.map(t => `
+      // Real topics only — the virtual "מועדפים" tab owns no questions
+      // and shouldn't appear in the mindset filter row.
+      ...TOPICS.filter(t => !t.virtual).map(t => `
         <button class="iv-mindset-tab${filter === t.id ? ' iv-mindset-tab-active' : ''}"
                 data-mindset-topic="${_esc(t.id)}"
                 title="${_esc(t.description)}">
@@ -640,6 +821,7 @@ export class InterviewPanel {
     `;
 
     for (const topic of TOPICS) {
+      if (topic.virtual) continue;
       if (filter && topic.id !== filter) continue;
       const list = this.engine.listQuestions(topic.id);
       const entries = [];
@@ -690,7 +872,11 @@ export class InterviewPanel {
     return html;
   }
 
-  _renderCard(q, indexWithinTopic) {
+  _renderCard(q, indexWithinTopic, sourceTopicOverride) {
+    // `sourceTopicOverride` is set when we render this card under the
+    // virtual "מועדפים" tab — `this.activeTopic === 'favorites'` but
+    // serial / bookmark lookup / open need the REAL source topic.
+    const cardTopic = sourceTopicOverride || this.activeTopic;
     const badge = q.status === 'mastered'
       ? '<span class="iv-badge iv-badge-mastered">✓ MASTERED</span>'
       : (q.status === 'seen'
@@ -700,21 +886,25 @@ export class InterviewPanel {
       ? `<span class="iv-diff iv-diff-${_esc(q.difficulty)}">${_esc(q.difficulty)}</span>`
       : '';
     const partsLabel = q.partCount > 1 ? `<span class="iv-card-parts">${q.partCount} סעיפים</span>` : '';
-    const serial = serialFor(this.activeTopic, indexWithinTopic);
-    // Optional-chain the engine call: a stale browser cache may have
-    // shipped the engine module before `isBookmarked` existed. Without
-    // the `?.` the whole panel would TypeError and refuse to render
-    // until the user clears site data.
-    const bookmarked = this.engine.isBookmarked?.(this.activeTopic, q.id) ?? false;
+    const serial = serialFor(cardTopic, indexWithinTopic);
+    const bookmarked = this.engine.isBookmarked?.(cardTopic, q.id) ?? false;
+    // When rendering inside the virtual favourites tab, show a small
+    // origin-chip telling the user which topic this came from.
+    const originChip = sourceTopicOverride
+      ? (() => {
+          const t = TOPICS.find(x => x.id === sourceTopicOverride);
+          return t ? `<span class="iv-card-origin" title="מקור: ${_esc(t.description)}">${t.icon} ${_esc(t.label)}</span>` : '';
+        })()
+      : '';
     return `
-      <div class="iv-card${bookmarked ? ' iv-card-bookmarked' : ''}" data-act="open-question" data-question="${_esc(q.id)}">
+      <div class="iv-card${bookmarked ? ' iv-card-bookmarked' : ''}" data-act="open-question" data-question="${_esc(q.id)}" data-source-topic="${_esc(cardTopic)}">
         <div class="iv-card-head">
           ${bookmarked ? '<span class="iv-card-star" title="במועדפים">★</span>' : ''}
           <span class="iv-card-serial" dir="ltr">#${serial}</span>
           <div class="iv-card-title" dir="rtl">${_esc(q.title)}</div>
           ${badge}
         </div>
-        <div class="iv-card-meta">${diff}${partsLabel}</div>
+        <div class="iv-card-meta">${diff}${partsLabel}${originChip}</div>
       </div>`;
   }
 
@@ -1012,9 +1202,17 @@ function _renderTrace(trace, step) {
         </div>
         <button class="iv-btn iv-btn-primary" data-act="trace-next" title="ניווט: → או חץ למטה" ${idx === total - 1 ? 'disabled' : ''}>הבא ▶</button>
         <button class="iv-btn iv-btn-link" data-act="trace-reset" title="קיצור: R">↺ אפס</button>
+        ${trace.source ? '<button class="iv-btn" data-act="trace-fullscreen" title="מסך מלא: קוד + ויזואליזציה זה לצד זה (F)">🖥 מסך מלא</button>' : ''}
       </div>
-      <div class="iv-trace-keys" dir="rtl">⌨ ניווט מקלדת: <kbd>←</kbd> קודם · <kbd>→</kbd> הבא · <kbd>R</kbd> אפס</div>
+      <div class="iv-trace-keys" dir="rtl">⌨ ניווט מקלדת: <kbd>←</kbd> קודם · <kbd>→</kbd> הבא · <kbd>R</kbd> אפס${trace.source ? ' · <kbd>F</kbd> מסך מלא' : ''}</div>
     </div>`;
+}
+
+// ── Misc ────────────────────────────────────────────────────────────
+function _range(lo, hi) {
+  const out = [];
+  for (let i = lo; i <= hi; i++) out.push(i);
+  return out;
 }
 
 // ── Line-level diff (small inputs only) ──────────────────────────────
