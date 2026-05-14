@@ -1003,6 +1003,272 @@ function _twoSumSvg(arr, cur, seen, need, found, matchIdx) {
   </svg>`;
 }
 
+// ─── Parentheses-stack SVG — string + LIFO stack visualisation ──────
+// `s`     : full input string
+// `idx`   : current char index being processed (-1 for "init" / "done")
+// `stack` : current stack contents (array of chars, oldest first)
+// `action`: 'push' | 'pop' | 'mismatch' | 'init' | 'done'
+// `valid` : bool — only relevant on the final "done" frame
+function _parensSvg({ s, idx, stack, action, valid }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 56, CELL_H = 60;
+  const n = s.length;
+  const W = Math.max(820, n * CELL + 240);
+  const strY = 130;
+  const stackBottomY = 360;
+  const stackCellH = 46;
+
+  const left = (W - n * CELL) / 2;
+  const done = action === 'done';
+
+  // String row — characters as cells, current one highlighted
+  const cells = [...s].map((ch, i) => {
+    const x = left + i * CELL;
+    const isCur = i === idx;
+    const isPast = idx > i && action !== 'init';
+    const stroke = isCur ? (done ? '#ffd060' : '#39ff80') : (isPast ? '#3a5575' : '#2a4060');
+    const fill   = isCur ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = isCur ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    return `
+      <g style="animation: ${D.animPop} 260ms ${i * 25}ms both;">
+        <text x="${x + CELL / 2}" y="${strY - 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#7090b0" font-weight="bold">[${i}]</text>
+        <rect x="${x + 3}" y="${strY}" width="${CELL - 6}" height="${CELL_H}" rx="8"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isCur ? 2.6 : 1.4}" ${filter}/>
+        <text x="${x + CELL / 2}" y="${strY + 42}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="30" font-weight="bold"
+              fill="${isCur ? '#e8f0fa' : (isPast ? '#7090a8' : '#c0d0e0')}">${ch}</text>
+      </g>`;
+  }).join('');
+
+  // Stack column — bottom-up, with the most recent push glowing
+  const stackLeft = W - 200;
+  const stackHtml = stack.length === 0
+    ? `<text x="${stackLeft + 70}" y="${stackBottomY - 20}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="16"
+            fill="#5a7090" font-style="italic">(empty)</text>`
+    : stack.map((c, i) => {
+        const y = stackBottomY - (i + 1) * (stackCellH + 4);
+        const top = i === stack.length - 1;
+        const isAction = top && (action === 'push' || action === 'pop' || action === 'mismatch');
+        const stroke = action === 'mismatch' && top ? '#ff6060'
+                    : isAction ? (done ? '#ffd060' : '#39ff80')
+                    : '#3a5575';
+        const fill = action === 'mismatch' && top ? '#3a1010'
+                  : isAction ? D.curGrad
+                  : D.chipGrad;
+        const filter = isAction ? `filter="${action === 'mismatch' ? D.glowGold : D.glowCyan}"` : '';
+        return `
+          <g style="animation: ${D.animSlide} 280ms ${i * 25}ms both;">
+            <rect x="${stackLeft}" y="${y}" width="140" height="${stackCellH}" rx="8"
+                  fill="${fill}" stroke="${stroke}" stroke-width="${isAction ? 2.6 : 1.4}" ${filter}/>
+            <text x="${stackLeft + 70}" y="${y + 31}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+                  fill="${isAction ? '#c8f8d0' : '#a0c0d0'}">${c}</text>
+          </g>`;
+      }).join('');
+
+  const stackLabel = `<text x="${stackLeft + 70}" y="${stackBottomY + 22}" text-anchor="middle"
+                           font-family="'JetBrains Mono', monospace" font-size="14"
+                           fill="#80a0c0" font-weight="bold" letter-spacing="2">STACK</text>
+                     <line x1="${stackLeft - 8}" y1="${stackBottomY}" x2="${stackLeft + 148}" y2="${stackBottomY}"
+                           stroke="#3a5575" stroke-width="2"/>`;
+
+  // Connection arrow: current char ↔ stack top
+  let connector = '';
+  if (idx >= 0 && idx < n && (action === 'push' || action === 'pop' || action === 'mismatch')) {
+    const cx = left + idx * CELL + CELL / 2;
+    const stackTopY = stackBottomY - stack.length * (stackCellH + 4);
+    const targetY = action === 'push' ? stackTopY - stackCellH / 2 - 4 : stackTopY + stackCellH / 2;
+    const targetX = stackLeft + 70;
+    const midX = (cx + targetX) / 2;
+    const labelText = action === 'push'    ? 'push'
+                    : action === 'pop'     ? 'pop  ✓ match'
+                    : 'mismatch  ✗';
+    const labelColor = action === 'mismatch' ? '#ff6060'
+                     : action === 'pop' ? '#80f0a0'
+                     : '#80d4ff';
+    connector = `
+      <g style="animation: ${D.animFade} 480ms both;">
+        <path d="M ${cx} ${strY + CELL_H + 4} Q ${midX} ${(strY + CELL_H + targetY) / 2}, ${targetX - 70} ${targetY}"
+              stroke="${labelColor}" stroke-width="2.5" fill="none"
+              stroke-dasharray="6 4"
+              filter="${action === 'mismatch' ? D.glowGold : D.glowCyan}"
+              style="animation: ${D.animDash} 1.2s linear infinite;"
+              marker-end="${action === 'mismatch' ? D.arrowGold : D.arrowCyan}"/>
+        <text x="${midX}" y="${(strY + CELL_H + targetY) / 2 - 6}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="16"
+              fill="${labelColor}" font-weight="bold">${labelText}</text>
+      </g>`;
+  }
+
+  // Top banner
+  const bannerText = done
+    ? (valid ? '✓ VALID — סוגריים תקינים' : '✗ INVALID — לא תקין')
+    : action === 'init' ? `init — input "${s}"`
+    : action === 'push' ? `push '${s[idx]}'`
+    : action === 'pop'  ? `pop — '${s[idx]}' closes '${stack[stack.length - 0] || ''}'`
+    : action === 'mismatch' ? `mismatch — '${s[idx]}' tries to close wrong opener`
+    : '';
+  const bannerColor = done && !valid ? '#ff6060' : (done ? '#ffd060' : '#80d4ff');
+  const bannerFill  = done && !valid ? '#2a1010' : (done ? D.bannerGold : D.bannerCyan);
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 260}" y="14" width="520" height="42" rx="21"
+            fill="${typeof bannerFill === 'string' && bannerFill.startsWith('url') ? bannerFill : bannerFill}"
+            stroke="${bannerColor}" stroke-width="2"
+            filter="${done && !valid ? D.glowGold : (done ? D.glowGold : D.glowCyan)}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${bannerColor}" font-weight="bold" letter-spacing="1">${bannerText}</text>
+    </g>`;
+
+  const H = stackBottomY + 50;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${cells}
+    ${stackLabel}
+    ${stackHtml}
+    ${connector}
+  </svg>`;
+}
+
+// ─── Palindrome-merge SVG — array with two pointers + merge action ───
+// `arr`        : current array state (after merges so far)
+// `consumed`   : Set of indices that are "outside the active range"
+//                (already collapsed into a neighbour)
+// `i`, `j`     : current two-pointer positions
+// `mergeFrom`  : optional — the cell that was just merged AWAY from
+// `mergeInto`  : the cell that absorbed the merged value
+// `merges`     : merge counter shown as a chip
+// `done`       : final frame → gold theming
+function _palindromeMergeSvg({ arr, consumed, i, j, mergeFrom, mergeInto, merges, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 86, CELL_H = 72;
+  const n = arr.length;
+  const W = Math.max(720, n * CELL + 120);
+  const rowY = 140;
+  const left = (W - n * CELL) / 2;
+  const consumedSet = consumed instanceof Set ? consumed : new Set(consumed || []);
+
+  // Cells
+  const cells = arr.map((v, k) => {
+    const x = left + k * CELL;
+    const isI = k === i, isJ = k === j;
+    const isHot = isI || isJ;
+    const isConsumed = consumedSet.has(k);
+    const isMergeInto = mergeInto === k;
+    const isMergeFrom = mergeFrom === k;
+    let stroke, fill, filter = '';
+    if (isMergeInto) { stroke = '#ffd060'; fill = D.matchGrad; filter = `filter="${D.glowGold}"`; }
+    else if (isHot)  { stroke = done ? '#ffd060' : '#39ff80'; fill = done ? D.matchGrad : D.curGrad; filter = `filter="${done ? D.glowGold : D.glowCyan}"`; }
+    else if (isConsumed) { stroke = '#3a2818'; fill = '#1a1208'; }
+    else             { stroke = '#3a5575'; fill = D.idleGrad; }
+    const opacity = isConsumed ? '0.4' : '1';
+    const valColor = isMergeInto ? '#fff0c0'
+                   : (isHot ? (done ? '#fff0c0' : '#c8f8d0') : (isConsumed ? '#5a4a30' : '#e8f0fa'));
+    return `
+      <g opacity="${opacity}" style="animation: ${D.animPop} 280ms ${k * 35}ms both;">
+        <text x="${x + CELL / 2}" y="${rowY - 22}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="${isConsumed ? '#4a3818' : '#7090b0'}" font-weight="bold">[${k}]</text>
+        <rect x="${x + 6}" y="${rowY}" width="${CELL - 12}" height="${CELL_H}" rx="10"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isHot || isMergeInto ? 3 : 1.4}" ${filter}/>
+        <text x="${x + CELL / 2}" y="${rowY + 46}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="28" font-weight="bold"
+              fill="${valColor}">${v}</text>
+        ${isMergeFrom ? `<line x1="${x + 12}" y1="${rowY + 12}" x2="${x + CELL - 12}" y2="${rowY + CELL_H - 12}"
+                              stroke="#ff8060" stroke-width="2"/>
+                         <line x1="${x + CELL - 12}" y1="${rowY + 12}" x2="${x + 12}" y2="${rowY + CELL_H - 12}"
+                              stroke="#ff8060" stroke-width="2"/>` : ''}
+      </g>`;
+  }).join('');
+
+  // Pointer arrows above the active cells. i / j may collide on the
+  // final frame; stagger labels then.
+  const ptrColor = done ? '#ffd060' : '#80f0a0';
+  const ptr = (label, idx) => {
+    if (idx < 0 || idx >= n) return '';
+    const cx = left + idx * CELL + CELL / 2;
+    return `
+      <g style="animation: ${D.animFade} 320ms 200ms both;">
+        <text x="${cx}" y="${rowY - 48}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="20"
+              fill="${ptrColor}" font-weight="bold">${label}</text>
+        <path d="M ${cx} ${rowY - 36} L ${cx - 7} ${rowY - 22} L ${cx + 7} ${rowY - 22} z"
+              fill="${ptrColor}"/>
+      </g>`;
+  };
+  const pointers = (i === j)
+    ? ptr(`i = j = ${i}`, i)
+    : ptr('i', i) + ptr('j', j);
+
+  // Merge arrow + "+N" badge near the absorbing cell
+  let mergeArrow = '';
+  if (mergeFrom != null && mergeInto != null) {
+    const xFrom = left + mergeFrom * CELL + CELL / 2;
+    const xInto = left + mergeInto * CELL + CELL / 2;
+    const arcY = rowY + CELL_H + 36;
+    mergeArrow = `
+      <g style="animation: ${D.animFade} 560ms both;">
+        <path d="M ${xFrom} ${rowY + CELL_H + 4} C ${xFrom} ${arcY + 16}, ${xInto} ${arcY + 16}, ${xInto} ${rowY + CELL_H + 4}"
+              stroke="#ffa060" stroke-width="3" fill="none"
+              stroke-dasharray="7 4"
+              filter="${D.glowGold}"
+              style="animation: ${D.animDash} 1.4s linear infinite;"
+              marker-end="${D.arrowGold}"/>
+        <text x="${(xFrom + xInto) / 2}" y="${arcY + 24}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="16"
+              fill="#ffd060" font-weight="bold">merge ⤴</text>
+      </g>`;
+  }
+
+  // Merge counter chip
+  const cardX = W - 170, cardY = 100;
+  const counterCard = `
+    <g style="animation: ${D.animFade} 320ms both;">
+      <rect x="${cardX}" y="${cardY}" width="140" height="60" rx="10"
+            fill="${done ? D.matchGrad : D.idleGrad}"
+            stroke="${done ? '#ffd060' : '#3a5575'}" stroke-width="${done ? 3 : 1.5}"
+            ${done ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${cardX + 70}" y="${cardY + 22}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="12"
+            fill="${done ? '#ffd060' : '#80a0c0'}" font-weight="bold" letter-spacing="2">MERGES</text>
+      <text x="${cardX + 70}" y="${cardY + 50}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="28" font-weight="bold"
+            fill="${done ? '#ffd060' : '#80f0a0'}">${merges}</text>
+    </g>`;
+
+  // Banner
+  const bannerText = done
+    ? `✓ palindrome reached — ${merges} merge${merges === 1 ? '' : 's'}`
+    : (mergeFrom != null ? `merge arr[${mergeFrom}] → arr[${mergeInto}]` : `compare arr[${i}] vs arr[${j}]`);
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">${bannerText}</text>
+    </g>`;
+
+  const H = rowY + CELL_H + (mergeArrow ? 90 : 50);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${counterCard}
+    ${pointers}
+    ${cells}
+    ${mergeArrow}
+  </svg>`;
+}
+
 // ─── Dutch-flag SVG — 3-way partition with low/mid/high pointers ────
 // Renders a row of colored circles with three labeled pointer arrows.
 // Colors map: 'R'→red, 'Y'→yellow, 'G'→green. The pointer arrows are
@@ -1014,7 +1280,9 @@ function _dutchFlagSvg({ arr, low, mid, high, swapped, done }) {
   const CELL = 70, R = 26;
   const n = arr.length;
   const W = Math.max(720, n * CELL + 80);
-  const rowY = 140;
+  // Bumped rowY (140 → 170) so the upper swap arc has room without
+  // colliding with the banner / pointer labels.
+  const rowY = 170;
   const totalW = n * CELL;
   const left = (W - totalW) / 2;
 
@@ -1065,24 +1333,67 @@ function _dutchFlagSvg({ arr, low, mid, high, swapped, done }) {
                  + ptr('mid', mid, yOf.mid)
                  + ptr('high', high, yOf.high);
 
-  // Swap arc below the row, if any swap happened this step.
+  // Swap visualisation. Two **crossing** arcs — one per ball — make
+  // the exchange physically intuitive (each ball follows its own
+  // path to the other slot). Even when a == b (self-swap), we draw
+  // a small "no-op" loop so the user sees that the algorithm DID
+  // consider this slot.
   let swap = '';
   if (swapped && swapped.length === 2) {
     const [a, b] = swapped;
     const xa = left + a * CELL + CELL / 2;
     const xb = left + b * CELL + CELL / 2;
-    const arcY = rowY + R + 24;
-    swap = `
-      <g style="animation: ${D.animFade} 480ms both;">
-        <path d="M ${xa} ${rowY + R + 4} C ${xa} ${arcY + 20}, ${xb} ${arcY + 20}, ${xb} ${rowY + R + 4}"
-              stroke="${ptrColor}" stroke-width="2.5" fill="none"
-              stroke-dasharray="6 4"
-              filter="${done ? D.glowGold : D.glowCyan}"
-              style="animation: ${D.animDash} 1.2s linear infinite;"/>
-        <text x="${(xa + xb) / 2}" y="${arcY + 18}" text-anchor="middle"
-              font-family="'JetBrains Mono', monospace" font-size="15"
-              fill="${ptrColor}" font-weight="bold">swap</text>
-      </g>`;
+    if (a === b) {
+      // Self-swap — a tiny loop above the cell with a "noop" badge.
+      swap = `
+        <g style="animation: ${D.animFade} 480ms both;">
+          <circle cx="${xa}" cy="${rowY - 70}" r="14" fill="none"
+                  stroke="${ptrColor}" stroke-width="2" stroke-dasharray="4 3"
+                  filter="${done ? D.glowGold : D.glowCyan}"
+                  style="animation: ${D.animDash} 1.4s linear infinite;"/>
+          <text x="${xa + 22}" y="${rowY - 66}"
+                font-family="'JetBrains Mono', monospace" font-size="13"
+                fill="${ptrColor}">self-swap (no-op)</text>
+        </g>`;
+    } else {
+      // Two crossing arcs. Color the FROM-arc one way and the TO-arc
+      // another so the exchange isn't a tangle. Bottom arc curves down,
+      // top arc curves up — they cross visibly above/below the row.
+      const arcDown = rowY + R + 38;
+      const arcUp   = rowY - R - 38;
+      const startA  = rowY + R + 2;
+      const startB  = rowY - R - 2;
+      swap = `
+        <g style="animation: ${D.animFade} 520ms both; transform-origin: center;">
+          <!-- Ball A travels DOWN-and-OVER to slot B -->
+          <path d="M ${xa} ${startA}
+                   C ${xa} ${arcDown}, ${xb} ${arcDown}, ${xb} ${startA}"
+                stroke="#80d4ff" stroke-width="3" fill="none"
+                stroke-linecap="round"
+                stroke-dasharray="10 5"
+                filter="${D.glowCyan}"
+                style="animation: ${D.animDash} 1s linear infinite;"
+                marker-end="${D.arrowCyan}"/>
+          <!-- Ball B travels UP-and-OVER to slot A -->
+          <path d="M ${xb} ${startB}
+                   C ${xb} ${arcUp}, ${xa} ${arcUp}, ${xa} ${startB}"
+                stroke="#ffd060" stroke-width="3" fill="none"
+                stroke-linecap="round"
+                stroke-dasharray="10 5"
+                filter="${D.glowGold}"
+                style="animation: ${D.animDash} 1s linear infinite reverse;"
+                marker-end="${D.arrowGold}"/>
+          <!-- Center "↔ swap" badge -->
+          <g>
+            <rect x="${(xa + xb) / 2 - 46}" y="${arcDown + 10}" width="92" height="28" rx="14"
+                  fill="${D.matchGrad}" stroke="${ptrColor}" stroke-width="1.8"
+                  filter="${done ? D.glowGold : D.glowCyan}"/>
+            <text x="${(xa + xb) / 2}" y="${arcDown + 29}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="16"
+                  fill="${ptrColor}" font-weight="bold">↔ swap</text>
+          </g>
+        </g>`;
+    }
   }
 
   // Title banner
@@ -1100,7 +1411,8 @@ function _dutchFlagSvg({ arr, low, mid, high, swapped, done }) {
       </text>
     </g>`;
 
-  const H = rowY + R + (swap ? 80 : 30);
+  // Account for the swap badge that sits below the lower arc.
+  const H = rowY + R + (swap ? 120 : 30);
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
     ${_traceDefs(uid)}
     ${banner}
@@ -2597,6 +2909,72 @@ Output: [R, R, R, R, Y, Y, Y, G, G, G]
           'LIFO — סטאק. בכל פתיחה דוחפים, בכל סגירה — מציצים ובודקים שזה התאמה.',
           'בסוף, הסטאק צריך להיות **ריק**. אחרת — נשארו פתיחות לא-סגורות. גם פספוס pop (סטאק ריק בסגירה) → לא תקין.',
         ],
+        trace: {
+          title: 'Valid Parentheses — s="([{}])"',
+          source:
+`def is_valid(s):
+    pairs = {')': '(', ']': '[', '}': '{'}
+    stack = []
+    for c in s:
+        if c in '([{':
+            stack.append(c)
+        elif c in ')]}':
+            if not stack or stack[-1] != pairs[c]:
+                return False
+            stack.pop()
+    return not stack`,
+          sourceLang: 'python',
+          steps: [
+            {
+              code: 'init: stack = []',
+              explain: 'מתחילים עם סטאק ריק. ה-loop יסרוק תו-בתו את \\\`s\\\`.',
+              executed: [2, 3], focusLine: 3,
+              viz: _parensSvg({ s: '([{}])', idx: -1, stack: [], action: 'init' }),
+            },
+            {
+              code: "c='(' → push",
+              explain: 'תו פתיחה — נדחף לסטאק. \\\`stack = [(]\\\`.',
+              executed: [4, 5, 6], focusLine: 6,
+              viz: _parensSvg({ s: '([{}])', idx: 0, stack: ['('], action: 'push' }),
+            },
+            {
+              code: "c='[' → push",
+              explain: 'עוד פתיחה. \\\`stack = [(, []\\\`. הצומת האחרון בסטאק הוא תמיד "מי שצריך להיסגר הבא".',
+              executed: [4, 5, 6], focusLine: 6,
+              viz: _parensSvg({ s: '([{}])', idx: 1, stack: ['(', '['], action: 'push' }),
+            },
+            {
+              code: "c='{' → push",
+              explain: 'פתיחה שלישית. \\\`stack = [(, [, {]\\\`.',
+              executed: [4, 5, 6], focusLine: 6,
+              viz: _parensSvg({ s: '([{}])', idx: 2, stack: ['(', '[', '{'], action: 'push' }),
+            },
+            {
+              code: "c='}' → top='{' ✓ pop",
+              explain: 'סוגר. \\\`pairs[}] = {\\\` — תואם ל-top. pop. \\\`stack = [(, [\\\`.',
+              executed: [4, 7, 8, 10], focusLine: 10,
+              viz: _parensSvg({ s: '([{}])', idx: 3, stack: ['(', '['], action: 'pop' }),
+            },
+            {
+              code: "c=']' → top='[' ✓ pop",
+              explain: '\\\`pairs[]] = [\\\` תואם ל-top. pop. \\\`stack = [(]\\\`.',
+              executed: [4, 7, 8, 10], focusLine: 10,
+              viz: _parensSvg({ s: '([{}])', idx: 4, stack: ['('], action: 'pop' }),
+            },
+            {
+              code: "c=')' → top='(' ✓ pop",
+              explain: 'הסגר האחרון תואם לפותח האחרון שנשאר. pop ⇒ \\\`stack = []\\\`.',
+              executed: [4, 7, 8, 10], focusLine: 10,
+              viz: _parensSvg({ s: '([{}])', idx: 5, stack: [], action: 'pop' }),
+            },
+            {
+              code: 'return not stack  → True',
+              explain: 'הסטאק ריק → כל פתיחה נסגרה כראוי. **VALID** ✓',
+              executed: [11], focusLine: 11,
+              viz: _parensSvg({ s: '([{}])', idx: -1, stack: [], action: 'done', valid: true }),
+            },
+          ],
+        },
         answer:
 `**Stack-based.** \`O(n)\` זמן, \`O(n)\` מקום (גרוע ביותר — כל הקלט הוא פתיחות).
 
@@ -2869,6 +3247,71 @@ arr = [2, 6, 1, 8]       →  1   (מיזוג 2+6 → [8, 1, 8] = פלינדרו
           'אם \`arr[i] < arr[j]\` — חייב למזג את \`arr[i]\` עם השכן הימני: \`arr[i+1] += arr[i]; i++; merges++\`. מקסום הצד הקטן.',
           'אם \`arr[i] > arr[j]\` — סימטרי: \`arr[j-1] += arr[j]; j--; merges++\`. המצביעים נפגשים תוך \`O(n)\` צעדים.',
         ],
+        trace: {
+          title: 'Min-merges-palindrome — arr=[10, 11, 32, 27]',
+          source:
+`def min_merges(arr):
+    i, j = 0, len(arr) - 1
+    merges = 0
+    while i < j:
+        if arr[i] == arr[j]:
+            i += 1
+            j -= 1
+        elif arr[i] < arr[j]:
+            arr[i + 1] += arr[i]
+            i += 1
+            merges += 1
+        else:                       # arr[i] > arr[j]
+            arr[j - 1] += arr[j]
+            j -= 1
+            merges += 1
+    return merges`,
+          sourceLang: 'python',
+          steps: [
+            {
+              code: 'init: i=0, j=3, merges=0',
+              explain: 'שני מצביעים מהקצוות, הפנים. ה-loop רץ כל עוד \\\`i < j\\\`.',
+              executed: [2, 3, 4], focusLine: 4,
+              viz: _palindromeMergeSvg({ arr: [10, 11, 32, 27], consumed: [], i: 0, j: 3, merges: 0 }),
+            },
+            {
+              code: 'arr[0]=10 < arr[3]=27 → merge left',
+              explain: 'הצד השמאלי קטן. **חייבים** להגדיל אותו (אסור להקטין את \\\`arr[j]\\\`). מיזוג: \\\`arr[1] += arr[0]\\\` ⇒ \\\`arr[1]=21\\\`. אחר כך \\\`i++\\\` ו-\\\`merges++\\\`.',
+              executed: [4, 8, 9, 10, 11], focusLine: 9,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 32, 27], consumed: [], i: 0, j: 3, merges: 0, mergeFrom: 0, mergeInto: 1 }),
+            },
+            {
+              code: 'after merge: arr=[_, 21, 32, 27], i=1, merges=1',
+              explain: 'התא \\\`[0]\\\` הופך לא-רלוונטי (כבר נצרך) — מצוייר דהוי. הטווח הפעיל עכשיו \\\`[1..3]\\\`.',
+              executed: [4], focusLine: 4,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 32, 27], consumed: [0], i: 1, j: 3, merges: 1 }),
+            },
+            {
+              code: 'arr[1]=21 < arr[3]=27 → merge left',
+              explain: 'שוב הצד השמאלי קטן. \\\`arr[2] += 21\\\` → \\\`arr[2]=53\\\`. \\\`i++\\\`, \\\`merges++\\\`.',
+              executed: [4, 8, 9, 10, 11], focusLine: 9,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 53, 27], consumed: [0], i: 1, j: 3, merges: 1, mergeFrom: 1, mergeInto: 2 }),
+            },
+            {
+              code: 'after merge: arr=[_, _, 53, 27], i=2, merges=2',
+              explain: 'כעת התא \\\`[1]\\\` גם נצרך. הטווח הפעיל \\\`[2..3]\\\`. רק שני איברים נשארו.',
+              executed: [4], focusLine: 4,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 53, 27], consumed: [0, 1], i: 2, j: 3, merges: 2 }),
+            },
+            {
+              code: 'arr[2]=53 > arr[3]=27 → merge right',
+              explain: 'הצד הימני קטן יותר. סימטרי לקודם: \\\`arr[j-1] += arr[j]\\\` ⇒ \\\`arr[2] += 27 = 80\\\`. \\\`j--\\\`, \\\`merges++\\\`.',
+              executed: [4, 12, 13, 14, 15], focusLine: 13,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 80, 27], consumed: [0, 1], i: 2, j: 3, merges: 2, mergeFrom: 3, mergeInto: 2 }),
+            },
+            {
+              code: 'after merge: arr=[_, _, 80, _], i=j=2 → done',
+              explain: 'כל המערך התכווץ לאיבר יחיד \\\`80\\\`. **פלינדרום טריוויאלי** של איבר יחיד. סה"כ \\\`3\\\` מיזוגים.',
+              executed: [4, 16], focusLine: 16,
+              viz: _palindromeMergeSvg({ arr: [10, 21, 80, 27], consumed: [0, 1, 3], i: 2, j: 2, merges: 3, done: true }),
+            },
+          ],
+        },
         answer:
 `**Two pointers greedy.** \`O(n)\` זמן, \`O(1)\` מקום (תוך-מקום על המערך).
 

@@ -4226,18 +4226,21 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 
 .iv-table {
   border-collapse: collapse;
-  margin: 8px 0;
-  font-size: 12px;
+  margin: 14px 0;
+  font-size: 20px;
+  width: 100%;
 }
 .iv-table th, .iv-table td {
   border: 1px solid #2a4060;
-  padding: 4px 8px;
+  padding: 10px 14px;
   text-align: right;
+  line-height: 1.5;
 }
 .iv-table th {
   background: #102a1a;
   color: #80f0a0;
   font-weight: bold;
+  font-size: 21px;
 }
 
 /* Action buttons row */

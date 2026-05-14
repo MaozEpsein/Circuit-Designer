@@ -1050,13 +1050,23 @@ export class InterviewPanel {
     const traceStep = this._traceStep[tKey];
     const traceHtml = _renderTrace(part.trace, traceStep);
 
+    // Consistent answer layout: **code → diagram → explanations**.
+    // When the question doesn't use `approaches` (one-solution case),
+    // we hoist the FIRST code block out of the markdown answer and
+    // render it ABOVE the trace; the remainder of the answer
+    // (intro/complexity/edge-cases prose) goes AFTER the trace as the
+    // "explanations" section. This matches the convention requested
+    // for the algorithms tab: solution-first, then visual, then prose.
+    const { codeFirstHtml, restAnswer } = _hoistFirstCode(part, !!part.approaches?.length);
+
     const answerHtml = answerShown
       ? `<div class="iv-answer" dir="rtl">
            <div class="iv-answer-head">תשובה</div>
            ${answerSvgHtml}
            ${approachesHtml}
+           ${codeFirstHtml}
            ${traceHtml}
-           <div class="iv-answer-body">${_renderRichText(part.answer || '')}</div>
+           <div class="iv-answer-body">${_renderRichText(restAnswer)}</div>
            ${circuitInAnswerHtml}
            <button class="iv-btn iv-btn-link" data-act="hide-answer">הסתר תשובה</button>
          </div>`
@@ -1266,6 +1276,30 @@ function _lineDiff(a, b) {
     }
   }
   return { left, right };
+}
+
+// Extract the FIRST fenced code block from `part.answer` and render
+// it as an isolated `<pre class="iv-code">` BEFORE the trace player.
+// The remaining answer markdown (intro line + complexity + edge-cases
+// + steps-of-thinking) is returned as `restAnswer` to be rendered
+// AFTER the trace. When the question already uses `approaches[]`
+// (multi-solution case), the approach cards carry the code → we
+// skip hoisting and let the markdown answer flow as-is.
+function _hoistFirstCode(part, hasApproaches) {
+  const answer = part.answer || '';
+  if (hasApproaches) return { codeFirstHtml: '', restAnswer: answer };
+  const m = answer.match(/```(\w*)\n([\s\S]*?)\n```/);
+  if (!m) return { codeFirstHtml: '', restAnswer: answer };
+  const lang = m[1] || '';
+  const code = m[2];
+  const langAttr = lang ? ` data-lang="${_esc(lang)}"` : '';
+  const codeHtml =
+    `<pre class="iv-code iv-code-hoisted"${langAttr} dir="ltr"><code>${_esc(code)}</code></pre>`;
+  // Remove the *first* occurrence of the block from the answer so it
+  // doesn't appear twice. `String.prototype.replace` with a string
+  // arg replaces only the first match — exactly what we want.
+  const rest = answer.replace(m[0], '').trim();
+  return { codeFirstHtml: codeHtml, restAnswer: rest };
 }
 
 function _hasGenericStarter() { return true; }
