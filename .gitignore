@@ -1,0 +1,4 @@
+# Extracted slide images + JSON dump from IQ/PP/*.pptx — regeneratable
+# at any time via `python IQ/PP/extract.py`, so we don't ship them.
+IQ/PP/slides/
+IQ/PP/extracted.json
