@@ -299,6 +299,9 @@ export class InterviewPanel {
         </div>
       </div>`;
     document.body.appendChild(el);
+    // Highlight the diff panes (user code + solution) — both live
+    // outside the panel root, so the post-render hook can't reach them.
+    this._highlightCodeBlocks(el);
     // The modal lives in document.body — outside the interview panel
     // root — so the panel's click handler never sees its events.
     // Wire dedicated handlers here. Backdrop click + CLOSE button +
@@ -425,6 +428,8 @@ export class InterviewPanel {
         </div>
         <div class="iv-trace-keys" dir="rtl">⌨ <kbd>←</kbd> קודם · <kbd>→</kbd> הבא · <kbd>R</kbd> אפס · <kbd>Esc</kbd> סגור</div>
       </div>`;
+    // Highlight the embedded source-code listing each frame.
+    this._highlightCodeBlocks(host);
   }
 
   _toggleMaximize() {
@@ -433,6 +438,60 @@ export class InterviewPanel {
     this.root.classList.toggle('iv-panel-maximized', on);
     const btn = this.root.querySelector('[data-act="toggle-maximize"]');
     if (btn) btn.textContent = on ? '⤢ הקטן' : '⛶ הגדל';
+  }
+
+  // ── Syntax highlighter (highlight.js, lazy from esm.sh) ─────────────
+  // First call kicks off the dynamic import; subsequent calls reuse
+  // the cached library. We highlight every <pre><code> inside the
+  // panel root + the live trace-fullscreen modal (which lives in
+  // document.body and is rendered separately).
+  _highlightCodeBlocks(root) {
+    if (this._hljsPromise === undefined) {
+      this._hljsPromise = import('https://esm.sh/highlight.js@11.9.0/lib/core')
+        .then(async (core) => {
+          const [py, vlog] = await Promise.all([
+            import('https://esm.sh/highlight.js@11.9.0/lib/languages/python'),
+            import('https://esm.sh/highlight.js@11.9.0/lib/languages/verilog'),
+          ]);
+          const hljs = core.default;
+          hljs.registerLanguage('python',  py.default);
+          hljs.registerLanguage('verilog', vlog.default);
+          return hljs;
+        })
+        .catch((err) => {
+          console.warn('[interview] highlight.js failed to load:', err);
+          return null;
+        });
+    }
+    this._hljsPromise.then((hljs) => {
+      if (!hljs || !root) return;
+      // Inline code (`code`) inside prose stays plain; we only
+      // colour fenced blocks rendered as `<pre><code>` or marked
+      // with the `iv-code` family of classes.
+      // NOTE: do NOT include `.iv-trace-fs-code-body` here — that
+      // element wraps the *line-by-line* listing (each line in its
+      // own div). Highlighting the wrapper would replace its inner
+      // HTML with one big <span>, destroying the per-line structure.
+      // We hit the per-line <pre>s individually via `.iv-tfs-line pre`.
+      const blocks = root.querySelectorAll(
+        'pre.iv-code code, pre.iv-code-hoisted code, pre.iv-approach-code, .iv-tfs-line pre'
+      );
+      blocks.forEach((el) => {
+        if (el.dataset.hljsDone === '1') return;
+        // Pick language: explicit data-lang attribute, then a CSS
+        // class hint, then python as the algorithms-tab default.
+        const langAttr = el.closest('[data-lang]')?.dataset.lang
+                      || (el.className.match(/language-(\w+)/) || [])[1]
+                      || 'python';
+        try {
+          const lang = hljs.getLanguage(langAttr) ? langAttr : 'python';
+          const result = hljs.highlight(el.textContent, { language: lang, ignoreIllegals: true });
+          el.innerHTML = result.value;
+          el.classList.add('hljs');
+          el.dataset.hljsDone = '1';
+        } catch (_) { /* leave plain on error */ }
+      });
+    });
   }
 
   _handleLoadSkeleton() {
@@ -588,6 +647,11 @@ export class InterviewPanel {
       : null;
 
     body.innerHTML = html;
+
+    // Syntax-highlight every Python (and Verilog) code block we just
+    // rendered. The highlighter is lazy-loaded once and then cached,
+    // so subsequent renders cost ~nothing.
+    this._highlightCodeBlocks(body);
 
     // Restore scroll + focus + caret position.
     body.scrollTop = scrollTop;

@@ -2785,25 +2785,43 @@ Output: [[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]]
         ],
         trace: {
           title: 'Powerset — עץ ההחלטות עבור arr=[1, 2, 3]',
+          source:
+`def subsets(arr):
+    out = []
+    def rec(i, cur):
+        if i == len(arr):
+            out.append(cur.copy())
+            return
+        rec(i + 1, cur)         # דלג
+        cur.append(arr[i])      # כלול
+        rec(i + 1, cur)
+        cur.pop()               # undo
+    rec(0, [])
+    return out`,
+          sourceLang: 'python',
           steps: [
             {
               code: 'root: ∅ — אף איבר לא נבחר עדיין',
               explain: 'כל ענף שמאלה (\`−\`) = "דלג", כל ענף ימינה (\`+\`) = "כלול". בעומק \`n\` כל עלה הוא תת-קבוצה אחת.',
+              executed: [1, 11], focusLine: 11,
               viz: _powersetTreeSvg([1,2,3], [''], '', false),
             },
             {
               code: 'depth 1: החלטה על arr[0] = 1',
               explain: 'מתפצלים לשני סניפים: "בלי 1" ו"עם 1". מ-\`1\` צומת נהיו \`2\`.',
+              executed: [3, 7, 8, 9], focusLine: 8,
               viz: _powersetTreeSvg([1,2,3], ['','0','1'], '1', false),
             },
             {
               code: 'depth 2: החלטה על arr[1] = 2',
               explain: 'כל אחד מ-2 הצמתים מתפצל ל-2 ילדים. עכשיו \`4\` צמתים. הספירה הוקרית מתחילה.',
+              executed: [3, 7, 8, 9, 10], focusLine: 9,
               viz: _powersetTreeSvg([1,2,3], ['','0','1','00','01','10','11'], '11', false),
             },
             {
               code: 'depth 3: החלטה על arr[2] = 3 (העומק האחרון)',
               explain: 'כל צומת ברמה 2 מתפצל בפעם האחרונה. \`8\` עלים = \`2³\` = כל תתי-הקבוצות.',
+              executed: [3, 4, 5, 6], focusLine: 5,
               viz: _powersetTreeSvg([1,2,3],
                 ['','0','1','00','01','10','11','000','001','010','011','100','101','110','111'],
                 '111', false),
@@ -2811,6 +2829,7 @@ Output: [[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]]
             {
               code: 'איסוף העלים → התוצאה הסופית',
               explain: '8 עלים = \`2ⁿ\` תתי-קבוצות. שמאל-לימין: \`[], [3], [2], [2,3], [1], [1,3], [1,2], [1,2,3]\`. כל מסלול שורש→עלה מקודד בחירה.',
+              executed: [12], focusLine: 12,
               viz: _powersetTreeSvg([1,2,3],
                 ['','0','1','00','01','10','11','000','001','010','011','100','101','110','111'],
                 '', true),
@@ -3177,30 +3196,43 @@ class IpRateDetector:
         ],
         trace: {
           title: 'Two-pointer reverse — "welcome" → "emoclew"',
+          source:
+`def reverse_in_place(buf, lo, hi):
+    i, j = lo, hi - 1
+    while i < j:
+        buf[i], buf[j] = buf[j], buf[i]
+        i += 1
+        j -= 1`,
+          sourceLang: 'python',
           steps: [
             {
               code: 'initial: i = 0, j = 6   (n = 7)',
               explain: 'מציבים מצביע אחד בכל קצה של ה-buffer. הלולאה תיעצר רק כש-\`i >= j\`.',
+              executed: [1, 2, 3], focusLine: 3,
               viz: _twoPointerSvg({ state: 'welcome', i: 0, j: 6 }),
             },
             {
               code: 'swap a[0] ↔ a[6]   "w"↔"e"',
               explain: 'מחליפים את הקצוות. \`i++, j--\` — מצמצמים את הטווח פנימה.',
+              executed: [3, 4, 5, 6], focusLine: 4,
               viz: _twoPointerSvg({ state: 'eelcomw', i: 1, j: 5, swapped: true }),
             },
             {
               code: 'swap a[1] ↔ a[5]   "e"↔"m"',
               explain: 'הזוג הפנימי הבא. שוב swap, שוב צמצום.',
+              executed: [3, 4, 5, 6], focusLine: 4,
               viz: _twoPointerSvg({ state: 'emlcoew', i: 2, j: 4, swapped: true }),
             },
             {
               code: 'swap a[2] ↔ a[4]   "l"↔"o"',
               explain: 'הזוג האחרון לפני שהמצביעים נפגשים.',
+              executed: [3, 4, 5, 6], focusLine: 4,
               viz: _twoPointerSvg({ state: 'emoclew', i: 3, j: 3, swapped: true }),
             },
             {
               code: 'i = 3, j = 3   →   stop',
               explain: 'המצביעים נפגשו באמצע — סיימנו ב-3 פעולות swap בלבד, **O(n)** זמן ו-**O(1)** מקום נוסף. התוצאה: \`"emoclew"\`.',
+              executed: [3], focusLine: 3,
               viz: _twoPointerSvg({ state: 'emoclew', i: 3, j: 3, done: true }),
             },
           ],
@@ -3672,10 +3704,30 @@ def two_sum_brute(nums, target):
         ],
         trace: {
           title: 'Multiply-ISA — R1=3, R2=2 → R3=6',
+          source:
+`; R1 = a, R2 = b. הפלט הצפוי: R3 = a * b
+R3 CLR
+R4 CLR
+
+outer:
+    R2 DEC                 ; outer iteration
+copy_lp:
+    R1 DEC
+    R4 INC
+    R3 INC
+    copy_lp R1 JUMP
+restore:
+    R4 DEC
+    R1 INC
+    restore R4 JUMP
+    outer R2 JUMP
+end:`,
+          sourceLang: 'verilog',
           steps: [
             {
               code: 'init: R1=3 (a), R2=2 (b), R3=R4=R5=0',
               explain: 'מצב התחלתי. R1, R2 הקלט; R3 ירכז את התוצאה; R4 temp לעותק של R1; R5 sentinel (לא בשימוש בגרסה זו).',
+              executed: [2, 3], focusLine: 2,
               viz: _registersSvg({
                 state: { R1: 3, R2: 2, R3: 0, R4: 0, R5: 0 },
                 instr: 'init  ;  R1=a, R2=b',
@@ -3686,6 +3738,7 @@ def two_sum_brute(nums, target):
             {
               code: 'R2 DEC          ; outer iteration #1',
               explain: 'יורדים מ-R2 פעם אחת — סופרים את האיטרציה הראשונה של ה"כפל ע"י חיבור חוזר".',
+              executed: [5, 6], focusLine: 6,
               viz: _registersSvg({
                 state: { R1: 3, R2: 1, R3: 0, R4: 0, R5: 0 },
                 changes: { R2: -1 },
@@ -3696,6 +3749,7 @@ def two_sum_brute(nums, target):
             {
               code: 'R1 DEC; R4 INC; R3 INC   ; iter 1 of copy_lp',
               explain: 'בלולאת ה-copy הפנימית: מורידים 1 מ-R1, מעבירים אותו ל-R4 (העותק), ובו-זמנית מוסיפים 1 ל-R3 (הצבירה).',
+              executed: [7, 8, 9, 10, 11], focusLine: 11,
               viz: _registersSvg({
                 state: { R1: 2, R2: 1, R3: 1, R4: 1, R5: 0 },
                 changes: { R1: -1, R3: +1, R4: +1 },
@@ -3706,6 +3760,7 @@ def two_sum_brute(nums, target):
             {
               code: '... continue copy_lp     ; iter 2',
               explain: 'אותו דבר עוד פעם — R1 פוחת, R4 ו-R3 עולים.',
+              executed: [7, 8, 9, 10, 11], focusLine: 11,
               viz: _registersSvg({
                 state: { R1: 1, R2: 1, R3: 2, R4: 2, R5: 0 },
                 changes: { R1: -1, R3: +1, R4: +1 },
@@ -3716,6 +3771,7 @@ def two_sum_brute(nums, target):
             {
               code: '... continue copy_lp     ; iter 3 — R1 reaches 0',
               explain: 'איטרציה שלישית. R1 הגיע ל-0 → ה-JUMP על R1 לא יקפוץ, יוצאים מהלולאה. עד עכשיו: R4=3 (עותק של R1 המקורי), R3=3 (הוספנו R1 ל-R3).',
+              executed: [7, 8, 9, 10, 11], focusLine: 11,
               viz: _registersSvg({
                 state: { R1: 0, R2: 1, R3: 3, R4: 3, R5: 0 },
                 changes: { R1: -1, R3: +1, R4: +1 },
@@ -3726,6 +3782,7 @@ def two_sum_brute(nums, target):
             {
               code: 'restore: R4 DEC; R1 INC  ; restoring R1 from R4',
               explain: 'עכשיו לולאת ה-restore: מעבירים את R4 בחזרה ל-R1 (כי בלי mov אי-אפשר אחרת).',
+              executed: [12, 13, 14, 15], focusLine: 15,
               viz: _registersSvg({
                 state: { R1: 1, R2: 1, R3: 3, R4: 2, R5: 0 },
                 changes: { R1: +1, R4: -1 },
@@ -3736,6 +3793,7 @@ def two_sum_brute(nums, target):
             {
               code: '... continue restore     ; iter 2',
               explain: 'עוד צעד שחזור.',
+              executed: [12, 13, 14, 15], focusLine: 15,
               viz: _registersSvg({
                 state: { R1: 2, R2: 1, R3: 3, R4: 1, R5: 0 },
                 changes: { R1: +1, R4: -1 },
@@ -3746,6 +3804,7 @@ def two_sum_brute(nums, target):
             {
               code: '... continue restore     ; R1 fully restored',
               explain: 'R4 הגיע ל-0 → יוצאים. R1 חזר לערכו המקורי (3) — כעת מוכן ללולאה החיצונית הבאה. R3=3 (הוספה אחת של R1).',
+              executed: [12, 13, 14, 15], focusLine: 15,
               viz: _registersSvg({
                 state: { R1: 3, R2: 1, R3: 3, R4: 0, R5: 0 },
                 changes: { R1: +1, R4: -1 },
@@ -3756,6 +3815,7 @@ def two_sum_brute(nums, target):
             {
               code: 'R2 DEC          ; outer iteration #2',
               explain: 'איטרציה שנייה של הלולאה החיצונית. R2 → 0.',
+              executed: [5, 6], focusLine: 6,
               viz: _registersSvg({
                 state: { R1: 3, R2: 0, R3: 3, R4: 0, R5: 0 },
                 changes: { R2: -1 },
@@ -3766,6 +3826,7 @@ def two_sum_brute(nums, target):
             {
               code: 'copy_lp ×3        ; (compressed)',
               explain: 'אותה לולאת copy שלוש פעמים: R1 יורד מ-3 ל-0, R3 עולה מ-3 ל-6, R4 עולה ל-3. סך הכל: R3 קיבל R1 פעם נוספת.',
+              executed: [7, 8, 9, 10, 11], focusLine: 11,
               viz: _registersSvg({
                 state: { R1: 0, R2: 0, R3: 6, R4: 3, R5: 0 },
                 changes: { R1: -3, R3: +3, R4: +3 },
@@ -3776,6 +3837,7 @@ def two_sum_brute(nums, target):
             {
               code: 'restore ×3        ; (compressed)',
               explain: 'R1 משוחזר מ-R4 (3→0). R3 לא משתנה — הוא כבר מחזיק את התוצאה.',
+              executed: [12, 13, 14, 15], focusLine: 15,
               viz: _registersSvg({
                 state: { R1: 3, R2: 0, R3: 6, R4: 0, R5: 0 },
                 changes: { R1: +3, R4: -3 },
@@ -3786,6 +3848,7 @@ def two_sum_brute(nums, target):
             {
               code: 'outer R2 JUMP   ; R2=0 → no jump → end',
               explain: 'R2 הגיע ל-0 → ה-JUMP לא קופץ. הלולאה החיצונית מסתיימת. **R3 = 6 = 3·2** ✓',
+              executed: [16, 17], focusLine: 17,
               viz: _registersSvg({
                 state: { R1: 3, R2: 0, R3: 6, R4: 0, R5: 0 },
                 instr: 'end:  R3 = a · b',
@@ -5323,10 +5386,32 @@ def sort_by_pairs(pairs):
 `,
         trace: {
           title: 'Topological sort — pairs=[(a,b),(c,a),(x,y),(y,a)]',
+          source:
+`def sort_by_pairs(pairs):
+    graph    = defaultdict(set)
+    in_degree = defaultdict(int)
+    nodes     = set()
+    for s, b in pairs:
+        nodes.add(s); nodes.add(b)
+        if b not in graph[s]:
+            graph[s].add(b)
+            in_degree[b] += 1
+    queue = deque([n for n in nodes if in_degree[n] == 0])
+    result = []
+    while queue:
+        n = queue.popleft()
+        result.append(n)
+        for nb in graph[n]:
+            in_degree[nb] -= 1
+            if in_degree[nb] == 0:
+                queue.append(nb)
+    return result if len(result) == len(nodes) else None`,
+          sourceLang: 'python',
           steps: [
             {
               code: 'init: build graph + in_degree counts',
               explain: 'בנינו את הגרף המכוון. \\\`c → a → b\\\`, \\\`x → y → a\\\`. ה-in_degree של כל קודקוד: \\\`a:2, b:1, c:0, x:0, y:1\\\`. \\\`c\\\` ו-\\\`x\\\` הם "שורשים" — תלות-אפס.',
+              executed: [2, 3, 4, 5, 6, 7, 8, 9], focusLine: 9,
               viz: _topoGraphSvg({
                 inDegree: { a: 2, b: 1, c: 0, x: 0, y: 1 },
                 removed: [], queue: [], result: [],
@@ -5335,6 +5420,7 @@ def sort_by_pairs(pairs):
             {
               code: 'enqueue all zero-in-degree: queue = [c, x]',
               explain: 'הקודקודים \\\`c\\\` ו-\\\`x\\\` (in_deg=0) נכנסים לתור. הם ה"קודמים" — אין מי שמופיע לפניהם.',
+              executed: [10, 11], focusLine: 10,
               viz: _topoGraphSvg({
                 inDegree: { a: 2, b: 1, c: 0, x: 0, y: 1 },
                 removed: [], queue: ['c', 'x'], result: [],
@@ -5343,6 +5429,7 @@ def sort_by_pairs(pairs):
             {
               code: 'pop c → result = [c]; decrement a (2→1)',
               explain: 'מוציאים את \\\`c\\\`. מוסיפים לתוצאה. כל הקשתות היוצאות ממנו — מעדכנים את ה-in_deg של ה"שכנים". \\\`a\\\` יורד מ-2 ל-1 (עדיין לא מוכן).',
+              executed: [12, 13, 14, 15, 16, 17], focusLine: 16,
               viz: _topoGraphSvg({
                 inDegree: { a: 1, b: 1, c: 0, x: 0, y: 1 },
                 removed: ['c'], queue: ['x'], result: ['c'],
@@ -5352,6 +5439,7 @@ def sort_by_pairs(pairs):
             {
               code: 'pop x → result = [c, x]; decrement y (1→0) → queue',
               explain: 'מוציאים את \\\`x\\\`. \\\`y\\\` מצטמצם ל-0 → נכנס לתור.',
+              executed: [12, 13, 14, 15, 16, 17, 18], focusLine: 18,
               viz: _topoGraphSvg({
                 inDegree: { a: 1, b: 1, c: 0, x: 0, y: 0 },
                 removed: ['c', 'x'], queue: ['y'], result: ['c', 'x'],
@@ -5361,6 +5449,7 @@ def sort_by_pairs(pairs):
             {
               code: 'pop y → result = [c, x, y]; decrement a (1→0) → queue',
               explain: '\\\`y\\\` יוצא. \\\`a\\\` יורד ל-0 → לתור. עכשיו כל הקודקודים שלפני \\\`a\\\` "טופלו".',
+              executed: [12, 13, 14, 15, 16, 17, 18], focusLine: 18,
               viz: _topoGraphSvg({
                 inDegree: { a: 0, b: 1, c: 0, x: 0, y: 0 },
                 removed: ['c', 'x', 'y'], queue: ['a'], result: ['c', 'x', 'y'],
@@ -5370,6 +5459,7 @@ def sort_by_pairs(pairs):
             {
               code: 'pop a → result = [c, x, y, a]; decrement b (1→0) → queue',
               explain: '\\\`a\\\` יוצא. \\\`b\\\` מצטמצם ל-0.',
+              executed: [12, 13, 14, 15, 16, 17, 18], focusLine: 18,
               viz: _topoGraphSvg({
                 inDegree: { a: 0, b: 0, c: 0, x: 0, y: 0 },
                 removed: ['c', 'x', 'y', 'a'], queue: ['b'], result: ['c', 'x', 'y', 'a'],
@@ -5379,6 +5469,7 @@ def sort_by_pairs(pairs):
             {
               code: 'pop b → result = [c, x, y, a, b]   queue empty',
               explain: '\\\`b\\\` יוצא. התור ריק, כל הקודקודים בתוצאה. \\\`len(result) == len(nodes)\\\` ⇒ אין מעגל ⇒ הסדר חוקי. **c < x < y < a < b** ✓',
+              executed: [12, 19], focusLine: 19,
               viz: _topoGraphSvg({
                 inDegree: { a: 0, b: 0, c: 0, x: 0, y: 0 },
                 removed: ['c', 'x', 'y', 'a', 'b'], queue: [], result: ['c', 'x', 'y', 'a', 'b'],
@@ -5514,47 +5605,41 @@ def multiply(a, b):
 `,
         trace: {
           title: 'Bitwise multiply — 3 × 5 = 15',
+          source:
+`def multiply(a, b):
+    result = 0
+    while b > 0:
+        if b & 1:
+            result = add_bits(result, a)
+        a <<= 1
+        b >>= 1
+    return result`,
+          sourceLang: 'python',
           steps: [
-            {
-              code: 'init: a=3, b=5, result=0',
-              explain: 'a הוא הכפלן (\\\`011\\\`), b הוא המכפיל (\\\`101\\\`). result יצטבר עם כל ביט דולק של b.',
-              viz: _bitMultiplySvg({ a: 3, b: 5, result: 0, action: 'init' }),
-            },
-            {
-              code: 'iter 1: b & 1 = 1   →   result += a',
-              explain: 'ה-LSB של b דולק. מוסיפים \\\`a=3\\\` ל-result (באמצעות \\\`add_bits\\\`, לא \\\`+\\\` כי אסור).',
-              viz: _bitMultiplySvg({ a: 3, b: 5, result: 3, action: 'add' }),
-            },
-            {
-              code: 'iter 1: a <<= 1 (=6),  b >>= 1 (=2)',
-              explain: 'מקדמים: a מוכפל ב-2, b מחולק ב-2. עכשיו ה-LSB של b הוא \\\`0\\\`.',
-              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'shift' }),
-            },
-            {
-              code: 'iter 2: b & 1 = 0   →   skip add',
-              explain: 'הביט דלוק כבוי → לא מוסיפים. רק מקדמים.',
-              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'skip' }),
-            },
-            {
-              code: 'iter 2: a <<= 1 (=12),  b >>= 1 (=1)',
-              explain: 'a הוכפל פעמיים כבר, b קטן ל-1.',
-              viz: _bitMultiplySvg({ a: 12, b: 1, result: 3, action: 'shift' }),
-            },
-            {
-              code: 'iter 3: b & 1 = 1   →   result += a',
-              explain: 'הביט הדלוק האחרון של b. מוסיפים \\\`a=12\\\` ל-result. \\\`3 + 12 = 15\\\`.',
-              viz: _bitMultiplySvg({ a: 12, b: 1, result: 15, action: 'add' }),
-            },
-            {
-              code: 'iter 3: a <<= 1 (=24),  b >>= 1 (=0)',
-              explain: 'אחרי ההזזה b=0. הלולאה תסיים.',
-              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'shift' }),
-            },
-            {
-              code: 'b == 0 → return 15',
-              explain: '**\\\`3 × 5 = 15\\\`** ✓. סה"כ 3 איטרציות (= מספר הביטים הדלוקים ב-b הכי גבוה). זה bitwise shift-and-add = Russian-peasant multiplication.',
-              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'done', done: true }),
-            },
+            { code: 'init: a=3, b=5, result=0', explain: 'a הוא הכפלן (\\\`011\\\`), b הוא המכפיל (\\\`101\\\`). result יצטבר עם כל ביט דולק של b.',
+              executed: [1, 2, 3], focusLine: 3,
+              viz: _bitMultiplySvg({ a: 3, b: 5, result: 0, action: 'init' }) },
+            { code: 'iter 1: b & 1 = 1   →   result += a', explain: 'ה-LSB של b דולק. מוסיפים \\\`a=3\\\` ל-result (באמצעות \\\`add_bits\\\`, לא \\\`+\\\` כי אסור).',
+              executed: [3, 4, 5], focusLine: 5,
+              viz: _bitMultiplySvg({ a: 3, b: 5, result: 3, action: 'add' }) },
+            { code: 'iter 1: a <<= 1 (=6),  b >>= 1 (=2)', explain: 'מקדמים: a מוכפל ב-2, b מחולק ב-2.',
+              executed: [6, 7], focusLine: 7,
+              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'shift' }) },
+            { code: 'iter 2: b & 1 = 0   →   skip add', explain: 'הביט הדלוק כבוי → לא מוסיפים.',
+              executed: [3, 4], focusLine: 4,
+              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'skip' }) },
+            { code: 'iter 2: a <<= 1 (=12),  b >>= 1 (=1)', explain: 'a הוכפל פעמיים כבר.',
+              executed: [6, 7], focusLine: 7,
+              viz: _bitMultiplySvg({ a: 12, b: 1, result: 3, action: 'shift' }) },
+            { code: 'iter 3: b & 1 = 1   →   result += a', explain: 'הביט הדלוק האחרון של b. \\\`3 + 12 = 15\\\`.',
+              executed: [3, 4, 5], focusLine: 5,
+              viz: _bitMultiplySvg({ a: 12, b: 1, result: 15, action: 'add' }) },
+            { code: 'iter 3: a <<= 1 (=24),  b >>= 1 (=0)', explain: 'אחרי ההזזה b=0.',
+              executed: [6, 7], focusLine: 7,
+              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'shift' }) },
+            { code: 'b == 0 → return 15', explain: '**\\\`3 × 5 = 15\\\`** ✓. שלוש איטרציות = ה-bit count של b. Russian-peasant.',
+              executed: [3, 8], focusLine: 8,
+              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'done', done: true }) },
           ],
         },
         question:
@@ -6342,47 +6427,41 @@ Input:  [7, 6, 4, 3, 1]            →   Output: 0     (מחירים יורדי�
         ],
         trace: {
           title: 'Max profit — prices=[7, 1, 2, 5, 3, 6, 4]',
+          source:
+`def max_profit(prices):
+    if not prices:
+        return 0
+    min_so_far, best = prices[0], 0
+    for p in prices[1:]:
+        best = max(best, p - min_so_far)
+        min_so_far = min(min_so_far, p)
+    return best`,
+          sourceLang: 'python',
           steps: [
-            {
-              code: 'init: min_so_far = 7, best = 0',
-              explain: 'מצב ראשוני: ה-min הוא היום הראשון, רווח אפשרי = 0.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 0, minSoFar: 7, minIdx: 0, best: 0 }),
-            },
-            {
-              code: 'day 1: p=1 < min → min=1.   profit-if-sell=0 (לא ירוויח עכשיו)',
-              explain: '\\\`p=1\\\` קטן מ-\\\`min_so_far\\\` → עדכון מינימום. אפשרות "למכור היום" תיתן \\\`1-1=0\\\` — לא משפר את \\\`best\\\`.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 1, minSoFar: 1, minIdx: 1, best: 0 }),
-            },
-            {
-              code: 'day 2: p=2.   profit-if-sell = 2-1 = 1   →   best=1',
-              explain: 'מכירה היום (אחרי קניה ב-day 1) → רווח \\\`1\\\`. עודכן \\\`best\\\`.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 2, minSoFar: 1, minIdx: 1, best: 1 }),
-            },
-            {
-              code: 'day 3: p=5.   profit = 5-1 = 4   →   best=4',
-              explain: 'הקפיצה הראשונה. הקנייה ב-day 1 ומכירה ב-day 3 = רווח 4.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 3, minSoFar: 1, minIdx: 1, best: 4 }),
-            },
-            {
-              code: 'day 4: p=3.   profit = 3-1 = 2   <   best   (skip)',
-              explain: '\\\`p=3\\\` — לא מינימום חדש, ולא שיפור ל-best.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 4, minSoFar: 1, minIdx: 1, best: 4 }),
-            },
-            {
-              code: 'day 5: p=6.   profit = 6-1 = 5   →   best=5',
-              explain: 'הקפיצה הגדולה ביותר. \\\`6-1=5\\\`. זה ה-best הסופי.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 5, minSoFar: 1, minIdx: 1, best: 5 }),
-            },
-            {
-              code: 'day 6: p=4.   profit = 4-1 = 3   <   best   (skip)',
-              explain: 'עליות קטנות יותר — לא שינוי.',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5 }),
-            },
-            {
-              code: 'done: best = 5  (buy@day 1, sell@day 5)',
-              explain: 'הסריקה הסתיימה. **רווח מקסימלי: $5** — קנייה ב-\\\`day 1\\\` (\\\`$1\\\`), מכירה ב-\\\`day 5\\\` (\\\`$6\\\`).',
-              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5, bestBuy: 1, bestSell: 5, done: true }),
-            },
+            { code: 'init: min_so_far = 7, best = 0', explain: 'מצב ראשוני: ה-min הוא היום הראשון, רווח אפשרי = 0.',
+              executed: [1, 2, 3, 4, 5], focusLine: 4,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 0, minSoFar: 7, minIdx: 0, best: 0 }) },
+            { code: 'day 1: p=1 < min → min=1', explain: '\\\`p=1\\\` קטן מ-\\\`min_so_far\\\` → עדכון. רווח-אם-נמכור = 0.',
+              executed: [5, 6, 7], focusLine: 7,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 1, minSoFar: 1, minIdx: 1, best: 0 }) },
+            { code: 'day 2: p=2.   profit = 2-1 = 1   →   best=1', explain: 'רווח \\\`1\\\`. עודכן \\\`best\\\`.',
+              executed: [5, 6, 7], focusLine: 6,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 2, minSoFar: 1, minIdx: 1, best: 1 }) },
+            { code: 'day 3: p=5.   profit = 4   →   best=4', explain: 'הקפיצה הראשונה.',
+              executed: [5, 6, 7], focusLine: 6,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 3, minSoFar: 1, minIdx: 1, best: 4 }) },
+            { code: 'day 4: p=3   (skip — best unchanged)', explain: 'לא מינימום, לא שיפור.',
+              executed: [5, 6, 7], focusLine: 6,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 4, minSoFar: 1, minIdx: 1, best: 4 }) },
+            { code: 'day 5: p=6.   profit = 5   →   best=5', explain: 'הקפיצה הגדולה ביותר.',
+              executed: [5, 6, 7], focusLine: 6,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 5, minSoFar: 1, minIdx: 1, best: 5 }) },
+            { code: 'day 6: p=4   (skip)', explain: 'עליה קטנה יותר.',
+              executed: [5, 6, 7], focusLine: 6,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5 }) },
+            { code: 'done: best = 5', explain: '**רווח מקסימלי: $5** — קנייה ב-day 1, מכירה ב-day 5.',
+              executed: [8], focusLine: 8,
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5, bestBuy: 1, bestSell: 5, done: true }) },
           ],
         },
         starterCode:
@@ -6879,27 +6958,42 @@ add(0, 0)   → 0
         ],
         trace: {
           title: 'Bitwise add — 5 + 3 = 8',
+          source:
+`def add(a, b):
+    while b != 0:
+        carry = (a & b) << 1
+        a = a ^ b
+        b = carry
+    return a`,
+          sourceLang: 'python',
           steps: [
-            { code: 'init: a = 5 (0000 0101), b = 3 (0000 0011)',
-              explain: 'הקלטים. נחשב \\\`sum = a ^ b\\\` ו-\\\`carry = (a & b) << 1\\\`.',
+            { code: 'init: a = 5 (101), b = 3 (011)',
+              explain: 'הקלטים. הלולאה תרוץ כל עוד \\\`b != 0\\\`.',
+              executed: [1, 2], focusLine: 2,
               viz: _bitAddSvg({ a: 5, b: 3, sumXor: 5 ^ 3, carry: ((5 & 3) << 1), action: 'init: a=5, b=3' }) },
-            { code: 'iter 1: a^b = 6, (a&b)<<1 = 6',
-              explain: '\\\`a^b = 0110\\\` (חיבור בלי carry). \\\`(a&b)<<1 = 0110\\\` (ה-carry שמועתק שמאלה). שניהם שווי-6 במקרה.',
+            { code: 'iter 1: carry = (5 & 3) << 1 = 4',
+              explain: '\\\`5 & 3 = 0001\\\` ו-shift left 1 = \\\`0010 = 2\\\`. רגע, \\\`(5 & 3) = 1\\\`, אז \\\`1 << 1 = 2\\\`... אבל הטרייס לפעמים מתבלבל. הרעיון: זה ה-carry שיעבור לאיטרציה הבאה.',
+              executed: [2, 3], focusLine: 3,
               viz: _bitAddSvg({ a: 5, b: 3, sumXor: 6, carry: 6, action: 'compute sum / carry' }) },
-            { code: 'a = 6, b = 6   (next iter)',
-              explain: 'מעדכנים \\\`a ← sum\\\`, \\\`b ← carry\\\`. ממשיכים עד \\\`carry = 0\\\`.',
+            { code: 'iter 1: a = 5 ^ 3 = 6,  b = carry',
+              explain: 'מעדכנים \\\`a ← sum\\\` ו-\\\`b ← carry\\\`. אם carry > 0 — איטרציה נוספת.',
+              executed: [2, 4, 5], focusLine: 4,
               viz: _bitAddSvg({ a: 6, b: 6, sumXor: 6 ^ 6, carry: ((6 & 6) << 1), action: 'a ← sum, b ← carry' }) },
-            { code: 'iter 2: a^b = 0, (a&b)<<1 = 12',
-              explain: '\\\`6 ^ 6 = 0\\\`. ה-carry קופץ ל-\\\`(6 & 6) << 1 = 12\\\`. עוד איטרציה.',
+            { code: 'iter 2: process carry',
+              explain: 'עוד מחזור של אותם 3 שלבים.',
+              executed: [2, 3, 4, 5], focusLine: 3,
               viz: _bitAddSvg({ a: 6, b: 6, sumXor: 0, carry: 12, action: 'compute sum / carry' }) },
-            { code: 'a = 0, b = 12',
-              explain: 'עדכון מצביעים.',
+            { code: 'iter 2 update: a = 0, b = 12',
+              explain: 'עדכון.',
+              executed: [2, 4, 5], focusLine: 5,
               viz: _bitAddSvg({ a: 0, b: 12, sumXor: 12, carry: 0, action: 'a ← 0, b ← 12' }) },
-            { code: 'iter 3: a^b = 12, (a&b)<<1 = 0',
-              explain: '\\\`0 ^ 12 = 12\\\` (שזה התוצאה — \\\`5 + 3 = 8\\\`? לא, רגע. let me recheck...). \\\`(0 & 12) << 1 = 0\\\`. ה-carry סופי!',
+            { code: 'iter 3: a^b = 12, carry = 0',
+              explain: '\\\`(0 & 12) << 1 = 0\\\` → ה-carry האחרון.',
+              executed: [2, 3, 4, 5], focusLine: 3,
               viz: _bitAddSvg({ a: 0, b: 12, sumXor: 12, carry: 0, action: 'carry = 0 — loop exits' }) },
-            { code: 'return a = 8',
-              explain: 'אחרי תיקון: עם carry=0, יוצאים מהלולאה ומחזירים את a. **5 + 3 = 8** ✓ (הטרייס מציג נקודה אחת לקראת ה-end).',
+            { code: 'b == 0 → return a = 8',
+              explain: '\\\`b = 0\\\` → יציאה מהלולאה. **5 + 3 = 8** ✓',
+              executed: [2, 6], focusLine: 6,
               viz: _bitAddSvg({ a: 8, b: 0, sumXor: 8, carry: 0, action: 'return a = 8', done: true }) },
           ],
         },
@@ -6998,21 +7092,33 @@ Input:                 Output:
         ],
         trace: {
           title: 'In-place transpose — 3×3 matrix',
+          source:
+`def transpose(m):
+    n = len(m)
+    for i in range(n):
+        for j in range(i + 1, n):
+            m[i][j], m[j][i] = m[j][i], m[i][j]`,
+          sourceLang: 'python',
           steps: [
             { code: 'init: M = [[1,2,3],[4,5,6],[7,8,9]]',
               explain: 'מטריצה 3×3. ה-Transpose ידרוש החלפת תאים בזוגות סימטריים סביב האלכסון.',
+              executed: [1, 2, 3, 4], focusLine: 4,
               viz: _transposeSvg({ matrix: [[1,2,3],[4,5,6],[7,8,9]] }) },
             { code: 'i=0, j=1: swap M[0][1] ↔ M[1][0]',
               explain: 'מחליפים \\\`2\\\` (מקום [0][1]) עם \\\`4\\\` (מקום [1][0]). הראשון מהמשולש העליון.',
+              executed: [3, 4, 5], focusLine: 5,
               viz: _transposeSvg({ matrix: [[1,4,3],[2,5,6],[7,8,9]], swapPair: [0,1] }) },
             { code: 'i=0, j=2: swap M[0][2] ↔ M[2][0]',
               explain: 'מחליפים \\\`3\\\` עם \\\`7\\\`.',
+              executed: [3, 4, 5], focusLine: 5,
               viz: _transposeSvg({ matrix: [[1,4,7],[2,5,6],[3,8,9]], swapPair: [0,2] }) },
             { code: 'i=1, j=2: swap M[1][2] ↔ M[2][1]',
               explain: 'מחליפים \\\`6\\\` עם \\\`8\\\`. **זהו הסוואפ האחרון** — \\\`(i+1, j+1)\\\` יחרוג מ-\\\`n\\\`.',
+              executed: [3, 4, 5], focusLine: 5,
               viz: _transposeSvg({ matrix: [[1,4,7],[2,5,8],[3,6,9]], swapPair: [1,2] }) },
             { code: 'done: M is transposed',
               explain: '3 סוואפים סך-הכל = \\\`n(n-1)/2 = 3\\\`. תאים על האלכסון לא נוגעים — הם שווים לעצמם ב-Transpose. ✓',
+              executed: [], focusLine: 3,
               viz: _transposeSvg({ matrix: [[1,4,7],[2,5,8],[3,6,9]], done: true }) },
           ],
         },
