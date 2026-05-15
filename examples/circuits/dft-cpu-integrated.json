@@ -1,0 +1,154 @@
+{
+  "_dft": {
+    "_doc": "Simple CPU wrapped with a full DFT layer — interview showcase.\n\n  CORE (unchanged single-cycle CPU):\n    PC → ROM → IR → CU → ALU ↔ REG_FILE_DP (RF) ↔ RAM, with a write-back MUX.\n\n  PRE-LOADED REGISTERS (no LI used — initialRegs seeds the RF):\n    R0=0  R1=5  R2=1  R3=0  R4=7  R5=3  R6=99  R7=0  R8..R15=0.\n\n  PROGRAM (8 instructions, no LI, exercises RF + RAM + branches):\n    0: ADD   R3,R3,R1       ; R3 += R1               (accumulator)\n    1: STORE R1,R5          ; mem[R5=3] = R1         (RAM write)\n    2: SUB   R1,R1,R2       ; R1 -= 1                (counter)\n    3: BNE   R1,R0,0        ; loop while R1 != 0     (4× TAKEN, 1× NOT-TAKEN)\n    4: LOAD  R7,R5          ; R7 = mem[3]            (RAM read into RF)\n    5: ADD   R3,R3,R7       ; R3 += R7\n    6: BEQ   R0,R6,0        ; 0==99 ? — NEVER TAKEN  (predictor mispredict)\n    7: HALT\n\n  EXECUTION HIGHLIGHTS (for the interviewer):\n    • RF changes: R1 walks 5→4→3→2→1→0; R3 accumulates 5,9,12,14,15,16; R7 loaded from RAM.\n    • RAM changes: addr 3 written successively with 5,4,3,2,1; last value read back into R7.\n    • Branch demo:\n        – BNE at PC=3 is taken 4 times, not-taken once → ideal for the 2-bit predictor\n          (it converges to 'Strongly Taken' and only mispredicts the final exit).\n        – BEQ at PC=6 is never taken; with default static-NT predictor this is a hit,\n          with a static-T or saturated 2-bit it would mispredict. Use BRANCH PREDICTOR\n          (PIP panel) to swap predictors and watch the hit/miss column flip.\n\n  DFT LAYER (added without altering the CPU's datapath):\n    1) SCAN CHAIN ON PC — 4 SCAN_FFs in a chain capture PC[3:0] when TE=0\n       (functional / capture) and shift the captured state out serially on\n       SCAN_OUT when TE=1 (shift). SCAN_IN provides the serial input.\n       Demonstrates IEEE-style internal scan: 'observe the PC without an oscilloscope'.\n\n    2) MISR SIGNATURE COMPACTOR — an 8-bit MISR taps the RF read-port-A bus\n       (the 'operand A' going into the ALU) every cycle and compacts a\n       running 'signature' of the program's execution (Fibonacci form,\n       polynomial taps [7,5,3,2]). SIG is the live signature register —\n       equivalent to a CRC over the test response. Tapping the RF output\n       (instead of the ALU output) keeps the MISR observable in the topo\n       sort without sitting inside the CU↔ALU feedback loop, while still\n       capturing every register read the program performs. Inject a stuck-at\n       fault on the RF/MISR path (DFT panel ➜ click a wire ➜ Stuck-at-0/1)\n       and SIG diverges from the fault-free value: classic 'observation\n       compression' for BIST.\n\n    3) BIST CONTROLLER — an FSM (IDLE → SETUP → RUN → COMPARE → DONE/FAIL)\n       that watches the MISR signature for runLength=24 cycles after START,\n       then COMPAREs against goldenSig and latches PASS or FAIL. Set goldenSig\n       to the fault-free signature you observe on a clean run, then inject a\n       fault and re-run: PASS → FAIL transition with no extra wiring.\n\n    4) LFSR PATTERN GENERATOR — a free-running 8-bit Fibonacci LFSR\n       (taps [7,5,4,3], maximal length 255) wired to LFSR_Q. Available as a\n       pseudo-random test-vector source for off-line ATPG / test-mode demos.\n\n  HOW TO RUN THE DEMO (interview script):\n    a) Hit RUN — watch the CPU execute. Open MEM to see RF + RAM evolve;\n       open PIP ➜ BRANCH PREDICTOR to see BNE's prediction record converge.\n    b) Open the DFT panel — note that the PC-scan chain is auto-detected,\n       and the BIST_CTRL state is reported live.\n    c) Capture the fault-free MISR signature into BIST.goldenSig\n       (DFT panel ➜ BIST ➜ ✎ ➜ 'capture live SIG').\n    d) RESET and pulse START — FSM advances IDLE → SETUP → RUN (24 cycles)\n       → COMPARE → DONE/PASS.\n    e) Right-click a wire near the ALU ➜ inject Stuck-at-0. RESET, START\n       again — same FSM run now ends in FAIL. You have just demonstrated\n       fault detection by signature analysis on a live CPU.\n    f) Set TE=1 and step a few clocks — PC bits shift out on SCAN_OUT;\n       set TE=0 to re-capture and resume functional operation."
+  },
+  "nodes": [
+    { "type": "CLOCK", "x": -600, "y": 300, "value": 1, "id": "clk" },
+    { "type": "INPUT", "fixedValue": 1, "label": "EN",  "x": -600, "y": -100, "id": "en" },
+    { "type": "INPUT", "fixedValue": 1, "label": "RE",  "x": -400, "y":  100, "id": "re_rom" },
+    { "type": "INPUT", "fixedValue": 1, "label": "LD",  "x": -100, "y":  100, "id": "ld" },
+
+    { "type": "PC",   "bitWidth": 4, "label": "PC", "x": -500, "y":   0, "id": "pc" },
+    { "type": "ROM",  "addrBits": 4, "dataBits": 16,
+      "memory": {
+        "0":   817,
+        "1": 36885,
+        "2":  4370,
+        "3": 49168,
+        "4": 34565,
+        "5":   823,
+        "6": 45062,
+        "7": 61440
+      },
+      "label": "ROM", "x": -300, "y": 0, "id": "rom" },
+    { "type": "IR", "instrWidth": 16, "opBits": 4, "rdBits": 4, "rs1Bits": 4, "rs2Bits": 4,
+      "label": "IR", "x": -50, "y": 0, "id": "ir" },
+    { "type": "CU", "label": "CU", "x": 150, "y": 200, "id": "cu", "controlTable": null, "branchPredictor": "2bit" },
+    { "type": "REG_FILE_DP", "regCount": 16, "dataBits": 8,
+      "initialRegs": [0,5,1,0,7,3,99,0,0,0,0,0,0,0,0,0],
+      "label": "RF", "x": 200, "y": -100, "id": "rf" },
+    { "type": "ALU", "bitWidth": 8, "label": "ALU", "x": 450, "y": -50, "id": "alu" },
+    { "type": "RAM", "addrBits": 4, "dataBits": 8, "memory": {}, "label": "RAM", "x": 450, "y": 120, "id": "ram" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "WB_MUX", "x": 650, "y": 0, "id": "wb_mux" },
+
+    { "type": "OUTPUT", "label": "PC_VAL", "sandbox": true, "x": -500, "y": -150, "id": "out_pc" },
+    { "type": "OUTPUT", "label": "ALU_R",  "sandbox": true, "x":  600, "y": -120, "id": "out_alur" },
+    { "type": "OUTPUT", "label": "HALT",   "sandbox": true, "x":  300, "y":  350, "id": "out_halt" },
+    { "type": "OUTPUT", "label": "RF_A",   "sandbox": true, "x":  350, "y": -200, "id": "out_rfa" },
+    { "type": "OUTPUT", "label": "RF_B",   "sandbox": true, "x":  350, "y": -150, "id": "out_rfb" },
+
+    { "type": "INPUT",   "fixedValue": 0, "label": "TE",      "x": -600, "y": 480, "id": "dft_te" },
+    { "type": "INPUT",   "fixedValue": 0, "label": "SCAN_IN", "x": -600, "y": 540, "id": "dft_si" },
+    { "type": "SPLIT",   "inBits": 4, "slicesSpec": "0, 1, 2, 3", "label": "PC_split", "x": -400, "y": 510, "id": "dft_pc_split" },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S0", "x": -220, "y": 510, "id": "dft_s0" },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S1", "x":  -60, "y": 510, "id": "dft_s1" },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S2", "x":  100, "y": 510, "id": "dft_s2" },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S3", "x":  260, "y": 510, "id": "dft_s3" },
+    { "type": "OUTPUT",  "label": "SCAN_OUT", "sandbox": true, "x": 420, "y": 510, "id": "dft_scan_out" },
+
+    { "type": "SPLIT", "inBits": 8, "slicesSpec": "0, 1, 2, 3, 4, 5, 6, 7", "label": "RF_A_split", "x": 780, "y": 0, "id": "dft_alu_split" },
+    { "type": "MISR",  "bitWidth": 8, "taps": [7, 5, 3, 2], "seed": 0, "goldenSig": null, "label": "MISR", "x": 940, "y": 0, "id": "dft_misr" },
+    { "type": "OUTPUT", "label": "SIG", "sandbox": true, "bitWidth": 8, "x": 1120, "y": 0, "id": "dft_sig_out" },
+
+    { "type": "INPUT", "fixedValue": 0, "stepValues": [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "label": "START", "x": 780, "y": 170, "id": "dft_start" },
+    { "type": "INPUT", "fixedValue": 0, "label": "RESET", "x": 780, "y": 230, "id": "dft_reset" },
+    { "type": "BIST_CONTROLLER", "sigBits": 8, "runLength": 24, "goldenSig": 0, "label": "BIST_CTRL", "x": 1000, "y": 200, "id": "dft_bist" },
+    { "type": "OUTPUT", "label": "DONE",       "sandbox": true, "x": 1260, "y": 130, "id": "dft_done_out" },
+    { "type": "OUTPUT", "label": "PASS",       "sandbox": true, "x": 1260, "y": 190, "id": "dft_pass_out" },
+    { "type": "OUTPUT", "label": "TEST_MODE",  "sandbox": true, "x": 1260, "y": 250, "id": "dft_tm_out" },
+    { "type": "OUTPUT", "label": "STATE", "bitWidth": 3, "sandbox": true, "x": 1260, "y": 310, "id": "dft_state_out" },
+
+    { "type": "LFSR",   "bitWidth": 8, "taps": [7, 5, 4, 3], "seed": 1, "label": "LFSR_ATPG", "x": 780, "y": 400, "id": "dft_lfsr" },
+    { "type": "OUTPUT", "label": "LFSR_Q", "sandbox": true, "x": 980, "y": 400, "id": "dft_lfsr_out" }
+  ],
+  "wires": [
+    { "id": "w_pc_clk",      "sourceId": "clk", "targetId": "pc",  "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_pc_en",       "sourceId": "en",  "targetId": "pc",  "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_pc_jmpaddr",  "sourceId": "ir",  "targetId": "pc",  "targetInputIndex": 0, "sourceOutputIndex": 1, "netName": "JMP_ADDR" },
+    { "id": "w_pc_jmp",      "sourceId": "cu",  "targetId": "pc",  "targetInputIndex": 1, "sourceOutputIndex": 4, "netName": "JMP" },
+    { "id": "w_pc_rom",      "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "ADDR" },
+    { "id": "w_rom_re",      "sourceId": "re_rom", "targetId": "rom", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_rom_clk",     "sourceId": "clk", "targetId": "rom", "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_rom_ir",      "sourceId": "rom", "targetId": "ir",  "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "INSTR" },
+    { "id": "w_ir_ld",       "sourceId": "ld",  "targetId": "ir",  "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_ir_clk",      "sourceId": "clk", "targetId": "ir",  "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_ir_cu_op",    "sourceId": "ir",  "targetId": "cu",  "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "OP" },
+    { "id": "w_alu_cu_z",    "sourceId": "alu", "targetId": "cu",  "targetInputIndex": 1, "sourceOutputIndex": 1, "netName": "Z_FLAG" },
+    { "id": "w_alu_cu_c",    "sourceId": "alu", "targetId": "cu",  "targetInputIndex": 2, "sourceOutputIndex": 2, "netName": "C_FLAG" },
+    { "id": "w_ir_rf_rs1",   "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 0, "sourceOutputIndex": 2, "netName": "RS1" },
+    { "id": "w_ir_rf_rs2",   "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 1, "sourceOutputIndex": 3, "netName": "RS2" },
+    { "id": "w_ir_rf_rd",    "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 2, "sourceOutputIndex": 1, "netName": "RD" },
+    { "id": "w_wb_rf_data",  "sourceId": "wb_mux", "targetId": "rf", "targetInputIndex": 3, "sourceOutputIndex": 0, "netName": "WB_DATA" },
+    { "id": "w_cu_rf_we",    "sourceId": "cu",  "targetId": "rf",  "targetInputIndex": 4, "sourceOutputIndex": 1, "netName": "REG_WE" },
+    { "id": "w_rf_clk",      "sourceId": "clk", "targetId": "rf",  "targetInputIndex": 5, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_rf_alu_a",    "sourceId": "rf",  "targetId": "alu", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "A" },
+    { "id": "w_rf_alu_b",    "sourceId": "rf",  "targetId": "alu", "targetInputIndex": 1, "sourceOutputIndex": 1, "netName": "B" },
+    { "id": "w_cu_alu_op",   "sourceId": "cu",  "targetId": "alu", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "ALU_OP" },
+    { "id": "w_rf_ram_addr", "sourceId": "rf",  "targetId": "ram", "targetInputIndex": 0, "sourceOutputIndex": 1, "netName": "MEM_ADDR" },
+    { "id": "w_rf_ram_data", "sourceId": "rf",  "targetId": "ram", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "MEM_DATA" },
+    { "id": "w_cu_ram_we",   "sourceId": "cu",  "targetId": "ram", "targetInputIndex": 2, "sourceOutputIndex": 2, "netName": "MEM_WE" },
+    { "id": "w_cu_ram_re",   "sourceId": "cu",  "targetId": "ram", "targetInputIndex": 3, "sourceOutputIndex": 3, "netName": "MEM_RE" },
+    { "id": "w_ram_clk",     "sourceId": "clk", "targetId": "ram", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_alu_wbmux",   "sourceId": "alu", "targetId": "wb_mux", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "ALU_RESULT" },
+    { "id": "w_ram_wbmux",   "sourceId": "ram", "targetId": "wb_mux", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "MEM_OUT" },
+    { "id": "w_cu_wbmux_sel","sourceId": "cu",  "targetId": "wb_mux", "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "MEM_RE_SEL" },
+
+    { "id": "w_pc_out",  "sourceId": "pc",  "targetId": "out_pc",   "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_alu_out", "sourceId": "alu", "targetId": "out_alur", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_halt_out","sourceId": "cu",  "targetId": "out_halt", "targetInputIndex": 0, "sourceOutputIndex": 5 },
+    { "id": "w_rfa_out", "sourceId": "rf",  "targetId": "out_rfa",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_rfb_out", "sourceId": "rf",  "targetId": "out_rfb",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+
+    { "id": "w_dft_pc_split",  "sourceId": "pc",            "targetId": "dft_pc_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "PC_BUS" },
+
+    { "id": "w_dft_s0_d",   "sourceId": "dft_pc_split", "targetId": "dft_s0", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s0_ti",  "sourceId": "dft_si",       "targetId": "dft_s0", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s0_te",  "sourceId": "dft_te",       "targetId": "dft_s0", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s0_clk", "sourceId": "clk",          "targetId": "dft_s0", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s1_d",   "sourceId": "dft_pc_split", "targetId": "dft_s1", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_dft_s1_ti",  "sourceId": "dft_s0",       "targetId": "dft_s1", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s1_te",  "sourceId": "dft_te",       "targetId": "dft_s1", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s1_clk", "sourceId": "clk",          "targetId": "dft_s1", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s2_d",   "sourceId": "dft_pc_split", "targetId": "dft_s2", "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_dft_s2_ti",  "sourceId": "dft_s1",       "targetId": "dft_s2", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s2_te",  "sourceId": "dft_te",       "targetId": "dft_s2", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s2_clk", "sourceId": "clk",          "targetId": "dft_s2", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s3_d",   "sourceId": "dft_pc_split", "targetId": "dft_s3", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w_dft_s3_ti",  "sourceId": "dft_s2",       "targetId": "dft_s3", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s3_te",  "sourceId": "dft_te",       "targetId": "dft_s3", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s3_clk", "sourceId": "clk",          "targetId": "dft_s3", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_scan_out", "sourceId": "dft_s3", "targetId": "dft_scan_out", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+
+    { "id": "w_dft_alu_split", "sourceId": "rf", "targetId": "dft_alu_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "RF_A_OBS" },
+
+    { "id": "w_dft_misr_0", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_misr_1", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 1, "sourceOutputIndex": 1 },
+    { "id": "w_dft_misr_2", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 2, "sourceOutputIndex": 2 },
+    { "id": "w_dft_misr_3", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 3, "sourceOutputIndex": 3 },
+    { "id": "w_dft_misr_4", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 4, "sourceOutputIndex": 4 },
+    { "id": "w_dft_misr_5", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 5, "sourceOutputIndex": 5 },
+    { "id": "w_dft_misr_6", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 6, "sourceOutputIndex": 6 },
+    { "id": "w_dft_misr_7", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 7, "sourceOutputIndex": 7 },
+    { "id": "w_dft_misr_clk", "sourceId": "clk", "targetId": "dft_misr", "targetInputIndex": 8, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_sig_out", "sourceId": "dft_misr", "targetId": "dft_sig_out", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+
+    { "id": "w_dft_bist_start", "sourceId": "dft_start", "targetId": "dft_bist", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_bist_reset", "sourceId": "dft_reset", "targetId": "dft_bist", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_dft_bist_sig",   "sourceId": "dft_misr",  "targetId": "dft_bist", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "SIG_IN" },
+    { "id": "w_dft_bist_clk",   "sourceId": "clk",       "targetId": "dft_bist", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_done",  "sourceId": "dft_bist", "targetId": "dft_done_out",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_pass",  "sourceId": "dft_bist", "targetId": "dft_pass_out",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_dft_tm",    "sourceId": "dft_bist", "targetId": "dft_tm_out",    "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_dft_state", "sourceId": "dft_bist", "targetId": "dft_state_out", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+
+    { "id": "w_dft_lfsr_clk", "sourceId": "clk",      "targetId": "dft_lfsr",     "targetInputIndex": 0, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_dft_lfsr_out", "sourceId": "dft_lfsr", "targetId": "dft_lfsr_out", "targetInputIndex": 0, "sourceOutputIndex": 0 }
+  ]
+}

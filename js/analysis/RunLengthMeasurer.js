@@ -130,6 +130,12 @@ function _detectHalt(nodes, nodeValues) {
       const v = nodeValues.get(n.id + '__out5');
       if (v === 1) return { nodeId: n.id, reason: 'CU halt output' };
     }
+    // MBIST_CONTROLLER terminates on DONE (out0) or FAIL (out2).
+    if (n.type === 'MBIST_CONTROLLER') {
+      const done = nodeValues.get(n.id);
+      const fail = nodeValues.get(n.id + '__out2');
+      if (done === 1) return { nodeId: n.id, reason: fail === 1 ? 'MBIST FAIL' : 'MBIST DONE' };
+    }
     // Any node whose label is "HALT" (common on CPU demos).
     if ((n.label || '').toUpperCase() === 'HALT') {
       const v = nodeValues.get(n.id);

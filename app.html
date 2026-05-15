@@ -111,6 +111,7 @@
           <span class="palette-chip palette-block" data-tool="place-lfsr" draggable="true" title="Linear-Feedback Shift Register — pseudo-random pattern generator for BIST. Default: 4-bit, x^4+x+1, period 15.">LFSR</span>
           <span class="palette-chip palette-block" data-tool="place-misr" draggable="true" title="Multiple Input Signature Register — compresses N-bit test responses into a compact signature. Default: 4-bit, x^4+x+1.">MISR</span>
           <span class="palette-chip palette-block" data-tool="place-bist" draggable="true" title="BIST Controller — orchestrates a Built-In Self-Test run. State machine: IDLE→SETUP→RUN→COMPARE→DONE/FAIL. Drives TEST_MODE for `runLength` cycles, then compares the captured MISR signature against `goldenSig`.">BIST</span>
+          <span class="palette-chip palette-block" data-tool="place-mbist" draggable="true" title="Memory BIST Controller — walks a connected RAM through the March C− algorithm. State machine: IDLE→SETUP→W0→RW1↑→RW0↑→RW1↓→RW0↓→READ→DONE/FAIL. Drives ADDR/DATA/WE/RE through a TEST_MODE mux while monitoring DATA_IN for stuck-at faults on memory cells.">MBIST</span>
           <span class="palette-chip palette-block" data-tool="place-jtag" draggable="true" title="JTAG TAP — IEEE 1149.1 Test Access Port controller. 16-state FSM driven by TMS on posedge TCK. Holds Instruction Register + Data Registers; the gateway for boundary-scan / debug.">JTAG</span>
           <span class="palette-chip palette-block" data-tool="place-bsc" draggable="true" title="Boundary-Scan Cell — wraps one IO pad with a capture/update shift cell. Chains via SI ← previous SO. Lets a TAP shift test patterns out and capture pad responses without device removal.">BSC</span>
         </div>
@@ -568,6 +569,13 @@
       <div id="project-list-content"></div>
     </div>
   </div>
+
+  <!-- DFT-layer reveal button (demo-specific, hidden unless the active
+       scene declares `_dft.revealButton`). Position is fixed bottom-right
+       so it floats above the canvas regardless of zoom/pan. -->
+  <button id="btn-dft-reveal" class="hidden" title="Reveal the DFT collar that wraps the CPU's RAM — scan chain, MISR, logic-BIST, LFSR, MBIST + 4 BUS_MUXes. Toggles the visual layer; simulation is unaffected.">
+    <span class="dft-reveal-icon">🔬</span> SHOW DFT LAYER
+  </button>
 
   <!-- Context Menu -->
   <div id="context-menu" class="hidden">

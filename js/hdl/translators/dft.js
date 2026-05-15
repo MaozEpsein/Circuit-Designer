@@ -568,3 +568,283 @@ registerTranslator(COMPONENT_TYPES.BOUNDARY_SCAN_CELL, (node, ctx) => {
     assigns,
   };
 });
+
+// ── MBIST_CONTROLLER (Memory BIST, stage 1) ─────────────────
+// Pin layout:
+//   Inputs : START(0), RESET(1), DATA_IN(2, dataBits), CLK(3)
+//   Outputs: DONE(0), PASS(1), FAIL(2), TEST_MODE(3),
+//            STATE(4, 3-bit), ADDR(5, addrBits),
+//            DATA_OUT(6, dataBits), WE(7), RE(8)
+// March C− algorithm: 10 states (IDLE..FAIL), 6 march elements,
+// 3 sub-phases per RW step (drive RE → sample → drive WE).
+//
+// Stage-1 emission is structural: declares state registers, an
+// initial block, and a posedge-CLK always with a `case (state)`
+// transition table. Output assigns reflect the FSM. The DATA_IN
+// comparison is approximated (the live engine does the actual check
+// at native simulation; the Verilog here is a teaching version).
+registerTranslator(COMPONENT_TYPES.MBIST_CONTROLLER, (node, ctx) => {
+  const sr = SourceRef.fromNode(node.id);
+  const addrBits = Math.max(1, (node.addrBits | 0) || 4);
+  const dataBits = Math.max(1, (node.dataBits | 0) || 8);
+
+  const startNet = ctx.inputNet(node.id, 0);
+  const resetNet = ctx.inputNet(node.id, 1);
+  const dinNet   = ctx.inputNet(node.id, 2);
+  const clkNet   = ctx.inputNet(node.id, 3);
+  if (!clkNet) return {};
+
+  const outDone = _outNet(ctx, node.id, 0);
+  const outPass = _outNet(ctx, node.id, 1);
+  const outFail = _outNet(ctx, node.id, 2);
+  const outTM   = _outNet(ctx, node.id, 3);
+  const outSt   = _outNet(ctx, node.id, 4);
+  const outAd   = _outNet(ctx, node.id, 5);
+  const outDo   = _outNet(ctx, node.id, 6);
+  const outWE   = _outNet(ctx, node.id, 7);
+  const outRE   = _outNet(ctx, node.id, 8);
+
+  // Internal regs.
+  const stateName = `mbist_${node.id}_state`;
+  const stepName  = `mbist_${node.id}_step`;
+  const addrName  = `mbist_${node.id}_addr`;
+  const subName   = `mbist_${node.id}_sub`;
+  const failAName = `mbist_${node.id}_failAddr`;
+  const stateNet  = makeNet({ name: stateName, width: 4,        kind: NET_KIND.REG, sourceRef: sr });
+  const stepNet   = makeNet({ name: stepName,  width: 3,        kind: NET_KIND.REG, sourceRef: sr });
+  const addrNet   = makeNet({ name: addrName,  width: addrBits, kind: NET_KIND.REG, sourceRef: sr });
+  const subNet    = makeNet({ name: subName,   width: 2,        kind: NET_KIND.REG, sourceRef: sr });
+  const failANet  = makeNet({ name: failAName, width: addrBits, kind: NET_KIND.REG, sourceRef: sr });
+  const stateRef  = makeRef(stateName, 4);
+  const stepRef   = makeRef(stepName,  3);
+  const addrRef   = makeRef(addrName,  addrBits);
+  const subRef    = makeRef(subName,   2);
+  const failARef  = makeRef(failAName, addrBits);
+
+  const lit4 = (n) => makeLiteral(n, 4, sr);
+  const lit3 = (n) => makeLiteral(n, 3, sr);
+  const lit2 = (n) => makeLiteral(n, 2, sr);
+  const litA = (n) => makeLiteral(n, addrBits, sr);
+  const litD = (n) => makeLiteral(n, dataBits, sr);
+  const lit1 = makeLiteral(1, 1, sr);
+  const lit0 = makeLiteral(0, 1, sr);
+
+  const startRef = startNet ? makeRef(startNet.name, 1) : lit0;
+  const resetRef = resetNet ? makeRef(resetNet.name, 1) : lit0;
+  const dinRef   = dinNet   ? makeRef(dinNet.name, dataBits)
+                            : makeLiteral(0, dataBits, sr);
+
+  const N_minus_1 = (1 << addrBits) - 1;
+
+  // Case body for FSM. Stage 1 emits the high-level transitions; the
+  // exact mismatch check is approximated by a default no-op on read
+  // sub-phases (live engine performs the actual check).
+  const cases = [
+    // 0 IDLE — wait for START
+    { label: lit4(0), body: [{
+        kind: 'IfStmt', sourceRef: sr, cond: startRef,
+        then: [
+          { kind: 'NonBlockingAssign', lhs: stateRef, rhs: lit4(1) },
+          { kind: 'NonBlockingAssign', lhs: stepRef,  rhs: lit3(0) },
+          { kind: 'NonBlockingAssign', lhs: addrRef,  rhs: litA(0) },
+          { kind: 'NonBlockingAssign', lhs: subRef,   rhs: lit2(0) },
+        ], else: null,
+    }] },
+    // 1 SETUP — go to W0_UP
+    { label: lit4(1), body: [
+        { kind: 'NonBlockingAssign', lhs: stateRef, rhs: lit4(2) },
+    ] },
+    // 2 W0_UP — increment addr; on rollover → state 3, addr=0
+    { label: lit4(2), body: [{
+        kind: 'IfStmt', sourceRef: sr,
+        cond: makeBinaryOp('<', addrRef, litA(N_minus_1), 1, sr),
+        then: [{ kind: 'NonBlockingAssign', lhs: addrRef,
+                 rhs: makeBinaryOp('+', addrRef, litA(1), addrBits, sr) }],
+        else: [
+          { kind: 'NonBlockingAssign', lhs: stateRef, rhs: lit4(3) },
+          { kind: 'NonBlockingAssign', lhs: stepRef,  rhs: lit3(1) },
+          { kind: 'NonBlockingAssign', lhs: addrRef,  rhs: litA(0) },
+          { kind: 'NonBlockingAssign', lhs: subRef,   rhs: lit2(0) },
+        ],
+    }] },
+    // 3..6 RW phases (asc 3/4, desc 5/6) — 3 sub-phases each, transitions are
+    // structural; the live engine handles the actual fault check. Stub:
+    // advance sub-phase; on sub=2 rollover, advance addr; on addr rollover,
+    // advance state.
+    ...[3, 4, 5, 6].map(stateCode => ({
+      label: lit4(stateCode), body: [{
+        kind: 'CaseStmt', sourceRef: sr,
+        selector: subRef,
+        cases: [
+          { label: lit2(0), body: [{ kind: 'NonBlockingAssign', lhs: subRef, rhs: lit2(1) }] },
+          { label: lit2(1), body: [{ kind: 'NonBlockingAssign', lhs: subRef, rhs: lit2(2) }] },
+          { label: lit2(2), body: [{
+              kind: 'IfStmt', sourceRef: sr,
+              cond: (stateCode === 3 || stateCode === 4)
+                    ? makeBinaryOp('<', addrRef, litA(N_minus_1), 1, sr)
+                    : makeBinaryOp('>', addrRef, litA(0), 1, sr),
+              then: [
+                { kind: 'NonBlockingAssign', lhs: subRef, rhs: lit2(0) },
+                { kind: 'NonBlockingAssign', lhs: addrRef,
+                  rhs: (stateCode === 3 || stateCode === 4)
+                       ? makeBinaryOp('+', addrRef, litA(1), addrBits, sr)
+                       : makeBinaryOp('-', addrRef, litA(1), addrBits, sr) },
+              ],
+              else: [
+                { kind: 'NonBlockingAssign', lhs: stateRef, rhs: lit4(stateCode + 1) },
+                { kind: 'NonBlockingAssign', lhs: stepRef,
+                  rhs: lit3(stateCode + 1 - 2) },
+                { kind: 'NonBlockingAssign', lhs: subRef,  rhs: lit2(0) },
+                { kind: 'NonBlockingAssign', lhs: addrRef,
+                  rhs: (stateCode === 3) ? litA(0)
+                     : (stateCode === 4) ? litA(N_minus_1)
+                     : (stateCode === 5) ? litA(N_minus_1)
+                     : litA(0) },
+              ],
+          }] },
+        ],
+        default: [],
+      }],
+    })),
+    // 7 READ_FINAL — 2 sub-phases; on addr rollover → DONE
+    { label: lit4(7), body: [{
+        kind: 'CaseStmt', sourceRef: sr, selector: subRef,
+        cases: [
+          { label: lit2(0), body: [{ kind: 'NonBlockingAssign', lhs: subRef, rhs: lit2(1) }] },
+          { label: lit2(1), body: [{
+              kind: 'IfStmt', sourceRef: sr,
+              cond: makeBinaryOp('<', addrRef, litA(N_minus_1), 1, sr),
+              then: [
+                { kind: 'NonBlockingAssign', lhs: subRef, rhs: lit2(0) },
+                { kind: 'NonBlockingAssign', lhs: addrRef,
+                  rhs: makeBinaryOp('+', addrRef, litA(1), addrBits, sr) },
+              ],
+              else: [{ kind: 'NonBlockingAssign', lhs: stateRef, rhs: lit4(8) }],
+          }] },
+        ],
+        default: [],
+    }] },
+    // 8 DONE / 9 FAIL — terminal
+    { label: lit4(8), body: [] },
+    { label: lit4(9), body: [] },
+  ];
+
+  const alwaysBody = [{
+    kind: 'IfStmt', sourceRef: sr, cond: resetRef,
+    then: [
+      { kind: 'NonBlockingAssign', lhs: stateRef,  rhs: lit4(0) },
+      { kind: 'NonBlockingAssign', lhs: stepRef,   rhs: lit3(0) },
+      { kind: 'NonBlockingAssign', lhs: addrRef,   rhs: litA(0) },
+      { kind: 'NonBlockingAssign', lhs: subRef,    rhs: lit2(0) },
+      { kind: 'NonBlockingAssign', lhs: failARef,  rhs: litA(0) },
+    ],
+    else: [{
+      kind: 'CaseStmt', sourceRef: sr, selector: stateRef,
+      cases, default: [],
+    }],
+  }];
+
+  // Continuous projections of FSM state onto the 9 outputs.
+  const assigns = [];
+  if (outDone) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outDone.name, 1),
+    rhs: makeBinaryOp('||',
+      makeBinaryOp('==', stateRef, lit4(8), 1, sr),
+      makeBinaryOp('==', stateRef, lit4(9), 1, sr), 1, sr),
+  });
+  if (outPass) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outPass.name, 1),
+    rhs: makeBinaryOp('==', stateRef, lit4(8), 1, sr),
+  });
+  if (outFail) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outFail.name, 1),
+    rhs: makeBinaryOp('==', stateRef, lit4(9), 1, sr),
+  });
+  if (outTM) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outTM.name, 1),
+    rhs: makeBinaryOp('&&',
+      makeBinaryOp('!=', stateRef, lit4(0), 1, sr),
+      makeBinaryOp('&&',
+        makeBinaryOp('!=', stateRef, lit4(8), 1, sr),
+        makeBinaryOp('!=', stateRef, lit4(9), 1, sr), 1, sr),
+      1, sr),
+  });
+  if (outSt) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outSt.name, 3),
+    rhs: makeSlice(stateName, 2, 0, sr),
+  });
+  if (outAd) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outAd.name, addrBits),
+    rhs: addrRef,
+  });
+  // DATA_OUT — 0 unless on a write sub-phase of an odd march step.
+  if (outDo) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outDo.name, dataBits),
+    rhs: makeTernary(
+      makeBinaryOp('||',
+        makeBinaryOp('==', stepRef, lit3(1), 1, sr),
+        makeBinaryOp('==', stepRef, lit3(3), 1, sr), 1, sr),
+      litD((1 << dataBits) - 1), litD(0), dataBits, sr),
+  });
+  // WE = (state == W0_UP) || ((state ∈ {RW1_UP..RW0_DN}) && sub == 2)
+  if (outWE) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outWE.name, 1),
+    rhs: makeBinaryOp('||',
+      makeBinaryOp('==', stateRef, lit4(2), 1, sr),
+      makeBinaryOp('&&',
+        makeBinaryOp('&&',
+          makeBinaryOp('>=', stateRef, lit4(3), 1, sr),
+          makeBinaryOp('<=', stateRef, lit4(6), 1, sr), 1, sr),
+        makeBinaryOp('==', subRef, lit2(2), 1, sr), 1, sr),
+      1, sr),
+  });
+  // RE = ((state ∈ {RW1_UP..RW0_DN}) && sub == 0) || (state == READ_FINAL && sub == 0)
+  if (outRE) assigns.push({
+    kind: 'Assign', sourceRef: sr, attributes: [],
+    lhs: makeRef(outRE.name, 1),
+    rhs: makeBinaryOp('&&',
+      makeBinaryOp('==', subRef, lit2(0), 1, sr),
+      makeBinaryOp('||',
+        makeBinaryOp('&&',
+          makeBinaryOp('>=', stateRef, lit4(3), 1, sr),
+          makeBinaryOp('<=', stateRef, lit4(6), 1, sr), 1, sr),
+        makeBinaryOp('==', stateRef, lit4(7), 1, sr),
+        1, sr),
+      1, sr),
+  });
+
+  // Suppress unused-warning for dinRef in stage-1 emission (the actual
+  // mismatch check is approximated; live engine handles it).
+  void dinRef;
+
+  return {
+    nets: [stateNet, stepNet, addrNet, subNet, failANet],
+    alwaysBlocks: [
+      {
+        kind: 'Always', sourceRef: sr, attributes: [],
+        sensitivity: { initial: true },
+        body: [
+          { kind: 'BlockingAssign', lhs: stateRef, rhs: lit4(0) },
+          { kind: 'BlockingAssign', lhs: stepRef,  rhs: lit3(0) },
+          { kind: 'BlockingAssign', lhs: addrRef,  rhs: litA(0) },
+          { kind: 'BlockingAssign', lhs: subRef,   rhs: lit2(0) },
+          { kind: 'BlockingAssign', lhs: failARef, rhs: litA(0) },
+        ],
+      },
+      {
+        kind: 'Always', sourceRef: sr, attributes: [],
+        sensitivity: { triggers: [{ edge: 'posedge', signal: clkNet.name }] },
+        body: alwaysBody,
+      },
+    ],
+    assigns,
+  };
+});

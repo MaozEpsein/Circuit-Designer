@@ -161,7 +161,7 @@ const PICKABLE_TYPES = new Set([
   'RAM', 'ROM', 'CACHE', 'REG_FILE', 'REG_FILE_DP',
   'FIFO', 'STACK', 'PIPE_REG',
   'ALU', 'CU', 'HANDSHAKE', 'HDU', 'FWD',
-  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR', 'MISR', 'BIST_CONTROLLER',
+  'GATE_SLOT', 'FF_SLOT', 'SCAN_FF', 'LFSR', 'MISR', 'BIST_CONTROLLER', 'MBIST_CONTROLLER',
   'JTAG_TAP', 'BOUNDARY_SCAN_CELL',
 ]);
 
@@ -173,6 +173,7 @@ const TYPE_TO_SIG_TYPE = {
   ALU: 'compute', CU: 'compute', HANDSHAKE: 'compute', HDU: 'compute', FWD: 'compute',
   GATE_SLOT: 'gate', FF_SLOT: 'ff', SCAN_FF: 'ff', LFSR: 'memory', MISR: 'memory',
   BIST_CONTROLLER: 'compute',
+  MBIST_CONTROLLER: 'compute',
   JTAG_TAP: 'compute', BOUNDARY_SCAN_CELL: 'compute',
 };
 
@@ -190,6 +191,7 @@ const PINS_BY_TYPE = {
   STACK:       [['Q', 0], ['FULL', 1], ['EMPTY', 2]],
   COUNTER:     [['Q', 0], ['TC', 1]],
   BIST_CONTROLLER: [['DONE', 0], ['PASS', 1], ['TEST_MODE', 2], ['STATE', 3]],
+  MBIST_CONTROLLER: [['DONE', 0], ['PASS', 1], ['FAIL', 2], ['TEST_MODE', 3], ['STATE', 4], ['ADDR', 5], ['DATA_OUT', 6], ['WE', 7], ['RE', 8]],
   JTAG_TAP:    [['TDO', 0], ['STATE', 1], ['IR', 2]],
   BOUNDARY_SCAN_CELL: [['PO', 0], ['SO', 1]],
   HANDSHAKE:   [['S', 0], ['F', 1]],

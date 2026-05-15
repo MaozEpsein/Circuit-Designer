@@ -1,0 +1,73 @@
+{
+  "_dft": {
+    "_doc": "Memory BIST — March C− algorithm on a 16×8 RAM, with TEST_MODE mux collar.\n\n  SHIPS WITH A PRE-INJECTED FAULT: cell 5 is stuck-at-1 (whole-word).\n  The MBIST will detect it and end in FAIL with failAddr=5. To see\n  the clean PASS path, click cell [addr=5, WORD] in the DFT panel's\n  CELL FAULTS grid until it returns to clean (·), RESET, then START.\n\n  WHAT'S IN THE SCENE:\n    • RAM   — 4 addr-bit × 8 data-bit (16 cells of 8 bits each).\n              Pre-loaded fault: cellFaults[5] = stuck-at-1 (whole word).\n    • MBIST — Memory BIST controller running March C−:\n              { ⇕w0; ⇑r0,w1; ⇑r1,w0; ⇓r0,w1; ⇓r1,w0; ⇕r0 }\n    • 4 BUS_MUXes — the 'MBIST collar': ADDR / DATA / WE / RE are\n        switched between FUNCTIONAL drivers (the 4 INPUT pads on the\n        far left, unused in this demo) and the MBIST controller, by\n        the TEST_MODE output of the MBIST. When TEST_MODE=1 the MBIST\n        drives the RAM; when TEST_MODE=0 the functional drivers do.\n    • START / RESET — pulse START on tick 1 (via stepValues) to arm.\n    • Observable outputs: DONE, PASS, FAIL, TEST_MODE, STATE (3-bit),\n        CUR_ADDR (4-bit), Q (RAM read-back, 8-bit).\n\n  HOW TO RUN (interview script):\n    1. Open the DFT panel (T). Scroll to MEMORY BIST. Note the orange\n       'WORD' chip on row addr=5 in the CELL FAULTS grid — that's the\n       injected stuck-at-1 fault.\n    2. Press RUN, then STEP / AUTO CLK. Watch the live grid:\n       state walks IDLE → SETUP → W0_UP → RW1_UP, addr counts up.\n    3. Around tick ~36, the MBIST reaches addr=5 in RW1_UP and reads\n       0xFF where it expected 0x00. The FSM flips to FAIL, the panel\n       shows failAddr=5, and the lamps assert FAIL=1.\n\n  TO SEE THE CLEAN PASS PATH:\n    1. Click the orange chip at [addr=5, WORD] three times to cycle\n       it back to clean (· in the chip — the fault is removed).\n    2. RESET (pulse the RESET input), then START again.\n    3. The MBIST now runs end-to-end and ends DONE / PASS (~243 ticks).\n\n  PER-BIT FAULTS:\n    Click an individual bit column (B0..B7) on any address to inject\n    a single-bit s-a fault. The panel's failBit field will pin the\n    exact bit that the March test caught.\n\n  WHY THE TEST_MODE COLLAR MATTERS:\n    In a real SoC, the RAM is also driven by functional logic (a CPU,\n    a DMA, a vision pipeline, etc.). The MUXes let the test mode\n    take over the RAM without disturbing the functional wiring,\n    and release it back to functional mode after DONE/FAIL."
+  },
+  "nodes": [
+    { "type": "CLOCK", "x": -560, "y": 360, "value": 0, "id": "clk" },
+    { "type": "INPUT", "fixedValue": 0, "stepValues": [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "label": "START", "x": -560, "y": -180, "id": "start" },
+    { "type": "INPUT", "fixedValue": 0, "label": "RESET", "x": -560, "y": -120, "id": "reset" },
+
+    { "type": "INPUT", "fixedValue": 0, "label": "func_addr", "x": -560, "y":  20, "id": "func_addr" },
+    { "type": "INPUT", "fixedValue": 0, "label": "func_data", "x": -560, "y":  80, "id": "func_data" },
+    { "type": "INPUT", "fixedValue": 0, "label": "func_we",   "x": -560, "y": 140, "id": "func_we" },
+    { "type": "INPUT", "fixedValue": 0, "label": "func_re",   "x": -560, "y": 200, "id": "func_re" },
+
+    { "type": "MBIST_CONTROLLER", "addrBits": 4, "dataBits": 8, "algorithm": "MARCH_C_MINUS",
+      "label": "MBIST", "x": -260, "y":   0, "id": "mbist" },
+
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_ADDR", "x":  40, "y":   20, "id": "mux_addr" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_DATA", "x":  40, "y":   80, "id": "mux_data" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_WE",   "x":  40, "y":  140, "id": "mux_we" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_RE",   "x":  40, "y":  200, "id": "mux_re" },
+
+    { "type": "RAM", "addrBits": 4, "dataBits": 8, "memory": {},
+      "cellFaults": { "5": { "stuckAt": 1, "bit": null } },
+      "label": "RAM", "x": 300, "y": 100, "id": "ram" },
+
+    { "type": "OUTPUT", "label": "DONE",      "sandbox": true, "x": -50,  "y": -260, "id": "done_out" },
+    { "type": "OUTPUT", "label": "PASS",      "sandbox": true, "x":  50,  "y": -260, "id": "pass_out" },
+    { "type": "OUTPUT", "label": "FAIL",      "sandbox": true, "x": 150,  "y": -260, "id": "fail_out" },
+    { "type": "OUTPUT", "label": "TEST_MODE", "sandbox": true, "x": 250,  "y": -260, "id": "tm_out" },
+    { "type": "OUTPUT", "label": "STATE",     "sandbox": true, "bitWidth": 3, "x": 350, "y": -260, "id": "state_out" },
+    { "type": "OUTPUT", "label": "CUR_ADDR",  "sandbox": true, "bitWidth": 4, "x": 450, "y": -260, "id": "addr_out" },
+    { "type": "OUTPUT", "label": "Q",         "sandbox": true, "bitWidth": 8, "x": 550, "y":  100, "id": "q_out" }
+  ],
+  "wires": [
+    { "id": "w_clk_mbist", "sourceId": "clk",   "targetId": "mbist", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_start",     "sourceId": "start", "targetId": "mbist", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_reset",     "sourceId": "reset", "targetId": "mbist", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+
+    { "id": "w_addr_mux_f", "sourceId": "func_addr", "targetId": "mux_addr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_addr_mux_b", "sourceId": "mbist",     "targetId": "mux_addr", "targetInputIndex": 1, "sourceOutputIndex": 5 },
+    { "id": "w_addr_mux_s", "sourceId": "mbist",     "targetId": "mux_addr", "targetInputIndex": 2, "sourceOutputIndex": 3 },
+
+    { "id": "w_data_mux_f", "sourceId": "func_data", "targetId": "mux_data", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_data_mux_b", "sourceId": "mbist",     "targetId": "mux_data", "targetInputIndex": 1, "sourceOutputIndex": 6 },
+    { "id": "w_data_mux_s", "sourceId": "mbist",     "targetId": "mux_data", "targetInputIndex": 2, "sourceOutputIndex": 3 },
+
+    { "id": "w_we_mux_f", "sourceId": "func_we", "targetId": "mux_we", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_we_mux_b", "sourceId": "mbist",   "targetId": "mux_we", "targetInputIndex": 1, "sourceOutputIndex": 7 },
+    { "id": "w_we_mux_s", "sourceId": "mbist",   "targetId": "mux_we", "targetInputIndex": 2, "sourceOutputIndex": 3 },
+
+    { "id": "w_re_mux_f", "sourceId": "func_re", "targetId": "mux_re", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_re_mux_b", "sourceId": "mbist",   "targetId": "mux_re", "targetInputIndex": 1, "sourceOutputIndex": 8 },
+    { "id": "w_re_mux_s", "sourceId": "mbist",   "targetId": "mux_re", "targetInputIndex": 2, "sourceOutputIndex": 3 },
+
+    { "id": "w_ram_addr", "sourceId": "mux_addr", "targetId": "ram", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_ram_data", "sourceId": "mux_data", "targetId": "ram", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_ram_we",   "sourceId": "mux_we",   "targetId": "ram", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_ram_re",   "sourceId": "mux_re",   "targetId": "ram", "targetInputIndex": 3, "sourceOutputIndex": 0 },
+    { "id": "w_ram_clk",  "sourceId": "clk",      "targetId": "ram", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_ram_mbist", "sourceId": "ram", "targetId": "mbist", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+
+    { "id": "w_done",  "sourceId": "mbist", "targetId": "done_out",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_pass",  "sourceId": "mbist", "targetId": "pass_out",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_fail",  "sourceId": "mbist", "targetId": "fail_out",  "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_tm",    "sourceId": "mbist", "targetId": "tm_out",    "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w_state", "sourceId": "mbist", "targetId": "state_out", "targetInputIndex": 0, "sourceOutputIndex": 4 },
+    { "id": "w_addr",  "sourceId": "mbist", "targetId": "addr_out",  "targetInputIndex": 0, "sourceOutputIndex": 5 },
+    { "id": "w_q",     "sourceId": "ram",   "targetId": "q_out",     "targetInputIndex": 0, "sourceOutputIndex": 0 }
+  ]
+}

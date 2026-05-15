@@ -197,6 +197,40 @@ bus.on('clock:step', () => {
   if (scene.hasSequentialElements()) _stepClock();
 });
 
+// ── DFT-layer reveal trick (demo-specific UX) ────────────────
+// Scenes that ship with `_dft.revealButton: true` start with their
+// DFT-tagged nodes hidden from the canvas. The floating "🔬 SHOW DFT
+// LAYER" button toggles this on demand — exactly mirroring the silicon
+// flow where the DFT collar is added on top of a functional design.
+let _dftLayerHidden = false;
+const _btnDftReveal = document.getElementById('btn-dft-reveal');
+function _updateDftRevealButton() {
+  if (!_btnDftReveal) return;
+  const hasRevealMeta = !!(scene._dft && scene._dft.revealButton);
+  if (hasRevealMeta) {
+    _btnDftReveal.classList.remove('hidden');
+    _btnDftReveal.classList.toggle('revealed', !_dftLayerHidden);
+    _btnDftReveal.innerHTML = _dftLayerHidden
+      ? '<span class="dft-reveal-icon">🔬</span> SHOW DFT LAYER'
+      : '<span class="dft-reveal-icon">✓</span> DFT LAYER VISIBLE';
+  } else {
+    _btnDftReveal.classList.add('hidden');
+  }
+}
+bus.on('scene:loaded', () => {
+  // Initialize hidden when scene declares the reveal-button metadata.
+  _dftLayerHidden = !!(scene._dft && scene._dft.revealButton);
+  _updateDftRevealButton();
+});
+bus.on('scene:cleared', () => {
+  _dftLayerHidden = false;
+  _updateDftRevealButton();
+});
+_btnDftReveal?.addEventListener('click', () => {
+  _dftLayerHidden = !_dftLayerHidden;
+  _updateDftRevealButton();
+});
+
 // ── Context Menu ────────────────────────────────────────────
 const ctxMenu = document.getElementById('context-menu');
 let _ctxNodeId = null;
@@ -762,8 +796,21 @@ function tick() {
 
   const wirePreview = Input.getWirePreview();
 
+  // Demo-specific DFT-layer hide trick: when the active scene declares
+  // `_dft.revealButton`, the DFT-tagged nodes (and any wire whose source
+  // OR target is hidden) are filtered out of the render pass — but
+  // simulation runs as normal. Clicking the floating "🔬 SHOW DFT LAYER"
+  // button toggles this flag and re-renders the full scene.
+  let renderNodes = nodes;
+  let renderWires = wires;
+  if (_dftLayerHidden) {
+    renderNodes = nodes.filter(n => !n._dftLayer);
+    const visibleIds = new Set(renderNodes.map(n => n.id));
+    renderWires = wires.filter(w => visibleIds.has(w.sourceId) && visibleIds.has(w.targetId));
+  }
+
   Renderer.render(
-    nodes, wires, result.nodeValues, result.wireValues,
+    renderNodes, renderWires, result.nodeValues, result.wireValues,
     state.ffStates, state.hoveredNodeId, state.selectedNodeId,
     state.stepCount, wirePreview, state.tool,
     selection.rubberBandRect, selection.selected
@@ -2438,7 +2485,7 @@ function _refreshMemInspector() {
     n.type === 'REGISTER' || n.type === 'SHIFT_REG' || n.type === 'COUNTER' ||
     n.type === 'RAM' || n.type === 'ROM' || n.type === 'CACHE' || n.type === 'REG_FILE' || n.type === 'REG_FILE_DP' ||
     n.type === 'FIFO' || n.type === 'STACK' || n.type === 'PC' || n.type === 'PIPE_REG' ||
-    n.type === 'LFSR' || n.type === 'MISR' || n.type === 'BIST_CONTROLLER' ||
+    n.type === 'LFSR' || n.type === 'MISR' || n.type === 'BIST_CONTROLLER' || n.type === 'MBIST_CONTROLLER' ||
     n.type === 'JTAG_TAP' || n.type === 'BOUNDARY_SCAN_CELL'
   );
 
@@ -2447,7 +2494,7 @@ function _refreshMemInspector() {
     return;
   }
 
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', JTAG_TAP: 'JTAG', BOUNDARY_SCAN_CELL: 'BSC' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'RF', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', PIPE_REG: 'PIPE', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', MBIST_CONTROLLER: 'MBIST', JTAG_TAP: 'JTAG', BOUNDARY_SCAN_CELL: 'BSC' };
   let html = '';
 
   for (const node of memNodes) {
@@ -3023,9 +3070,20 @@ document.getElementById('btn-export-json')?.addEventListener('click', () => {
 // js/hdl/VerilogExporter.js (importVerilog) + js/hdl/ui/ImportModal.js
 // (helpers); this IIFE is just the DOM glue.
 (async function initVerilogImport() {
-  const { importVerilog } = await import('./hdl/VerilogExporter.js');
-  const { listModuleNames, pickTopModule, buildImportReport, formatParseError } =
-    await import('./hdl/ui/ImportModal.js');
+  // Make the dynamic-import boot resilient — a transient fetch failure
+  // (server cache, network hiccup, browser dev-mode stale module) should
+  // disable just the Verilog-import button, not poison the whole page.
+  let importVerilog, listModuleNames, pickTopModule, buildImportReport, formatParseError;
+  try {
+    ({ importVerilog } = await import('./hdl/VerilogExporter.js'));
+    ({ listModuleNames, pickTopModule, buildImportReport, formatParseError } =
+      await import('./hdl/ui/ImportModal.js'));
+  } catch (e) {
+    console.warn('[Circuit Designer Pro] Verilog import disabled (module load failed):', e?.message || e);
+    const btn = document.getElementById('btn-import-verilog');
+    if (btn) { btn.disabled = true; btn.title = 'Verilog import unavailable — reload the page.'; }
+    return;
+  }
 
   const btnOpen     = document.getElementById('btn-import-verilog');
   const overlay     = document.getElementById('vimport-overlay');
@@ -5096,6 +5154,20 @@ const EXAMPLES = [
   },
   // ── Test & DFT tab — one demo per layer of the DFT track.
   {
+    id: 'dft-cpu-mbist-integrated',
+    title: '0.0 DFT — Simple CPU + FULL DFT stack incl. Memory BIST ⭐⭐',
+    desc: 'Crown-jewel showcase: Simple CPU + complete DFT stack on one canvas — scan chain, MISR + signature, logic BIST, ATPG LFSR, and (new) **Memory BIST** with March C− under a TEST_MODE mux collar. Ships with a pre-injected cell-fault at addr=5 (visible as an orange WORD chip in the DFT panel\'s CELL FAULTS grid). HOW IT FLOWS: 1) Press RUN — the CPU executes the program normally (functional mode, TEST_MODE=0); MISR signature evolves on RF_A; the existing logic-BIST workflow is unchanged. 2) The 4 BUS_MUXes between RF/CU and RAM switch under MBIST.TEST_MODE: when MBIST is idle (TEST_MODE=0) the CPU drives ADDR/DATA/WE/RE; when MBIST runs (TEST_MODE=1) it takes over. 3) Pulse MBIST_START to begin memory test — March C− detects the pre-injected fault at addr=5 around tick ~36, FAIL pill lights, failAddr=5 in the panel. To see PASS: click the orange chip thrice to clear, RESET+START again. This is the realistic SoC model: functional CPU + multiple DFT subsystems coexisting on a single canvas.',
+    tags: ['dft', 'mbist', 'bist', 'scan', 'misr', 'cpu', 'march', 'test-mode', 'integration', 'interview'],
+    file: 'examples/circuits/dft-cpu-mbist-integrated.json',
+  },
+  {
+    id: 'dft-cpu-integrated',
+    title: '0. DFT — Simple CPU + full DFT layer (scan + MISR + BIST + LFSR) ⭐',
+    desc: 'Interview showcase: the Simple CPU running a real program, wrapped in a complete DFT layer. CORE: the unchanged single-cycle CPU (PC + ROM + IR + CU + ALU + RF + RAM + WB MUX). Registers are pre-seeded via initialRegs (R1=5 counter, R2=1 step, R3=0 accumulator, R5=3 mem addr, R6=99 sentinel, R4=7) — no LI is used. PROGRAM: 8 instructions exercising the whole datapath — ADD/SUB build the loop, STORE writes mem[3] each iteration, BNE backward-branches 4× TAKEN + 1× NOT-TAKEN (perfect for the 2-bit branch predictor), LOAD reads mem[3] back into R7, BEQ is a never-taken branch (predictor mispredict demo), then HALT. The CU is configured for the 2-bit predictor — switch predictors in PIP ➜ BRANCH PREDICTOR to compare hit/miss columns. DFT LAYER (added without touching the CPU datapath): (1) SCAN CHAIN — 4 SCAN_FFs capture PC[3:0] when TE=0 and shift-out on SCAN_OUT when TE=1, auto-detected by the DFT panel. (2) MISR — 8-bit signature compactor (taps [7,5,3,2]) taps the RF read-port-A bus (operand A going into the ALU) every cycle, building a running signature of the program\'s register reads. (3) BIST_CTRL — FSM that runs for 24 cycles after START, then COMPAREs SIG vs goldenSig and latches PASS/FAIL. (4) LFSR_ATPG — free-running 8-bit pattern generator (taps [7,5,4,3], period 255). INTERVIEW SCRIPT: RUN once → capture clean signature into goldenSig → inject a stuck-at fault on any ALU/RF wire via the DFT panel → re-RUN → BIST now ends FAIL: classic signature-based fault detection demonstrated on a working CPU.',
+    tags: ['dft', 'cpu', 'scan', 'misr', 'bist', 'lfsr', 'branch-predictor', 'interview'],
+    file: 'examples/circuits/dft-cpu-integrated.json',
+  },
+  {
     id: 'dft-faults-tour',
     title: '1. DFT — wire fault models tour',
     desc: 'Side-by-side tour of all four wire-level fault models. Five parallel paths, each INPUT → BUF → OUTPUT, every path demonstrating one fault in isolation:\n  • A=1 → s-a-0 (orange) → OUT shows 0  (the wire is "stuck at 0")\n  • B=0 → s-a-1 (orange) → OUT shows 1  (stuck at 1)\n  • C=1 → open (red dashed) → OUT shows null  (broken / floating)\n  • D=0 ⟷ E=1 bridged (purple dotted link) → OUT_D shows 1  (wired-OR of both sources)\n  • E=1 → reference path → OUT shows 1\n\nOpen the DFT panel (T) to see the FAULT LIST: each wire enumerated, columns for s-a-0 / s-a-1 / open / bridge, the four injected sites highlighted with coloured pills, the rest dim. The "Injected" line in TESTABILITY OVERVIEW breaks them down by type. Select any orange/red/purple wire and toggle its fault off in the wire-properties panel — propagation resumes.',
@@ -5129,6 +5201,13 @@ const EXAMPLES = [
     desc: 'IEEE 1149.1 in action. A JTAG_TAP runs the 16-state Test-Logic FSM driven by TMS on posedge TCK; toggle TMS in the input panel and STEP to walk it (5×TMS=1 always lands you in Test-Logic-Reset). Four BOUNDARY_SCAN_CELLs form a scan ring around four "core" inputs core0..core3 — SI of each cell chains to SO of the previous one, so a value driven into the ring shifts cell-to-cell on every clock when SHIFT=1. With MODE=0 each pad output po_i passes core_i through transparently; MODE=1 swaps to the latched test bit captured during the last update. The DFT panel\'s JTAG TAPS section shows the TAP state name (Test-Logic-Reset, Shift-DR, Update-IR, …), live IR + DR, and the IDCODE. Open the side panel to edit IR width / IDCODE inline.',
     tags: ['dft', 'jtag', 'boundary-scan', 'fsm', 'verilog'],
     file: 'examples/circuits/dft-jtag-boundary-scan.json',
+  },
+  {
+    id: 'dft-mbist-march',
+    title: '8. DFT — MBIST (March C−) on 16×8 RAM ⭐',
+    desc: 'Memory BIST end-to-end, ships with a pre-injected cell fault for the killer demo. An MBIST_CONTROLLER walks a 16×8 RAM through the March C− algorithm: { ⇕w0; ⇑r0,w1; ⇑r1,w0; ⇓r0,w1; ⇓r1,w0; ⇕r0 }. Four BUS_MUXes form an industrial "MBIST collar": ADDR/DATA/WE/RE switch between functional drivers and the MBIST under TEST_MODE selection. WHAT YOU SEE OUT-OF-THE-BOX: open the DFT panel (T), scroll to MEMORY BIST. The CELL FAULTS grid shows an orange WORD chip at addr=5 — that\'s a pre-injected stuck-at-1 fault. Hit STEP / AUTO CLK; around tick ~36 the MBIST reaches addr=5 in RW1_UP, reads 0xFF instead of the expected 0x00, and flips to FAIL with failAddr=5. TO SEE THE PASS PATH: click the orange chip three times (cycles s-a-1 → s-a-0 → clean), RESET, START again — the MBIST now runs end-to-end and ends DONE / PASS in ~243 ticks. PER-BIT FAULTS: click any individual B0..B7 column on any address to inject a single-bit fault; the panel\'s failBit field pins the exact bit caught.',
+    tags: ['dft', 'mbist', 'memory', 'march', 'march-c-minus', 'fault-injection', 'cell-fault', 'test-mode'],
+    file: 'examples/circuits/dft-mbist-march.json',
   },
   {
     id: 'dft-bist-integration',

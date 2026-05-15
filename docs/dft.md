@@ -14,6 +14,20 @@ The intent is pedagogical and demonstrative, not to ship an industrial ATPG flow
 | **BIST_CONTROLLER** | Built-in self-test FSM. States: `IDLE → SETUP → RUN → COMPARE → DONE`. Drives the LFSR(s) for `runLength` cycles, then compares the MISR's signature against `goldenSignature`. |
 | **JTAG_TAP** | IEEE 1149.1 Test Access Port. Implements the canonical 16-state TAP FSM (Test-Logic-Reset, Run-Test/Idle, Select-DR/IR-Scan, …, Update-DR/IR), an IR of `irBits` width, and a 32-bit ID code. |
 | **BOUNDARY_SCAN_CELL** | Boundary-scan cell intended for chip-edge wiring. Two-mode operation: normal pass-through and test (capture/update through the JTAG TAP). |
+| **MBIST_CONTROLLER** | Memory BIST controller. Walks a connected RAM through the **March C−** algorithm (`{ ⇕w0; ⇑r0,w1; ⇑r1,w0; ⇓r0,w1; ⇓r1,w0; ⇕r0 }`) and asserts `PASS` or `FAIL`. Pins: `START(0), RESET(1), DATA_IN(2, dataBits), CLK(3) → DONE, PASS, FAIL, TEST_MODE, STATE (3-bit), ADDR (addrBits), DATA_OUT (dataBits), WE, RE`. Designed to sit behind a four-MUX "MBIST collar" so the test mode takes over the RAM's `ADDR/DATA/WE/RE` lines from the functional drivers under `TEST_MODE`. |
+
+### Memory-cell faults — `cellFaults` on RAM
+
+`RAM` nodes carry an optional `cellFaults` map alongside `memory`:
+
+```js
+node.cellFaults = {
+  3: { stuckAt: 1, bit: null }, // address 3, whole-word stuck-at-1
+  5: { stuckAt: 0, bit: 2 },    // address 5, bit 2 only, stuck-at-0
+}
+```
+
+Absent entry = clean cell. `bit: null` = whole-word fault (every bit of the cell). The engine applies the fault on **both** read and write paths (mirrors `_applyWireFault` for wires) — so the fault is storage-transparent and immune to test-order reshuffles. A write of `1` into a stuck-at-0 cell silently stores `0`; the next read returns `0` ≠ expected `1`; MBIST flags FAIL with the matching `failAddr` and `failBit`.
 
 Wire-level fault state (`stuck-at-0`, `stuck-at-1`, `open`, `bridge`) is per-wire metadata read by both the simulator (live) and the fault simulator (golden vs faulty comparison).
 

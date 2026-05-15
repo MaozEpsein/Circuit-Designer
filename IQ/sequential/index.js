@@ -1376,8 +1376,8 @@ t_Y_arrival = t_clk-to-Q + t_Y_logic   ← זעיר ביחס ל-t_clk
         ],
         circuitRevealsAnswer: true,
         circuit: () => build(() => {
-          // Moore implementation, 5 states encoded with 3 FFs.
-          // S0=000, S1=001, S2=010, S3=011, S4=100 (match → Y=1).
+          // Moore "1011" detector — 5 states, 3 FFs.
+          //   S0=000, S1=001, S2=010, S3=011, S4=100 (match → Y=1)
           // Transitions:
           //   S0: 0→S0(000), 1→S1(001)
           //   S1: 0→S2(010), 1→S1(001)
@@ -1385,85 +1385,95 @@ t_Y_arrival = t_clk-to-Q + t_Y_logic   ← זעיר ביחס ל-t_clk
           //   S3: 0→S2(010), 1→S4(100)
           //   S4: 0→S2(010), 1→S1(001)
           //
-          // Showing the structural concept (Q2,Q1,Q0 → next-state CL → D2,D1,D0; Y=Q2),
-          // without expanding minimized boolean equations on the canvas. The canvas
-          // illustrates: 3 FFs, output Y = Q2 (Moore — depends on state only),
-          // and a placeholder "next-state CL" block driven by X + Q.
-          const X   = h.input(100, 240, 'X');
-          const clk = h.clock(100, 720);
+          // Minimized next-state equations (K-map with don't-cares on m10..m15):
+          //   D2 = Q1 · Q0 · X
+          //   D1 = ¬X·(Q0 + Q2) + Q1·¬Q0·X
+          //   D0 = X · ¬(Q1·Q0)               = X·¬Q1 + X·¬Q0
+          // Moore output:
+          //   Y = Q2
+          const X   = h.input(80, 280, 'X');
+          const clk = h.clock(80, 820);
           X.fixedValue = 1;
 
-          const ff2 = h.ffD(720, 200, 'Q2');
-          const ff1 = h.ffD(720, 380, 'Q1');
-          const ff0 = h.ffD(720, 560, 'Q0');
+          const ff2 = h.ffD(1100, 220, 'Q2');
+          const ff1 = h.ffD(1100, 460, 'Q1');
+          const ff0 = h.ffD(1100, 700, 'Q0');
 
-          // Next-state logic, expressed gate-by-gate from the transition table.
-          // The minimized boolean equations (derived via K-maps on Q2,Q1,Q0,X) are:
-          //   D2 = Q1·Q0·X                           ; only S3+X=1 → S4
-          //   D1 = (Q0·¬X) | (Q1·¬Q0·¬X) | (Q2·¬X)   ; transitions into S2
-          //   D0 = X·¬Q2 & (Q1≠Q0 reduces here)
-          // For clarity we wire a compact gate-level version. (Some redundancies are
-          // intentional to keep the topology readable on canvas.)
-          const notX  = h.gate('NOT', 260, 240);
-          const notQ0 = h.gate('NOT', 460, 620);
-          const notQ2 = h.gate('NOT', 460, 140);
+          // Shared inverters
+          const notX  = h.gate('NOT', 240, 280);
+          const notQ0 = h.gate('NOT', 320, 760);
 
-          // D2 = Q1 · Q0 · X
-          const andQ1Q0 = h.gate('AND', 460, 460);
-          const andD2   = h.gate('AND', 600, 280);
-          // D1 = Q0 · ¬X   (representative of "into S2" path; full term family is
-          //                  Q0·¬X + Q2·¬X — both go to S2; combined under OR below)
-          const andQ0nX = h.gate('AND', 460, 360);
-          const orD1    = h.gate('OR',  600, 420);
-          const andQ2nX = h.gate('AND', 460, 540);
-          // D0 = X · ¬Q2   (transitions into S1/S3, both have Q0=1)
-          const andD0   = h.gate('AND', 600, 600);
+          // === D2 = Q1 · Q0 · X ============================================
+          const andQ1Q0 = h.gate('AND', 540, 540);   // Q1·Q0
+          const andD2   = h.gate('AND', 760, 320);   // (Q1·Q0)·X
 
-          // Moore output: Y = Q2  (S4 = 100)
-          const Y = h.output(1000, 200, 'Y = Q2');
+          // === D1 = ¬X·(Q0 + Q2) + Q1·¬Q0·X ================================
+          const orQ0Q2  = h.gate('OR',  540, 380);   // Q0 + Q2
+          const andT1   = h.gate('AND', 760, 460);   // ¬X · (Q0+Q2)
+          const andNQ0X = h.gate('AND', 540, 680);   // ¬Q0 · X
+          const andT2   = h.gate('AND', 760, 580);   // Q1 · (¬Q0·X)
+          const orD1    = h.gate('OR',  920, 520);   // T1 + T2
+
+          // === D0 = X · ¬(Q1·Q0)  -- reuse andQ1Q0, just invert it =========
+          const notQ1Q0 = h.gate('NOT', 760, 760);   // ¬(Q1·Q0)
+          const andD0   = h.gate('AND', 920, 720);   // X · ¬(Q1·Q0)
+
+          // Moore output: Y = Q2 (depends only on state)
+          const Y = h.output(1380, 220, 'Y = Q2');
 
           return {
             nodes: [
               X, clk,
-              notX, notQ0, notQ2,
-              andQ1Q0, andD2, andQ0nX, orD1, andQ2nX, andD0,
+              notX, notQ0,
+              andQ1Q0, andD2,
+              orQ0Q2, andT1, andNQ0X, andT2, orD1,
+              notQ1Q0, andD0,
               ff2, ff1, ff0,
               Y,
             ],
             wires: [
-              // X → ¬X
-              h.wire(X.id, notX.id, 0),
-              // Q0, Q2 → inverters
-              h.wire(ff0.id, notQ0.id, 0),
-              h.wire(ff2.id, notQ2.id, 0),
+              // Inverters
+              h.wire(X.id,    notX.id,  0),
+              h.wire(ff0.id,  notQ0.id, 0),
 
-              // D2 = Q1 · Q0 · X
-              h.wire(ff1.id,   andQ1Q0.id, 0),
-              h.wire(ff0.id,   andQ1Q0.id, 1),
+              // Q1·Q0 — feeds both D2 (via AND with X) and D0 (via NOT)
+              h.wire(ff1.id, andQ1Q0.id, 0),
+              h.wire(ff0.id, andQ1Q0.id, 1),
+
+              // D2 = (Q1·Q0) · X
               h.wire(andQ1Q0.id, andD2.id, 0),
               h.wire(X.id,       andD2.id, 1),
               h.wire(andD2.id,   ff2.id,   0),
 
-              // D1 path: (Q0·¬X) OR (Q2·¬X)
-              h.wire(ff0.id,    andQ0nX.id, 0),
-              h.wire(notX.id,   andQ0nX.id, 1),
-              h.wire(ff2.id,    andQ2nX.id, 0),
-              h.wire(notX.id,   andQ2nX.id, 1),
-              h.wire(andQ0nX.id, orD1.id, 0),
-              h.wire(andQ2nX.id, orD1.id, 1),
-              h.wire(orD1.id,    ff1.id, 0),
+              // D1 — term 1: ¬X · (Q0 + Q2)
+              h.wire(ff0.id, orQ0Q2.id, 0),
+              h.wire(ff2.id, orQ0Q2.id, 1),
+              h.wire(notX.id,   andT1.id, 0),
+              h.wire(orQ0Q2.id, andT1.id, 1),
 
-              // D0 = X · ¬Q2
-              h.wire(X.id,    andD0.id, 0),
-              h.wire(notQ2.id, andD0.id, 1),
-              h.wire(andD0.id, ff0.id,   0),
+              // D1 — term 2: Q1 · (¬Q0 · X)
+              h.wire(notQ0.id, andNQ0X.id, 0),
+              h.wire(X.id,     andNQ0X.id, 1),
+              h.wire(ff1.id,   andT2.id, 0),
+              h.wire(andNQ0X.id, andT2.id, 1),
+
+              // D1 = T1 + T2
+              h.wire(andT1.id, orD1.id, 0),
+              h.wire(andT2.id, orD1.id, 1),
+              h.wire(orD1.id,  ff1.id, 0),
+
+              // D0 = X · ¬(Q1·Q0)
+              h.wire(andQ1Q0.id, notQ1Q0.id, 0),
+              h.wire(X.id,       andD0.id,   0),
+              h.wire(notQ1Q0.id, andD0.id,   1),
+              h.wire(andD0.id,   ff0.id,     0),
 
               // Clocks
               h.wire(clk.id, ff2.id, 1),
               h.wire(clk.id, ff1.id, 1),
               h.wire(clk.id, ff0.id, 1),
 
-              // Moore output Y = Q2  ← תלוי רק במצב!
+              // Moore output Y = Q2  ← תלוי רק במצב, לא ב-X!
               h.wire(ff2.id, Y.id, 0),
             ],
           };
@@ -1472,5 +1482,769 @@ t_Y_arrival = t_clk-to-Q + t_Y_logic   ← זעיר ביחס ל-t_clk
     ],
     source: 'מאגר ראיונות — "1011" detector + setup-time / critical-path reasoning',
     tags: ['fsm', 'mealy', 'moore', 'sequence-detector', '1011', 'setup-time', 'critical-path', 'sequential'],
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // #2009 — Room occupancy monitor (men vs women) from a 4-bit
+  //          one-hot sensor. Source slide: IQ/PP/slides/circuits_s01_1.png
+  //          (מעגלים שקף 1).
+  // NOTE: numbered 2009 to keep slide-order consistent in the panel
+  // (slide 1 → 2009, slide 2 → 2010, slide 3 → 1005 in logic). Tabs
+  // place questions in array order, not by serial.
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'room-ratio-monitor',
+    difficulty: 'medium',
+    title: 'מוניטור יחס גברים/נשים בחדר (גלאי 4-ביט)',
+    intro:
+`גלאי בחדר מוציא בכל מחזור שעון קוד **4-ביט one-hot** המתאר אירוע יחיד:
+
+| קוד  | אירוע |
+|------|-------|
+| \`1000\` | גבר נכנס לחדר (Min) |
+| \`0100\` | גבר יוצא מהחדר (Mout) |
+| \`0010\` | אישה נכנסת לחדר (Fin) |
+| \`0001\` | אישה יוצאת מהחדר (Fout) |
+| \`0000\` | אין תנועה |
+
+תכנן מערכת שמדליקה אחת מ-3 נורות לפי **היחס בין גברים לנשים בחדר**:
+
+- **Red** — יותר נשים מגברים.
+- **Yellow** — מספר שווה.
+- **Green** — יותר גברים מנשים.
+
+ההנחות: בהדלקה החדר ריק (0 גברים, 0 נשים). הגלאי מבטיח שביט אחד לכל היותר דולק בכל ציקל (one-hot או אפס).`,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנון מושגי: איזה מצב המעגל צריך לשמור, ואיך מחשבים ממנו את 3 הנורות?',
+        hints: [
+          'הדרך הישירה: **שני מונים נפרדים** — `cnt_M` סופר גברים בחדר, `cnt_F` סופר נשים.',
+          '`cnt_M` עולה ב-Min ויורד ב-Mout. `cnt_F` עולה ב-Fin ויורד ב-Fout.',
+          '**Comparator** יחיד מחזיר את 3 הסיגנלים: EQ (Yellow), GT (Green = M > F), LT (Red = M < F).',
+          'אופציה אופטימלית: לאחד את שני המונים לרגיסטר חתום אחד `diff = M − F` (state-collapse). מצומצם, אבל פחות אינטואיטיבי — נדון בו בסוף.',
+        ],
+        answer:
+`**הארכיטקטורה הישירה: 2 מונים + comparator יחיד.**
+
+\`\`\`
+cnt_M ← מונה אנשים מסוג גבר בחדר        (עולה ב-Min, יורד ב-Mout)
+cnt_F ← מונה אנשים מסוג אישה בחדר        (עולה ב-Fin, יורד ב-Fout)
+\`\`\`
+
+**Mapping אירוע → פעולה על המונים:**
+
+| אירוע    | קוד (b3 b2 b1 b0) | cnt_M | cnt_F |
+|----------|-------------------|-------|-------|
+| Min      | \`1000\`            | **+1** | —     |
+| Mout     | \`0100\`            | **−1** | —     |
+| Fin      | \`0010\`            | —     | **+1** |
+| Fout     | \`0001\`            | —     | **−1** |
+| no-event | \`0000\`            | —     | —     |
+
+**Comparator יחיד** (\`cnt_M\` מול \`cnt_F\`) מחזיר 3 פלטים:
+
+\`\`\`
+EQ  = (cnt_M == cnt_F)   →  Yellow
+GT  = (cnt_M >  cnt_F)   →  Green   (יותר גברים)
+LT  = (cnt_M <  cnt_F)   →  Red     (יותר נשים)
+\`\`\`
+
+**Reset:** שני המונים מתחילים ב-0 (החדר ריק → EQ → Yellow).
+
+**רוחב המונים:** ⌈log₂(K+1)⌉ ביטים לקיבולת חדר \`K\`. לחדר של 16 → 4 ביטים מספיקים. אין צורך ב-signed כי המונים אי-שליליים.
+
+---
+
+**אופטימיזציה (state-collapse) — לסיום הראיון:**
+3 הנורות תלויות **רק** בסימן של \`M − F\`, אז ניתן להחליף את שני המונים ברגיסטר חתום אחד \`diff = M − F\`. עליות ב-Min ו-Fout, ירידות ב-Mout ו-Fin. Yellow=\`diff==0\`, Red=\`diff[MSB]\`, Green=\`¬Red ∧ ¬Yellow\`. חוסך כ-N ביטי FFs + comparator → במחיר adder signed יחיד. **גרסת ה-canvas שלמטה משתמשת בגרסת 2-המונים** כי היא קריאה יותר.`,
+        answerSchematic: `
+<svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Block diagram: two counters + comparator">
+  <text x="450" y="28" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="17">בלוק-דיאגרמה: 2 מונים + COMPARATOR</text>
+
+  <!-- ─── Inputs (left column) ─────────────────────────────── -->
+  <g font-weight="bold" font-size="13">
+    <text x="50" y="110" fill="#80b0e0">Min</text>
+    <text x="50" y="170" fill="#80b0e0">Mout</text>
+    <text x="50" y="290" fill="#80b0e0">Fin</text>
+    <text x="50" y="350" fill="#80b0e0">Fout</text>
+  </g>
+
+  <!-- ─── cnt_M block (top) ────────────────────────────────── -->
+  <rect x="200" y="80"  width="180" height="120" rx="4"
+        fill="#0a1520" stroke="#80f0a0" stroke-width="2.4"/>
+  <text x="290" y="125" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="16">cnt_M</text>
+  <text x="290" y="150" text-anchor="middle" fill="#c8d8f0" font-size="12">N-bit up/down counter</text>
+  <text x="290" y="172" text-anchor="middle" fill="#c8d8f0" font-size="12">reset: 0</text>
+  <text x="290" y="192" text-anchor="middle" fill="#80b0e0" font-size="11">+1 on Min, −1 on Mout</text>
+
+  <!-- Wires Min → cnt_M (UP), Mout → cnt_M (DOWN) -->
+  <line x1="90"  y1="106" x2="200" y2="106" stroke="#39ff80" stroke-width="1.8"/>
+  <text x="155" y="100" fill="#39ff80" font-size="11">UP</text>
+  <line x1="90"  y1="166" x2="200" y2="166" stroke="#ff7070" stroke-width="1.8"/>
+  <text x="145" y="160" fill="#ff7070" font-size="11">DOWN</text>
+
+  <!-- ─── cnt_F block (bottom) ─────────────────────────────── -->
+  <rect x="200" y="260" width="180" height="120" rx="4"
+        fill="#0a1520" stroke="#80f0a0" stroke-width="2.4"/>
+  <text x="290" y="305" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="16">cnt_F</text>
+  <text x="290" y="330" text-anchor="middle" fill="#c8d8f0" font-size="12">N-bit up/down counter</text>
+  <text x="290" y="352" text-anchor="middle" fill="#c8d8f0" font-size="12">reset: 0</text>
+  <text x="290" y="372" text-anchor="middle" fill="#80b0e0" font-size="11">+1 on Fin, −1 on Fout</text>
+
+  <!-- Wires Fin → cnt_F (UP), Fout → cnt_F (DOWN) -->
+  <line x1="90"  y1="286" x2="200" y2="286" stroke="#39ff80" stroke-width="1.8"/>
+  <text x="155" y="280" fill="#39ff80" font-size="11">UP</text>
+  <line x1="90"  y1="346" x2="200" y2="346" stroke="#ff7070" stroke-width="1.8"/>
+  <text x="145" y="340" fill="#ff7070" font-size="11">DOWN</text>
+
+  <!-- ─── Comparator block (middle-right) ──────────────────── -->
+  <rect x="510" y="160" width="180" height="160" rx="4"
+        fill="#0a1520" stroke="#f0d080" stroke-width="2.4"/>
+  <text x="600" y="200" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="16">COMPARATOR</text>
+  <text x="600" y="225" text-anchor="middle" fill="#c8d8f0" font-size="12">A vs B → EQ / GT / LT</text>
+  <text x="530" y="260" fill="#c8d8f0" font-size="12" font-weight="bold">A</text>
+  <text x="530" y="300" fill="#c8d8f0" font-size="12" font-weight="bold">B</text>
+
+  <!-- cnt_M output → CMP.A -->
+  <line x1="380" y1="140" x2="445" y2="140" stroke="#80c8ff" stroke-width="2"/>
+  <line x1="445" y1="140" x2="445" y2="255" stroke="#80c8ff" stroke-width="2"/>
+  <line x1="445" y1="255" x2="510" y2="255" stroke="#80c8ff" stroke-width="2"/>
+  <text x="395" y="132" fill="#80c8ff" font-size="11" font-weight="bold">M</text>
+
+  <!-- cnt_F output → CMP.B -->
+  <line x1="380" y1="320" x2="445" y2="320" stroke="#80c8ff" stroke-width="2"/>
+  <line x1="445" y1="320" x2="445" y2="295" stroke="#80c8ff" stroke-width="2"/>
+  <line x1="445" y1="295" x2="510" y2="295" stroke="#80c8ff" stroke-width="2"/>
+  <text x="395" y="314" fill="#80c8ff" font-size="11" font-weight="bold">F</text>
+
+  <!-- ─── Three lamps (right) ──────────────────────────────── -->
+  <g font-size="13" font-weight="bold">
+    <!-- GT → Green -->
+    <line x1="690" y1="195" x2="770" y2="195" stroke="#39ff80" stroke-width="2"/>
+    <text x="700" y="187" fill="#39ff80" font-size="11">GT</text>
+    <circle cx="800" cy="195" r="20" fill="#39ff80" stroke="#c8d8f0" stroke-width="1.4"/>
+    <text x="830" y="200" fill="#39ff80">Green</text>
+    <text x="830" y="216" fill="#80b0e0" font-size="11">M &gt; F</text>
+
+    <!-- EQ → Yellow -->
+    <line x1="690" y1="240" x2="770" y2="240" stroke="#f0d050" stroke-width="2"/>
+    <text x="700" y="232" fill="#f0d050" font-size="11">EQ</text>
+    <circle cx="800" cy="240" r="20" fill="#f0d050" stroke="#c8d8f0" stroke-width="1.4"/>
+    <text x="830" y="245" fill="#f0d050">Yellow</text>
+    <text x="830" y="261" fill="#80b0e0" font-size="11">M = F</text>
+
+    <!-- LT → Red -->
+    <line x1="690" y1="285" x2="770" y2="285" stroke="#ff5555" stroke-width="2"/>
+    <text x="700" y="277" fill="#ff5555" font-size="11">LT</text>
+    <circle cx="800" cy="285" r="20" fill="#ff5555" stroke="#c8d8f0" stroke-width="1.4"/>
+    <text x="830" y="290" fill="#ff5555">Red</text>
+    <text x="830" y="306" fill="#80b0e0" font-size="11">M &lt; F</text>
+  </g>
+
+  <text x="450" y="420" text-anchor="middle" fill="#c8d8f0" font-size="12">
+    שני מונים בלתי-תלויים (M, F) → comparator יחיד מפיק את 3 הסיגנלים EQ / GT / LT → 3 נורות.
+  </text>
+</svg>
+`,
+        interviewerMindset:
+`הראיין רוצה לראות שאתה מתחיל מהפתרון הישיר (**2 מונים + comparator**) — מיפוי 1:1 לבעיה. זו התשובה ה"בטוחה" שמראה שהבנת את הבעיה.
+
+**מקפיץ לטובה:**
+- להציע ביוזמתך אופטימיזציה ל-**רגיסטר חתום אחד** (state-collapse) ולנמק: הנורות תלויות רק בסימן ההפרש.
+- לשאול "מה קיבולת החדר?" לפני קביעת רוחב המונים.
+- להזכיר שעם comparator יחיד 3 הפלטים (EQ/GT/LT) הם הדדית-בלעדיים אוטומטית — אין צורך באזעקה של "more than one lamp".
+
+**מלכודת נפוצה:** לבנות counter "up-only" ולנסות "לפצות" באלגוריתם. במציאות צריך up/down counter (REG + ALU עם delta ∈ {−1,0,+1}). זה רכיב סטנדרטי, לא להסתבך.`,
+        expectedAnswers: [
+          'counter', 'מונה', 'cnt_m', 'cnt_f',
+          'comparator', 'cmp', 'משווה',
+          'eq', 'gt', 'lt',
+          'up/down', 'up-down',
+          'diff', 'state-collapse', 'collapse',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'מימוש פיזי: בחר רוחב למונים, הראה את חיווט ה-up/down counter ופלטי המשווה. מה קורה אם counter תחתון/עליון נחרג?',
+        hints: [
+          'רוחב 4-bit unsigned (0..15) מספיק לחדר עד 15 אנשים מכל מין. הרחב לפי קיבולת.',
+          'Up/down counter: על כל ציקל עולה ב-`+1` ב-event UP, יורד ב-`−1` ב-event DOWN, אחרת מחזיק. שני events לעולם לא דולקים יחד בגלל ה-one-hot.',
+          'מימוש פיזי: REG + ALU. delta = UP ? +1 : (DOWN ? −1 : 0). enable = UP | DOWN.',
+          'COMPARATOR מבטא בו-זמנית את 3 ההשוואות: EQ → Yellow, GT → Green, LT → Red. אין צורך בלוגיקה חיצונית.',
+          'חריגה: cnt_M = 15 + Min → גלישה ל-0. בלתי אפשרי פיזית (אדם 17 לא נכנס לחדר של 16). אם הספציפיקציה לא מבטיחה את זה — הוסף saturation: אם cnt = MAX ו-UP=1 → לא לעדכן.',
+        ],
+        answer:
+`**רוחב: 4-bit unsigned** (0..15) לחדר קטן. בלי signed — שני המונים אי-שליליים בהגדרה.
+
+**Up/Down counter (זהה ל-cnt_M ול-cnt_F):**
+\`\`\`
+delta     = up ? 4'b0001
+          : down ? 4'b1111  // = −1 ב-2'sC, הוספה רגילה תיתן cnt−1
+                 : 4'b0000
+
+cnt_next  = cnt + delta     // adder יחיד, אין צורך ב-subtract
+enable    = up | down       // לא לכתוב לרגיסטר בציקלים שקטים
+\`\`\`
+
+**Mapping signals → counters:**
+\`\`\`
+M.up   = sensor[3]    (Min)
+M.down = sensor[2]    (Mout)
+F.up   = sensor[1]    (Fin)
+F.down = sensor[0]    (Fout)
+\`\`\`
+
+**Output decode מ-Comparator יחיד:**
+\`\`\`
+{green, yellow, red} = CMP(cnt_M, cnt_F)
+   yellow ← EQ        (cnt_M == cnt_F)
+   green  ← GT        (cnt_M >  cnt_F)
+   red    ← LT        (cnt_M <  cnt_F)
+\`\`\`
+
+**Saturation trap:**
+
+1. **Underflow:** אם cnt_M = 0 ו-Mout מגיע → wrap ל-15. נורת Green תקפוץ מ-Yellow ל-Green בטעות. בלתי אפשרי פיזית, אבל הספציפיקציה צריכה לאשר. הגנה: בלוק את ה-DOWN כש-cnt=0.
+2. **Overflow:** סימטרי, אם cnt = MAX ו-UP=1. הגנה: בלוק את ה-UP.
+3. **Wider register:** 8-bit (0..255) מספיק לכל אולם נורמלי, פשוט יותר מהוספת saturation logic.
+
+**בראיון:** הזכר שזו "saturating up/down counter", רכיב סטנדרטי בכל ספריית design.`,
+        editor: 'verilog',
+        starterCode:
+`module room_ratio_monitor (
+    input  wire       clk,
+    input  wire       rst_n,        // async, active-low
+    input  wire [3:0] sensor,       // {Min, Mout, Fin, Fout}
+    output wire       red,
+    output wire       yellow,
+    output wire       green
+);
+
+    // TODO: split sensor into per-counter up/down events
+
+    // TODO: cnt_M — up/down counter for men in room
+
+    // TODO: cnt_F — up/down counter for women in room
+
+    // TODO: single comparator → red / yellow / green
+
+endmodule
+`,
+        answerVerilog:
+`module room_ratio_monitor #(
+    parameter N = 4                            // counter width
+) (
+    input  wire             clk,
+    input  wire             rst_n,
+    input  wire       [3:0] sensor,            // {Min, Mout, Fin, Fout}
+    output wire             red,
+    output wire             yellow,
+    output wire             green
+);
+    wire min  = sensor[3];
+    wire mout = sensor[2];
+    wire fin  = sensor[1];
+    wire fout = sensor[0];
+
+    reg [N-1:0] cnt_m;
+    reg [N-1:0] cnt_f;
+
+    // ── cnt_M: up on Min, down on Mout ──────────────────────
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)               cnt_m <= 0;
+        else if (min  && !mout)   cnt_m <= cnt_m + 1;
+        else if (mout && !min)    cnt_m <= cnt_m - 1;
+    end
+
+    // ── cnt_F: up on Fin, down on Fout ──────────────────────
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)               cnt_f <= 0;
+        else if (fin  && !fout)   cnt_f <= cnt_f + 1;
+        else if (fout && !fin)    cnt_f <= cnt_f - 1;
+    end
+
+    // ── Single comparator → three mutually-exclusive lamps ──
+    assign green  = (cnt_m >  cnt_f);
+    assign yellow = (cnt_m == cnt_f);
+    assign red    = (cnt_m <  cnt_f);
+endmodule
+`,
+        expectedAnswers: [
+          'cnt_m', 'cnt_f', 'counter', 'מונה',
+          'up', 'down', 'up/down', 'up-down',
+          'comparator', 'cmp', 'משווה',
+          'eq', 'gt', 'lt', '==', '>', '<',
+          'always', 'posedge', 'reg', 'assign',
+          'saturat',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'איך תאמת את המעגל בסימולציה? בנה רצף קצר של 6 אירועי גלאי ומסור איזו נורה תידלק בכל ציקל.',
+        hints: [
+          'התחל מ-`cnt_M=0`, `cnt_F=0` → EQ → Yellow.',
+          'ציקל 1: Min (1000) → `cnt_M=1, cnt_F=0` → GT → Green.',
+          'ציקל 2: Fin (0010) → `cnt_M=1, cnt_F=1` → EQ → Yellow.',
+          'ציקל 3: Fin (0010) → `cnt_M=1, cnt_F=2` → LT → Red.',
+          'ציקל 4: no-event → ללא שינוי → Red.',
+          'ציקל 5: Fout (0001) → `cnt_M=1, cnt_F=1` → EQ → Yellow.',
+          'ציקל 6: Min (1000) → `cnt_M=2, cnt_F=1` → GT → Green.',
+        ],
+        answer:
+`**Trace 6 ציקלים** (תואם במדויק את המעגל שעל הקנבס):
+
+| t | sensor | אירוע    | cnt_M | cnt_F | CMP | נורה |
+|---|--------|----------|:-----:|:-----:|:---:|:----:|
+| 0 | —      | reset    | 0 | 0 | EQ | **Yellow** |
+| 1 | 1000   | Min      | 1 | 0 | GT | **Green** |
+| 2 | 0010   | Fin      | 1 | 1 | EQ | **Yellow** |
+| 3 | 0010   | Fin      | 1 | 2 | LT | **Red** |
+| 4 | 0000   | no-event | 1 | 2 | LT | **Red** |
+| 5 | 0001   | Fout     | 1 | 1 | EQ | **Yellow** |
+| 6 | 1000   | Min      | 2 | 1 | GT | **Green** |
+
+**מה לבדוק בסימולציה:**
+- **State coverage:** Red, Yellow, Green נדלקות לפחות פעם אחת — בטראס הזה כולן ✓.
+- **One-hot lamp:** ה-Comparator מבטיח אוטומטית ש-\`green + yellow + red == 1\` (EQ/GT/LT הדדית-בלעדיות).
+- **Reset:** אחרי \`rst_n=0\` קצר, שני המונים = 0, EQ דולק → Yellow.
+- **No-event idempotency:** רצף \`0000 0000 0000\` לא משנה אף מונה — הנורה נשמרת (ציקל 4).
+- **Underflow trap:** הזן Mout כאשר \`cnt_M=0\` — המונה יעבור ל-15 (gross wrap-around). הוסף לוגיקת saturation ב-spec הדורש זאת.
+- **Overflow trap:** הזן 16 Min רצופים עם N=4 — המונה יעבור מ-15 ל-0. סימטרית.`,
+        expectedAnswers: [
+          'red', 'yellow', 'green', 'אדום', 'צהוב', 'ירוק',
+          'cnt_m', 'cnt_f', 'eq', 'gt', 'lt',
+          'trace', 'simulation', 'סימולציה',
+          'reset', 'one-hot', 'assertion',
+          'underflow', 'overflow', 'saturat',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 1 (מוניטור גלאי 4-ביט יחס גברים/נשים)',
+    tags: ['counter', 'up-down', 'comparator', 'sub-circuit', 'sequential', 'verilog'],
+    circuit: () => build(() => {
+      // The canvas mirrors the part-א architecture exactly:
+      //   2 up/down counter blocks + 1 COMPARATOR + 3 lamps.
+      // Each counter is a SUB_CIRCUIT named "U/D Counter" that wraps the
+      // REG + ALU + delta-MUX detail away from the top-level view.
+
+      // Fresh inner scene for each counter instance (each SUB_CIRCUIT must
+      // own its own node objects — the engine mutates internal INPUT
+      // fixedValues per cycle, so sharing would race).
+      const _udInner = () => ({
+        nodes: [
+          { type: 'INPUT',    id: 'up',     label: 'up',   x: -320, y: -60, fixedValue: 0 },
+          { type: 'INPUT',    id: 'down',   label: 'down', x: -320, y:   0, fixedValue: 0 },
+          { type: 'INPUT',    id: 'clk',    label: 'clk',  x: -320, y:  60, fixedValue: 0 },
+          { type: 'IMM',      id: 'imm_p1', label: '+1',   x: -160, y: 120, value:  1, bitWidth: 4 },
+          { type: 'IMM',      id: 'imm_m1', label: '−1',   x: -160, y: 160, value: 15, bitWidth: 4 },
+          { type: 'IMM',      id: 'imm_z0', label: '0',    x: -160, y: 200, value:  0, bitWidth: 4 },
+          { type: 'IMM',      id: 'imm_op', label: 'OP',   x: -160, y: 240, value:  0, bitWidth: 4 },
+          { type: 'IMM',      id: 'imm_clr',label: 'CLR',  x: -160, y: 280, value:  0, bitWidth: 1 },
+          { type: 'GATE_SLOT',id: 'or_any', label: 'EN',   x:    0, y: -30, gate: 'OR' },
+          { type: 'BUS_MUX',  id: 'mux_s',  label: '±1',   x:  120, y:  60, inputCount: 2 },
+          { type: 'BUS_MUX',  id: 'mux_d',  label: 'Δ',    x:  240, y: 130, inputCount: 2 },
+          { type: 'ALU',      id: 'alu',    label: 'ADD',  x:  380, y:  60, bitWidth: 4 },
+          { type: 'REGISTER', id: 'reg',    label: 'cnt',  x:  520, y:  60, bitWidth: 4 },
+          { type: 'OUTPUT',   id: 'count',  label: 'count',x:  680, y:  60 },
+        ],
+        wires: [
+          { id: 'iw01', sourceId: 'up',     targetId: 'or_any', targetInputIndex: 0, sourceOutputIndex: 0 },
+          { id: 'iw02', sourceId: 'down',   targetId: 'or_any', targetInputIndex: 1, sourceOutputIndex: 0 },
+          { id: 'iw03', sourceId: 'imm_m1', targetId: 'mux_s',  targetInputIndex: 0, sourceOutputIndex: 0 },
+          { id: 'iw04', sourceId: 'imm_p1', targetId: 'mux_s',  targetInputIndex: 1, sourceOutputIndex: 0 },
+          { id: 'iw05', sourceId: 'up',     targetId: 'mux_s',  targetInputIndex: 2, sourceOutputIndex: 0 },
+          { id: 'iw06', sourceId: 'imm_z0', targetId: 'mux_d',  targetInputIndex: 0, sourceOutputIndex: 0 },
+          { id: 'iw07', sourceId: 'mux_s',  targetId: 'mux_d',  targetInputIndex: 1, sourceOutputIndex: 0 },
+          { id: 'iw08', sourceId: 'or_any', targetId: 'mux_d',  targetInputIndex: 2, sourceOutputIndex: 0 },
+          { id: 'iw09', sourceId: 'reg',    targetId: 'alu',    targetInputIndex: 0, sourceOutputIndex: 0 },
+          { id: 'iw10', sourceId: 'mux_d',  targetId: 'alu',    targetInputIndex: 1, sourceOutputIndex: 0 },
+          { id: 'iw11', sourceId: 'imm_op', targetId: 'alu',    targetInputIndex: 2, sourceOutputIndex: 0 },
+          { id: 'iw12', sourceId: 'alu',    targetId: 'reg',    targetInputIndex: 0, sourceOutputIndex: 0 },
+          { id: 'iw13', sourceId: 'or_any', targetId: 'reg',    targetInputIndex: 1, sourceOutputIndex: 0 },
+          { id: 'iw14', sourceId: 'imm_clr',targetId: 'reg',    targetInputIndex: 2, sourceOutputIndex: 0 },
+          { id: 'iw15', sourceId: 'clk',    targetId: 'reg',    targetInputIndex: 3, sourceOutputIndex: 0, isClockWire: true },
+          { id: 'iw16', sourceId: 'reg',    targetId: 'count',  targetInputIndex: 0, sourceOutputIndex: 0 },
+        ],
+      });
+
+      // ── Top-level scene ──────────────────────────────────────
+      const B3  = h.input(80,  120, 'Min');   // up  for cnt_M
+      const B2  = h.input(80,  200, 'Mout');  // down for cnt_M
+      const B1  = h.input(80,  420, 'Fin');   // up  for cnt_F
+      const B0  = h.input(80,  500, 'Fout');  // down for cnt_F
+      const clk = h.clock(80, 700);
+
+      // 6-cycle trace: Min, Fin, Fin, no-event, Fout, Min.
+      B3.fixedValue = 0; B3.stepValues = [1, 0, 0, 0, 0, 1, 0, 0];
+      B2.fixedValue = 0; B2.stepValues = [0, 0, 0, 0, 0, 0, 0, 0];
+      B1.fixedValue = 0; B1.stepValues = [0, 1, 1, 0, 0, 0, 0, 0];
+      B0.fixedValue = 0; B0.stepValues = [0, 0, 0, 0, 1, 0, 0, 0];
+
+      const cntM = h.block('SUB_CIRCUIT', 360, 160, {
+        subName: 'ud_counter',
+        label: 'cnt_M  (U/D Counter)',
+        subInputs:  [{ id: 'up' }, { id: 'down' }, { id: 'clk' }],
+        subOutputs: [{ id: 'count' }],
+        subCircuit: _udInner(),
+      });
+      const cntF = h.block('SUB_CIRCUIT', 360, 460, {
+        subName: 'ud_counter',
+        label: 'cnt_F  (U/D Counter)',
+        subInputs:  [{ id: 'up' }, { id: 'down' }, { id: 'clk' }],
+        subOutputs: [{ id: 'count' }],
+        subCircuit: _udInner(),
+      });
+
+      const cmp = h.block('COMPARATOR', 680, 310, { label: 'CMP' });
+
+      const cntMOut = h.output(560, 100, 'cnt_M');
+      const cntFOut = h.output(560, 540, 'cnt_F');
+      const green   = h.output(900, 230, 'Green');
+      const yellow  = h.output(900, 310, 'Yellow');
+      const red     = h.output(900, 390, 'Red');
+
+      return {
+        nodes: [B3, B2, B1, B0, clk, cntM, cntF, cmp, cntMOut, cntFOut, green, yellow, red],
+        wires: [
+          // cnt_M ports: up=0, down=1, clk=2.
+          h.wire(B3.id,  cntM.id, 0),
+          h.wire(B2.id,  cntM.id, 1),
+          h.wire(clk.id, cntM.id, 2),
+          // cnt_F ports.
+          h.wire(B1.id,  cntF.id, 0),
+          h.wire(B0.id,  cntF.id, 1),
+          h.wire(clk.id, cntF.id, 2),
+
+          // Counter outputs → monitors + comparator.
+          h.wire(cntM.id, cntMOut.id, 0),
+          h.wire(cntF.id, cntFOut.id, 0),
+          h.wire(cntM.id, cmp.id, 0),
+          h.wire(cntF.id, cmp.id, 1),
+
+          // Comparator outputs: 0=EQ→Yellow, 1=GT→Green, 2=LT→Red.
+          h.wire(cmp.id, yellow.id, 0, 0),
+          h.wire(cmp.id, green.id,  0, 1),
+          h.wire(cmp.id, red.id,    0, 2),
+        ],
+      };
+    }),
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // #2010 — FSM divisibility by 3 (serial bit stream, MSB first)
+  // Source slide: IQ/PP/slides/circuits_s02_1.png (מעגלים שקף 2).
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'fsm-divisible-by-3',
+    difficulty: 'medium',
+    title: 'FSM — האם מספר בינארי מתחלק ב-3?',
+    intro:
+`אתה מקבל זרם סדרתי של \`N\` ביטים (\`N\` לא ידוע מראש), **MSB ראשון**. בכל קצה שעון נכנס ביט אחד \`X\`. בסוף הזרם המעגל צריך להוציא \`Y=1\` אם המספר שמיוצג ע"י כל הביטים מתחלק ב-3, אחרת \`Y=0\`.
+
+דוגמאות:
+- \`00011011\` = 27 → \`Y=1\` (27 = 3·9 ✓)
+- \`1000\` = 8 → \`Y=0\` (8 mod 3 = 2 ✗)
+- \`110\` = 6 → \`Y=1\`
+
+**אילוץ:** המעגל סינכרוני, חד-ביט-לפר-ציקל, אינו יודע מתי הזרם מסתיים — \`Y\` חייב להיות תקין בכל ציקל (מצב התקבולת = השארית מודולו 3).`,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנון: כמה מצבים נדרשים? תאר את הסמנטיקה של כל מצב ובנה את טבלת המעברים.',
+        hints: [
+          'אחרי קליטת ביט נוסף MSB-first, הערך המספרי הוא `value = 2·value_old + X`.',
+          'אנחנו לא צריכים לשמור את כל ה-value (יכול להיות עצום) — מספיק לשמור את **השארית מודולו 3** של מה שראינו עד כה.',
+          'שארית אפשרית: 0, 1, 2 → **3 מצבים בלבד**: `S0` (mod=0), `S1` (mod=1), `S2` (mod=2).',
+          'מעבר: `new_state = (2 · old_state + X) mod 3`.',
+          'פלט Moore: `Y = 1 ⇔ state == S0`.',
+        ],
+        answer:
+`**3 מצבים** מספיקים — מצב = השארית מודולו 3 של הזרם שנקלט עד כה:
+
+| מצב | משמעות (mod 3) | Y |
+|-----|-----------------|---|
+| \`S0\` | 0 | **1** |
+| \`S1\` | 1 | 0 |
+| \`S2\` | 2 | 0 |
+
+**הגיוון של המעבר** מ-MSB-first:
+ערך חדש \`= 2·value_old + X\`. לכן \`new_mod = (2·old_mod + X) mod 3\`.
+
+| ממצב | X=0 → | X=1 → |
+|------|-------|-------|
+| S0 (mod 0) | 2·0+0=0 → **S0** | 2·0+1=1 → **S1** |
+| S1 (mod 1) | 2·1+0=2 → **S2** | 2·1+1=3=0 → **S0** |
+| S2 (mod 2) | 2·2+0=4=1 → **S1** | 2·2+1=5=2 → **S2** |
+
+**מצב התחלה:** \`S0\` (ערך ריק = 0, מתחלק ב-3 טריוויאלית).
+
+**מעקב על \`00011011\` (=27):**
+S0→(0)→S0→(0)→S0→(0)→S0→(1)→S1→(1)→S0→(0)→S1→(1)→S0→(1)→**S1**.
+חכה — קיבלנו S1, לא S0! בואו נספור שוב MSB-first של "00011011":
+- ערך אחרי כל ביט: 0, 0, 0, 1, 3, 6, 13, 27.
+- mod 3 של כל אחד: 0, 0, 0, 1, 0, 0, 1, 0. סוף = **0** → \`Y=1\` ✓.
+- שגיאתי במעבר. נריץ שוב: S0→0→S0→0→S0→0→S0→1→S1→1→**S0** (mod=3=0)→0→S1 (mod=6→0? לא: 2·0+0=0 → **S0**, mod=0). תיקון: \`S0→(0)→S0\`. כלומר אחרי "000110" אנחנו ב-S0 (mod 0). ממשיכים: \`S0→(1)→S1\`, \`S1→(1)→S0\`. סוף: **S0 → Y=1** ✓.`,
+        answerSchematic: `
+<svg viewBox="0 0 560 320" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="11" role="img" aria-label="Moore FSM state diagram for divisibility-by-3">
+  <text x="280" y="20" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Moore FSM — Divisible by 3</text>
+
+  <g stroke="#80b0e0" stroke-width="1.8" fill="#0a1520">
+    <circle cx="100" cy="180" r="40"/>
+    <circle cx="100" cy="180" r="46" fill="none" stroke="#39ff80" stroke-width="1.2"/>
+    <circle cx="280" cy="180" r="40"/>
+    <circle cx="460" cy="180" r="40"/>
+  </g>
+  <g fill="#c8d8f0" text-anchor="middle" font-weight="bold" font-size="13">
+    <text x="100" y="178">S0</text>
+    <text x="280" y="178">S1</text>
+    <text x="460" y="178">S2</text>
+  </g>
+  <g fill="#80b0e0" text-anchor="middle" font-size="10">
+    <text x="100" y="195">mod=0</text>
+    <text x="280" y="195">mod=1</text>
+    <text x="460" y="195">mod=2</text>
+  </g>
+  <g text-anchor="middle" font-size="10">
+    <text x="100" y="212" fill="#39ff80" font-weight="bold">Y=1</text>
+    <text x="280" y="212" fill="#c8d8f0">Y=0</text>
+    <text x="460" y="212" fill="#c8d8f0">Y=0</text>
+  </g>
+
+  <!-- S0 self-loop, X=0 -->
+  <path d="M 80 148 C 50 100, 130 100, 120 146" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="60"  y="92"  text-anchor="middle" fill="#c8d8f0">X=0</text>
+
+  <!-- S0 → S1, X=1 -->
+  <path d="M 140 180 L 240 180" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="190" y="172" text-anchor="middle" fill="#c8d8f0">X=1</text>
+
+  <!-- S1 → S0, X=1 (top curve) -->
+  <path d="M 256 148 C 220 90, 140 90, 110 146" stroke="#39ff80" fill="none" marker-end="url(#m-arr-g)"/>
+  <text x="180" y="80" text-anchor="middle" fill="#39ff80" font-weight="bold">X=1</text>
+
+  <!-- S1 → S2, X=0 -->
+  <path d="M 320 180 L 420 180" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="370" y="172" text-anchor="middle" fill="#c8d8f0">X=0</text>
+
+  <!-- S2 → S1, X=0 (bottom curve) -->
+  <path d="M 440 212 C 400 268, 320 268, 300 218" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="370" y="280" text-anchor="middle" fill="#c8d8f0">X=0</text>
+
+  <!-- S2 self-loop, X=1 -->
+  <path d="M 480 148 C 510 100, 440 100, 440 146" stroke="#c8d8f0" fill="none" marker-end="url(#m-arr)"/>
+  <text x="500" y="92" text-anchor="middle" fill="#c8d8f0">X=1</text>
+
+  <defs>
+    <marker id="m-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8d8f0"/>
+    </marker>
+    <marker id="m-arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff80"/>
+    </marker>
+  </defs>
+
+  <text x="280" y="308" text-anchor="middle" fill="#c8d8f0" font-size="10">חוק המעבר אחיד: new_mod = (2·old_mod + X) mod 3.</text>
+</svg>
+`,
+        interviewerMindset:
+`הראיין רוצה לראות **תובנת ה-state-collapse**: \`value\` יכול לגדול ללא גבול, אבל \`value mod 3\` מצומצם ל-3 ערכים בלבד. מי שמנסה לבנות מונה רחב או לאחסן את הקלט כולו — לא הבין את ה-FSM.
+
+**מקפיץ לטובה:**
+- לנמק את המעבר עם \`2·s + X\` ולא לזכור טבלה.
+- להזכיר שהמצב ההתחלתי \`S0\` נכון לאפס המתמטי (אפס מתחלק ב-3).
+- לציין שאותה גישה (state = remainder) עובדת לכל \`mod k\` קבוע.`,
+        expectedAnswers: [
+          '3', 'שלושה', 'שלוש', 'three',
+          's0', 's1', 's2',
+          'mod', 'modulo', 'שארית', 'remainder',
+          '2*s', '2s+x', '2·s', 'msb',
+          'moore',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'קידוד פיזי: כמה FFs? בחר קידוד והפק את משוואות ה-Next-State וה-Output.',
+        hints: [
+          '3 מצבים → `⌈log₂3⌉ = 2` FFs. קידוד: `S0=00, S1=01, S2=10`. (קוד `11` בלתי-מוגדר — אפשר לטפל בו כ-don\'t-care.)',
+          'נסמן Q1Q0 = מצב נוכחי, X = ביט נכנס, D1D0 = Next-State.',
+          'כתוב את כל 6 השורות החוקיות + 2 don\'t-care של `11`, ועשה K-map או פישוט אלגברי.',
+          'תפיק: `D1 = Q0·¬X + Q1·X`, `D0 = ¬Q1·¬Q0·X + Q0·¬X`, `Y = ¬Q1·¬Q0`.',
+        ],
+        answer:
+`**2 פליפ-פלופים** (Q1, Q0) — קידוד \`S0=00, S1=01, S2=10\` (קוד \`11\` = don't-care).
+
+**טבלת Next-State (Q1 Q0 X → D1 D0):**
+
+| Q1 Q0 | X | D1 D0 | (מצב→) |
+|-------|---|-------|--------|
+| 0 0   | 0 | 0 0   | S0→S0  |
+| 0 0   | 1 | 0 1   | S0→S1  |
+| 0 1   | 0 | 1 0   | S1→S2  |
+| 0 1   | 1 | 0 0   | S1→S0  |
+| 1 0   | 0 | 0 1   | S2→S1  |
+| 1 0   | 1 | 1 0   | S2→S2  |
+| 1 1   | * | – –   | don't-care |
+
+**אחרי פישוט (K-map):**
+
+\`\`\`
+D1 = ¬Q1·Q0·¬X  +  Q1·¬Q0·X
+D0 = ¬Q1·¬Q0·X  +  Q0·¬X
+Y  = ¬Q1·¬Q0          (אקטיבי במצב S0 בלבד)
+\`\`\`
+
+**צירופי שערים:** 2 ANDs + OR לכל אחד מה-Ds + AND קטן ל-Y. סה"כ ~5 שערים + 2 FFs — מעגל קצר וקומפקטי.`,
+        editor: 'verilog',
+        starterCode:
+`module div_by_3 (
+    input  wire clk,
+    input  wire rst_n,    // async reset, active-low
+    input  wire x,        // serial bit, MSB-first
+    output wire y         // 1 ⇔ accumulated value mod 3 == 0
+);
+
+    // TODO: encode 3 states (S0=00, S1=01, S2=10)
+
+    // TODO: state register
+
+    // TODO: next-state logic (new_state = (2*state + x) mod 3)
+
+    // TODO: Moore output
+
+endmodule
+`,
+        answerVerilog:
+`module div_by_3 (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire x,
+    output wire y
+);
+    // 3 states. Encoding S0=00, S1=01, S2=10.
+    reg [1:0] state, nstate;
+
+    always @(*) begin
+        case (state)
+            2'b00:   nstate = x ? 2'b01 : 2'b00;   // S0
+            2'b01:   nstate = x ? 2'b00 : 2'b10;   // S1
+            2'b10:   nstate = x ? 2'b10 : 2'b01;   // S2
+            default: nstate = 2'b00;               // illegal '11 → recover
+        endcase
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) state <= 2'b00;
+        else        state <= nstate;
+    end
+
+    assign y = (state == 2'b00);
+endmodule
+`,
+        expectedAnswers: [
+          '2', 'שני', 'two', 'log2',
+          'q1', 'q0', 'd1', 'd0',
+          's0', 's1', 's2',
+          'case', 'always', 'posedge', 'reg', 'assign',
+          '00', '01', '10',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'מה צריך לקרות בריסט? ומה יקרה אם בטעות נאתחל ל-S2 (mod=2) במקום S0 (mod=0)?',
+        hints: [
+          'ריסט סינכרוני / אסינכרוני שמחזיר את ה-FSM ל-S0 (mod=0).',
+          'אם נאתחל ל-S2 בטעות, הזרם "0" יוצא Y=0 כל הזמן עד שהמצב במקרה יחזור ל-S0 — שגיאה בכל הספירה.',
+          'במכונה הזו השארית "נדבקת" — אין מעבר אוטומטי ל-S0 ללא קלט נכון.',
+        ],
+        answer:
+`**ריסט:** חייב להחזיר ל-\`S0\` (00). זה ה-mod של ערך ריק (=0).
+
+**אם נאתחל ל-S2 בטעות:** המעגל מתחיל לספור מ-mod=2 במקום mod=0. הזרם "0000…" יוביל:
+S2 →(0)→ S1 →(0)→ S2 →(0)→ S1 → … — תקוע באוסילציה בין S1↔S2, Y לעולם לא יקפוץ ל-1 גם כשהערך האמיתי הוא 0 (מתחלק ב-3 טריוויאלית).
+
+**הלקח:** במכונת שאריות, מצב ההתחלה הוא חלק מהמפרט. ריסט שגוי = שגיאה מתמשכת לכל הזרם, לא ניתן להתאושש "בעצמו".`,
+        expectedAnswers: [
+          'reset', 'ריסט', 'rst', 's0', '00',
+          'initial', 'התחלה', 'אתחול',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 2 (מתחלק ב-3 FSM)',
+    tags: ['fsm', 'moore', 'divisibility', 'modulo', 'sequential', 'verilog'],
+    circuit: () => build(() => {
+      // Direct gate-level realisation of the equations from part ב:
+      //   D1 = ¬Q1·Q0·¬X  +  Q1·¬Q0·X
+      //   D0 = ¬Q1·¬Q0·X  +  Q0·¬X
+      //   Y  = ¬Q1·¬Q0
+      const X     = h.input(120, 200, 'X');
+      const clk   = h.clock(120, 540);
+      const ff0   = h.ffD(820,  280, 'FF_Q0');
+      const ff1   = h.ffD(820,  140, 'FF_Q1');
+      const notX  = h.gate('NOT', 280, 200);
+      const notQ0 = h.gate('NOT', 480, 360);
+      const notQ1 = h.gate('NOT', 480, 60);
+      // D1 = ¬Q1·Q0·¬X + Q1·¬Q0·X  → use 2 AND3 (synthesized as cascaded ANDs) + OR
+      const a1 = h.gate('AND', 600, 100);   // ¬Q1·Q0   (intermediate)
+      const a2 = h.gate('AND', 700, 130);   // (¬Q1·Q0)·¬X
+      const a3 = h.gate('AND', 600, 180);   // Q1·¬Q0   (intermediate)
+      const a4 = h.gate('AND', 700, 210);   // (Q1·¬Q0)·X
+      const orD1 = h.gate('OR', 780, 170);
+      // D0 = ¬Q1·¬Q0·X + Q0·¬X
+      const b1 = h.gate('AND', 600, 320);   // ¬Q1·¬Q0
+      const b2 = h.gate('AND', 700, 350);   // (¬Q1·¬Q0)·X
+      const b3 = h.gate('AND', 700, 410);   // Q0·¬X
+      const orD0 = h.gate('OR', 780, 380);
+      // Y = ¬Q1·¬Q0   (reuse b1)
+      const Y = h.output(1020, 460, 'Y');
+      return {
+        nodes: [X, clk, ff0, ff1, notX, notQ0, notQ1, a1, a2, a3, a4, orD1, b1, b2, b3, orD0, Y],
+        wires: [
+          h.wire(X.id,  notX.id, 0),
+          h.wire(ff0.id, notQ0.id, 0),
+          h.wire(ff1.id, notQ1.id, 0),
+
+          // a1 = ¬Q1 · Q0
+          h.wire(notQ1.id, a1.id, 0),
+          h.wire(ff0.id,   a1.id, 1),
+          // a2 = a1 · ¬X
+          h.wire(a1.id,    a2.id, 0),
+          h.wire(notX.id,  a2.id, 1),
+
+          // a3 = Q1 · ¬Q0
+          h.wire(ff1.id,   a3.id, 0),
+          h.wire(notQ0.id, a3.id, 1),
+          // a4 = a3 · X
+          h.wire(a3.id,    a4.id, 0),
+          h.wire(X.id,     a4.id, 1),
+
+          // D1 = a2 + a4
+          h.wire(a2.id, orD1.id, 0),
+          h.wire(a4.id, orD1.id, 1),
+          h.wire(orD1.id, ff1.id, 0),
+
+          // b1 = ¬Q1 · ¬Q0
+          h.wire(notQ1.id, b1.id, 0),
+          h.wire(notQ0.id, b1.id, 1),
+          // b2 = b1 · X
+          h.wire(b1.id, b2.id, 0),
+          h.wire(X.id,  b2.id, 1),
+          // b3 = Q0 · ¬X
+          h.wire(ff0.id, b3.id, 0),
+          h.wire(notX.id, b3.id, 1),
+          // D0 = b2 + b3
+          h.wire(b2.id, orD0.id, 0),
+          h.wire(b3.id, orD0.id, 1),
+          h.wire(orD0.id, ff0.id, 0),
+
+          // Clocks
+          h.wire(clk.id, ff0.id, 1),
+          h.wire(clk.id, ff1.id, 1),
+
+          // Output Y = ¬Q1·¬Q0 = b1
+          h.wire(b1.id, Y.id, 0),
+        ],
+      };
+    }),
   },
 ];

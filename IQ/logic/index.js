@@ -911,4 +911,242 @@ assign F = g1 | g2 | g3;
     source: 'מאגר ראיונות — לוגיקה קומבינטורית: decoders',
     tags: ['decoder', '2-to-4', 'combinational', 'k-map', 'sop', 'logic'],
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // #1005 — Full Adder from minimum 2:1 MUXes
+  // Source slide: IQ/PP/slides/circuits_s03_1.png (מעגלים שקף 3).
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: 'fa-from-2to1-mux',
+    difficulty: 'medium',
+    title: 'FA ממספר מינימלי של MUX 2:1',
+    intro:
+`ה-MUX 2:1 הבסיסי מקבל שני קלטים (\`d0\`, \`d1\`) ושורת בחירה אחת (\`s\`), והפלט הוא:
+
+\`\`\`
+y = s ? d1 : d0
+\`\`\`
+
+**המשימה:** ממש Full Adder (קלטים: \`a\`, \`b\`, \`c\`; פלטים: \`sum\`, \`carry\`) במספר **מינימלי** של MUXes 2:1. הסבר מדוע זה אכן המינימום.
+
+**הנחות:** ניתן להניח שמכל אות יש גם את ההיפוך (NOT זמין). אם הראיין מבקש "MUXes בלבד, ללא NOT" — נראה שגם זה אפשרי במחיר MUX נוסף.`,
+    parts: [
+      {
+        label: 'א',
+        question: 'גזור את המשוואות הבוליאניות של FA וכתב אותן בצורה מתאימה ל-MUX (כל אחת בצורת ternary).',
+        hints: [
+          '`sum = a ⊕ b ⊕ c`. כל XOR ניתן לבטא כ-`a ⊕ b = a ? ¬b : b`.',
+          '`carry = a·b + c·(a ⊕ b)`. אבל אפשר לכתוב גם: `carry = (a ⊕ b) ? c : a·b` או `carry = (a ⊕ b) ? c : a` (כש-a⊕b=0 הסיביות שוות, אז a=b, ולכן `a·b = a`).',
+          'ה-MUX מבטא ternary בדיוק: `y = s ? d1 : d0` — אז כל אחד מהביטויים לעיל הופך ל-MUX אחד.',
+        ],
+        answer:
+`**משוואות FA:**
+\`\`\`
+sum   = a ⊕ b ⊕ c
+carry = a·b + c·(a ⊕ b)
+\`\`\`
+
+**כתיבה ב-ternary (=MUX-friendly):**
+
+1. \`a ⊕ b = a ? ¬b : b\`  — XOR יחיד דרך MUX, sel=a. (טריק: כש-a=1 נדרש ¬b, כש-a=0 נדרש b.)
+
+2. \`sum = (a ⊕ b) ⊕ c = (a⊕b) ? ¬c : c\`  — XOR שני, sel = הביטוי הקודם.
+
+3. \`carry = (a ⊕ b) ? c : a\`  — **טריק חשוב!** כש-\`a⊕b=0\` (כלומר \`a=b\`), אז \`a·b = a\` (וגם \`= b\`), כך שאפשר לקחת \`a\` ישירות במקום \`a·b\`. כש-\`a⊕b=1\` (\`a≠b\`), הקאר הוא \`c\` (כי בדיוק אחד מ-\`a,b\` הוא 1 ואז קאר רק אם גם \`c=1\`).
+
+**שלוש משוואות → שלושה MUXes.** וכולן יכולות לחלוק את אותו "אות עזר" \`(a⊕b)\`.`,
+        expectedAnswers: [
+          'sum', 'carry', 'xor', '⊕',
+          'ternary', 'a ? b : c',
+          'a·b', 'ab',
+          '3', 'שלושה', 'three',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'בנה את ה-FA בפועל — כמה MUXes? סדר את החיווט והסבר מה כל MUX מחשב.',
+        hints: [
+          'MUX1: מחשב `T = a ⊕ b`. sel=a, d0=b, d1=¬b. דרוש ¬b → ניתן ע"י NOT, או ע"י MUX שמייצר ¬b מ-(1, 0, sel=b).',
+          'MUX2: מחשב `sum = T ⊕ c`. sel=T, d0=c, d1=¬c.',
+          'MUX3: מחשב `carry = T ? c : a`. sel=T, d0=a, d1=c.',
+          'סך הכול: **3 MUXes** אם NOT זמין (משתי הקלטים b ו-c). 4 MUXes אם רוצים פתרון "טהור" ללא inverter.',
+          'מינימום מוחלט: אי אפשר ב-2 MUXes כי FA הוא פונקציה לא טריוויאלית של 3 משתנים עם 2 פלטים — צריך לפחות 2 פלטים נפרדים, ושום ביטוי בודד של MUX 2:1 אינו `sum` או `carry` ישירות.',
+        ],
+        answer:
+`**3 MUXes 2:1** (בהנחה ש-\`¬b\` ו-\`¬c\` זמינים — אינוורטרים סטנדרטיים בכל ספרייה):
+
+| # | sel | d0 | d1 | מחשב |
+|---|-----|----|----|------|
+| MUX1 | \`a\` | \`b\`   | \`¬b\` | \`T = a ⊕ b\` |
+| MUX2 | \`T\` | \`c\`   | \`¬c\` | \`sum = T ⊕ c = a⊕b⊕c\` |
+| MUX3 | \`T\` | \`a\`   | \`c\`  | \`carry = a·b + c·T\` |
+
+**אינטואיציה ל-MUX3 (החלק היפה):**
+- אם \`T=0\` (כלומר \`a=b\`): \`carry = a = b = a·b\`. ✓
+- אם \`T=1\` (כלומר \`a≠b\`): בדיוק אחד מהם 1, אז \`a·b=0\`. אם גם \`c=1\` → קאר=1 (כי 1+1=10). אם \`c=0\` → קאר=0. כלומר \`carry = c\` במקרה הזה. ✓
+
+**גרסה "טהורה" ללא NOT — 4 MUXes:**
+החליפו את ה-\`¬b\` ב-\`MUX(d0=1, d1=0, sel=b)\` ואת ה-\`¬c\` באופן דומה — כל אינוורטר עולה MUX אחד. במקום \`¬c\` ב-MUX2 אפשר לעשות טריק עדין: שני XORs מאותו רעיון לאחד, מה שמחזיר למעשה ל-3 MUXes אם משתפים. הקונבנציה: **3 הוא המינימום המקובל ל-FA מ-MUXes 2:1**.
+
+**למה לא 2 MUXes?**
+- כל MUX 2:1 הוא פונקציה של 3 משתנים (\`sel, d0, d1\`) — אבל בעלת מבנה מוגבל (לינארית ב-sel).
+- ל-FA יש **2 פלטים** (\`sum\` ו-\`carry\`), כל אחד תלוי בכל 3 הקלטים \`a,b,c\`.
+- אם נשתמש רק ב-MUX אחד, יש לנו פלט יחיד. שני MUXes — שני פלטים, אבל **שניהם** נדרשים להיות פונקציה מלאה של 3 משתנים. ה-fan-in המוגבל של MUX 2:1 (3 sources) מחייב לפחות שכבה אחת של "הכנה" — לכן MUX3 הכרחי.`,
+        answerSchematic: `
+<svg viewBox="0 0 660 320" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace" font-size="11" role="img" aria-label="Full Adder built from 3 2:1 MUXes">
+  <text x="330" y="20" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">FA = 3 × MUX 2:1</text>
+
+  <!-- MUX1: T = a XOR b -->
+  <g>
+    <polygon points="170,80 240,100 240,180 170,200" fill="#0a1520" stroke="#80b0e0" stroke-width="1.6"/>
+    <text x="205" y="148" text-anchor="middle" fill="#c8d8f0" font-weight="bold">M1</text>
+    <text x="158" y="108" text-anchor="end" fill="#80b0e0">b</text>
+    <text x="158" y="142" text-anchor="end" fill="#80b0e0">¬b</text>
+    <text x="205" y="218" text-anchor="middle" fill="#80b0e0">sel=a</text>
+    <text x="260" y="144" fill="#39ff80">T = a⊕b</text>
+    <line x1="140" y1="105" x2="170" y2="105" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="140" y1="140" x2="170" y2="140" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="205" y1="200" x2="205" y2="220" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="240" y1="140" x2="320" y2="140" stroke="#39ff80" stroke-width="1.5"/>
+  </g>
+
+  <!-- MUX2: sum = T XOR c -->
+  <g>
+    <polygon points="340,40 410,60 410,140 340,160" fill="#0a1520" stroke="#80b0e0" stroke-width="1.6"/>
+    <text x="375" y="108" text-anchor="middle" fill="#c8d8f0" font-weight="bold">M2</text>
+    <text x="328" y="68" text-anchor="end" fill="#80b0e0">c</text>
+    <text x="328" y="102" text-anchor="end" fill="#80b0e0">¬c</text>
+    <text x="375" y="178" text-anchor="middle" fill="#80b0e0">sel=T</text>
+    <text x="430" y="104" fill="#80f0a0" font-weight="bold">sum</text>
+    <line x1="320" y1="65"  x2="340" y2="65"  stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="320" y1="100" x2="340" y2="100" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="375" y1="160" x2="375" y2="178" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="320" y1="140" x2="320" y2="178" stroke="#39ff80" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <line x1="320" y1="178" x2="375" y2="178" stroke="#39ff80" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <line x1="410" y1="100" x2="500" y2="100" stroke="#80f0a0" stroke-width="1.8"/>
+  </g>
+
+  <!-- MUX3: carry = T ? c : a -->
+  <g>
+    <polygon points="340,200 410,220 410,300 340,320" fill="#0a1520" stroke="#80b0e0" stroke-width="1.6"/>
+    <text x="375" y="268" text-anchor="middle" fill="#c8d8f0" font-weight="bold">M3</text>
+    <text x="328" y="228" text-anchor="end" fill="#80b0e0">a</text>
+    <text x="328" y="262" text-anchor="end" fill="#80b0e0">c</text>
+    <text x="430" y="264" fill="#80f0a0" font-weight="bold">carry</text>
+    <line x1="320" y1="225" x2="340" y2="225" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="320" y1="260" x2="340" y2="260" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="375" y1="320" x2="375" y2="312" stroke="#80b0e0" stroke-width="1.2"/>
+    <line x1="375" y1="312" x2="500" y2="312" stroke="#39ff80" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <line x1="500" y1="312" x2="500" y2="140" stroke="#39ff80" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <line x1="410" y1="260" x2="500" y2="260" stroke="#80f0a0" stroke-width="1.8"/>
+  </g>
+
+  <text x="330" y="305" text-anchor="middle" fill="#c8d8f0" font-size="10">קווים ירוקים מקווקווים = T (אות עזר משותף).</text>
+</svg>
+`,
+        interviewerMindset:
+`הראיין רוצה לראות **שתי תובנות שמתחבאות בפרטים:**
+
+1. \`a ⊕ b = a ? ¬b : b\` — XOR ב-MUX יחיד. רוב המועמדים לא רואים את זה ונופלים לידי שערים נוספים.
+2. \`carry = T ? c : a\` (ולא \`carry = T ? c : a·b\`) — ניצול שכש-\`T=0\` יש \`a=b\` ולכן \`a·b=a\`. זה מבטל את הצורך ב-AND חיצוני.
+
+**מקפיץ לטובה:** לפתוח עם "FA הוא XOR-3 ל-sum ו-majority ל-carry, ועל זה נבנה" — מראה שאתה מבחין במבנה הסימטרי. לציין שגם **majority(a,b,c)** ניתן ל-2 MUXes טהורים — וזה למעשה ה-carry.`,
+        expectedAnswers: [
+          '3', 'שלושה', 'three',
+          'mux', 'mux2', '2:1',
+          'xor', 'sum', 'carry',
+          't = a', 'a xor b', 'a⊕b',
+          'majority',
+        ],
+      },
+      {
+        label: 'ג',
+        editor: 'verilog',
+        starterCode:
+`module fa_from_mux (
+    input  wire a,
+    input  wire b,
+    input  wire c,
+    output wire sum,
+    output wire carry
+);
+
+    // TODO: build sum and carry using only 2:1 muxes (ternary operator)
+    //   hint: T = a ^ b  ⇒  T = a ? ~b : b
+    //         sum = T ? ~c : c
+    //         carry = T ? c : a
+
+endmodule
+`,
+        question: 'ממש את ה-FA ב-Verilog תוך שימוש ב-ternary בלבד (כל ternary = MUX 2:1).',
+        answer:
+`\`\`\`verilog
+module fa_from_mux (
+    input  wire a, b, c,
+    output wire sum, carry
+);
+    wire T;
+    assign T     = a ? ~b : b;     // MUX1 → T = a ^ b
+    assign sum   = T ? ~c : c;     // MUX2 → sum = T ^ c
+    assign carry = T ? c : a;      // MUX3 → carry = a·b + c·T
+endmodule
+\`\`\`
+
+שלושה \`assign\` עם ternary = שלושה MUXes פיזיים אחרי סינתזה (Synopsys / Yosys ימפו את כל אחד ל-\`MUX2\` ישיר).`,
+        expectedAnswers: [
+          'assign', 'wire', 'ternary',
+          'a ? ~b', 'a?~b', '~b : b',
+          't ? ~c', 't ? c', '? c : a',
+          'sum', 'carry',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 3 (FA ממספר מינימלי של MUX 2:1)',
+    tags: ['fa', 'full-adder', 'mux', '2:1-mux', 'minimum', 'combinational', 'logic', 'verilog'],
+    circuit: () => build(() => {
+      // Realize the 3-MUX FA on the canvas. The schematic uses MUX (inputCount=2),
+      // a single NOT gate to expose ¬b and ¬c (shared inverters).
+      const A = h.input(120, 200, 'a');
+      const B = h.input(120, 280, 'b');
+      const C = h.input(120, 380, 'c');
+      const notB = h.gate('NOT', 260, 280);
+      const notC = h.gate('NOT', 260, 380);
+
+      // MUX1: sel=A, d0=B, d1=¬B → T = a ⊕ b
+      const m1 = h.mux(420, 240, 'M1: T');
+      // MUX2: sel=T, d0=C, d1=¬C → sum
+      const m2 = h.mux(620, 320, 'M2: sum');
+      // MUX3: sel=T, d0=A, d1=C → carry
+      const m3 = h.mux(620, 460, 'M3: carry');
+
+      const SUM   = h.output(820, 320, 'sum');
+      const CARRY = h.output(820, 460, 'carry');
+
+      return {
+        nodes: [A, B, C, notB, notC, m1, m2, m3, SUM, CARRY],
+        wires: [
+          h.wire(B.id, notB.id, 0),
+          h.wire(C.id, notC.id, 0),
+
+          // MUX1: d0=B(in 0), d1=¬B(in 1), sel=A(in 2)
+          h.wire(B.id,    m1.id, 0),
+          h.wire(notB.id, m1.id, 1),
+          h.wire(A.id,    m1.id, 2),
+
+          // MUX2: d0=C, d1=¬C, sel=T(=m1)
+          h.wire(C.id,    m2.id, 0),
+          h.wire(notC.id, m2.id, 1),
+          h.wire(m1.id,   m2.id, 2),
+
+          // MUX3: d0=A, d1=C, sel=T(=m1)
+          h.wire(A.id,  m3.id, 0),
+          h.wire(C.id,  m3.id, 1),
+          h.wire(m1.id, m3.id, 2),
+
+          h.wire(m2.id, SUM.id,   0),
+          h.wire(m3.id, CARRY.id, 0),
+        ],
+      };
+    }),
+  },
 ];

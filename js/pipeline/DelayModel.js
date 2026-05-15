@@ -37,6 +37,7 @@ export const DEFAULT_DELAY_PS = {
   LFSR:        0,
   MISR:        0,    // clocked, no combinational delay through it
   BIST_CONTROLLER: 0, // clocked state machine, no combinational delay
+  MBIST_CONTROLLER: 0, // clocked FSM walking a RAM through March C−
   JTAG_TAP: 0,        // clocked TAP FSM
   BOUNDARY_SCAN_CELL: 50, // small mux + shift cell — mostly pass-through
   LATCH_SLOT:  0,

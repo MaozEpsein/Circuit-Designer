@@ -1,0 +1,197 @@
+{
+  "_dft": {
+    "revealButton": true,
+    "_doc": "Simple CPU + COMPLETE DFT stack: scan + MISR + logic-BIST + memory-BIST + ATPG LFSR — the crown-jewel interview showcase.\n\n  CORE (unchanged single-cycle CPU):\n    PC → ROM → IR → CU → ALU ↔ REG_FILE_DP (RF) ↔ RAM (via TEST_MODE collar).\n\n  PRE-LOADED REGISTERS: R0=0 R1=5 R2=1 R3=0 R4=7 R5=3 R6=99 R7=0.\n  PROGRAM (8 instructions): accumulates R3, stores to mem[3], loops on R1\n  with BNE (4× taken + 1× not-taken), loads back, never-taken BEQ, HALT.\n\n  DFT STACK (5 layers, all on one canvas):\n    1. SCAN CHAIN — 4 SCAN_FFs capture PC[3:0]; TE=1 shifts out on SCAN_OUT.\n    2. MISR + SIG  — 8-bit signature compactor on RF_A bus.\n    3. LOGIC BIST  — BIST_CTRL FSM watches MISR signature vs goldenSig.\n    4. LFSR_ATPG   — free-running pattern generator (period 255).\n    5. **MEMORY BIST (new)** — MBIST_CONTROLLER walks the RAM through\n        March C− via a 4-MUX TEST_MODE collar. Pre-injected fault on\n        cell 5 (whole-word stuck-at-1) so the demo runs to FAIL.\n\n  TEST_MODE MUX COLLAR (the realistic part):\n    The 4 MUXes between RF/CU and RAM swap drivers under MBIST.TEST_MODE:\n      • TEST_MODE = 0  → CPU drives ADDR/DATA/WE/RE (functional mode).\n      • TEST_MODE = 1  → MBIST drives them (memory self-test).\n    The CPU's STORE/LOAD path is unchanged when MBIST is idle; when\n    MBIST runs, the CPU is silently frozen out of the RAM. After MBIST\n    DONE/FAIL, TEST_MODE drops, and CPU access resumes — exactly the\n    silicon model.\n\n  HOW TO RUN (interview script):\n    a) Press RUN. Watch the CPU execute the program: open MEM to see\n       RF + RAM evolve; PIP ➜ BRANCH PREDICTOR for the BNE convergence.\n       Note: mem[3] gets written 5,4,3,2,1 by STORE. mem[5] (the faulty\n       cell) reads 0xFF whenever the CPU touches it.\n    b) Open the DFT panel (T) — note **two** controllers:\n       • BIST_CTRL — logic BIST watching the MISR signature.\n       • MBIST     — memory BIST with CELL FAULTS grid (orange cell\n         at addr=5 is the pre-injected fault).\n    c) RESET both controllers, then pulse MBIST_START (the MBIST one):\n       TEST_MODE goes high, CPU is frozen out, MBIST walks March C−.\n       Around tick ~36, MBIST hits FAIL with failAddr=5 — the panel\n       shows it, the FAIL lamp turns red. End of memory-BIST demo.\n    d) To see the CLEAN MBIST path: click the orange chip at addr=5\n       three times to remove the fault. RESET + MBIST_START.\n       MBIST now ends DONE/PASS after ~243 ticks.\n    e) For logic BIST: capture clean MISR signature into BIST.goldenSig,\n       RESET, pulse BIST_START — same FSM as the standalone demo.\n    f) For scan: TE=1, step the clock — PC[3:0] shifts out on SCAN_OUT."
+  },
+  "nodes": [
+    { "type": "CLOCK", "x": -780, "y": 380, "value": 1, "id": "clk" },
+    { "type": "INPUT", "fixedValue": 1, "label": "EN",  "x": -780, "y": -120, "id": "en" },
+    { "type": "INPUT", "fixedValue": 1, "label": "RE",  "x": -520, "y":  130, "id": "re_rom" },
+    { "type": "INPUT", "fixedValue": 1, "label": "LD",  "x": -120, "y":  130, "id": "ld" },
+
+    { "type": "PC",   "bitWidth": 4, "label": "PC", "x": -640, "y":   0, "id": "pc" },
+    { "type": "ROM",  "addrBits": 4, "dataBits": 16,
+      "memory": {
+        "0":   817, "1": 36885, "2":  4370, "3": 49168,
+        "4": 34565, "5":   823, "6": 45062, "7": 61440
+      },
+      "label": "ROM", "x": -380, "y": 0, "id": "rom" },
+    { "type": "IR", "instrWidth": 16, "opBits": 4, "rdBits": 4, "rs1Bits": 4, "rs2Bits": 4,
+      "label": "IR", "x": -80, "y": 0, "id": "ir" },
+    { "type": "CU", "label": "CU", "x": 220, "y": 320, "id": "cu", "controlTable": null, "branchPredictor": "2bit" },
+    { "type": "REG_FILE_DP", "regCount": 16, "dataBits": 8,
+      "initialRegs": [0,5,1,0,7,3,99,0,0,0,0,0,0,0,0,0],
+      "label": "RF", "x": 240, "y": -160, "id": "rf" },
+    { "type": "ALU", "bitWidth": 8, "label": "ALU", "x": 580, "y": -100, "id": "alu" },
+
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_ADDR", "x": 480, "y":  70, "id": "mux_addr" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_DATA", "x": 480, "y": 160, "id": "mux_data" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_WE",   "x": 480, "y": 250, "id": "mux_we" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_RE",   "x": 480, "y": 340, "id": "mux_re" },
+
+    { "type": "RAM", "addrBits": 4, "dataBits": 8, "memory": {},
+      "cellFaults": { "5": { "stuckAt": 1, "bit": null } },
+      "label": "RAM", "x": 720, "y": 200, "id": "ram" },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "WB_MUX", "x": 900, "y": -40, "id": "wb_mux" },
+
+    { "type": "OUTPUT", "label": "PC_VAL", "sandbox": true, "x": -640, "y": -180, "id": "out_pc" },
+    { "type": "OUTPUT", "label": "ALU_R",  "sandbox": true, "x":  720, "y": -200, "id": "out_alur" },
+    { "type": "OUTPUT", "label": "HALT",   "sandbox": true, "x":  220, "y":  460, "id": "out_halt" },
+    { "type": "OUTPUT", "label": "RF_A",   "sandbox": true, "x":  340, "y": -260, "id": "out_rfa" },
+    { "type": "OUTPUT", "label": "RF_B",   "sandbox": true, "x":  340, "y": -200, "id": "out_rfb" },
+
+    { "type": "INPUT",   "fixedValue": 0, "label": "TE",      "x": -780, "y": 620, "id": "dft_te",  "_dftLayer": true },
+    { "type": "INPUT",   "fixedValue": 0, "label": "SCAN_IN", "x": -780, "y": 680, "id": "dft_si",  "_dftLayer": true },
+    { "type": "SPLIT",   "inBits": 4, "slicesSpec": "0, 1, 2, 3", "label": "PC_split", "x": -520, "y": 650, "id": "dft_pc_split", "_dftLayer": true },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S0", "x": -260, "y": 650, "id": "dft_s0", "_dftLayer": true },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S1", "x":  -20, "y": 650, "id": "dft_s1", "_dftLayer": true },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S2", "x":  220, "y": 650, "id": "dft_s2", "_dftLayer": true },
+    { "type": "SCAN_FF", "initialQ": 0, "label": "S3", "x":  460, "y": 650, "id": "dft_s3", "_dftLayer": true },
+    { "type": "OUTPUT",  "label": "SCAN_OUT", "sandbox": true, "x": 680, "y": 650, "id": "dft_scan_out", "_dftLayer": true },
+
+    { "type": "SPLIT", "inBits": 8, "slicesSpec": "0, 1, 2, 3, 4, 5, 6, 7", "label": "RF_A_split", "x": 1100, "y": -100, "id": "dft_alu_split", "_dftLayer": true },
+    { "type": "MISR",  "bitWidth": 8, "taps": [7, 5, 3, 2], "seed": 0, "goldenSig": null, "label": "MISR", "x": 1320, "y": -100, "id": "dft_misr", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "SIG", "sandbox": true, "bitWidth": 8, "x": 1540, "y": -100, "id": "dft_sig_out", "_dftLayer": true },
+
+    { "type": "INPUT", "fixedValue": 0, "label": "BIST_START", "x": 1100, "y": 100, "id": "dft_start", "_dftLayer": true },
+    { "type": "INPUT", "fixedValue": 0, "label": "BIST_RESET", "x": 1100, "y": 180, "id": "dft_reset", "_dftLayer": true },
+    { "type": "BIST_CONTROLLER", "sigBits": 8, "runLength": 24, "goldenSig": 0, "label": "BIST_CTRL", "x": 1340, "y": 140, "id": "dft_bist", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "DONE",       "sandbox": true, "x": 1580, "y":  60, "id": "dft_done_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "PASS",       "sandbox": true, "x": 1580, "y": 130, "id": "dft_pass_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "TEST_MODE",  "sandbox": true, "x": 1580, "y": 200, "id": "dft_tm_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "STATE", "bitWidth": 3, "sandbox": true, "x": 1580, "y": 270, "id": "dft_state_out", "_dftLayer": true },
+
+    { "type": "LFSR",   "bitWidth": 8, "taps": [7, 5, 4, 3], "seed": 1, "label": "LFSR_ATPG", "x": 1100, "y": 400, "id": "dft_lfsr", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "LFSR_Q", "sandbox": true, "x": 1340, "y": 400, "id": "dft_lfsr_out", "_dftLayer": true },
+
+    { "type": "INPUT", "fixedValue": 0, "label": "MBIST_START", "x":  940, "y": 760, "id": "mbist_start", "_dftLayer": true },
+    { "type": "INPUT", "fixedValue": 0, "label": "MBIST_RESET", "x":  940, "y": 840, "id": "mbist_reset", "_dftLayer": true },
+    { "type": "MBIST_CONTROLLER", "addrBits": 4, "dataBits": 8, "algorithm": "MARCH_C_MINUS",
+      "label": "MBIST", "x": 1200, "y": 800, "id": "mbist", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_DONE",      "sandbox": true, "x": 1440, "y": 600, "id": "mbist_done_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_PASS",      "sandbox": true, "x": 1440, "y": 670, "id": "mbist_pass_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_FAIL",      "sandbox": true, "x": 1440, "y": 740, "id": "mbist_fail_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_TM",        "sandbox": true, "bitWidth": 1, "x": 1440, "y": 810, "id": "mbist_tm_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_STATE",     "bitWidth": 3, "sandbox": true, "x": 1440, "y": 880, "id": "mbist_state_out", "_dftLayer": true },
+    { "type": "OUTPUT", "label": "MBIST_ADDR",      "bitWidth": 4, "sandbox": true, "x": 1440, "y": 950, "id": "mbist_addr_out", "_dftLayer": true }
+  ],
+  "wires": [
+    { "id": "w_pc_clk",      "sourceId": "clk", "targetId": "pc",  "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_pc_en",       "sourceId": "en",  "targetId": "pc",  "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_pc_jmpaddr",  "sourceId": "ir",  "targetId": "pc",  "targetInputIndex": 0, "sourceOutputIndex": 1, "netName": "JMP_ADDR" },
+    { "id": "w_pc_jmp",      "sourceId": "cu",  "targetId": "pc",  "targetInputIndex": 1, "sourceOutputIndex": 4, "netName": "JMP" },
+    { "id": "w_pc_rom",      "sourceId": "pc",  "targetId": "rom", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "ADDR" },
+    { "id": "w_rom_re",      "sourceId": "re_rom", "targetId": "rom", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_rom_clk",     "sourceId": "clk", "targetId": "rom", "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_rom_ir",      "sourceId": "rom", "targetId": "ir",  "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "INSTR" },
+    { "id": "w_ir_ld",       "sourceId": "ld",  "targetId": "ir",  "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_ir_clk",      "sourceId": "clk", "targetId": "ir",  "targetInputIndex": 2, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_ir_cu_op",    "sourceId": "ir",  "targetId": "cu",  "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "OP" },
+    { "id": "w_alu_cu_z",    "sourceId": "alu", "targetId": "cu",  "targetInputIndex": 1, "sourceOutputIndex": 1, "netName": "Z_FLAG" },
+    { "id": "w_alu_cu_c",    "sourceId": "alu", "targetId": "cu",  "targetInputIndex": 2, "sourceOutputIndex": 2, "netName": "C_FLAG" },
+    { "id": "w_ir_rf_rs1",   "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 0, "sourceOutputIndex": 2, "netName": "RS1" },
+    { "id": "w_ir_rf_rs2",   "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 1, "sourceOutputIndex": 3, "netName": "RS2" },
+    { "id": "w_ir_rf_rd",    "sourceId": "ir",  "targetId": "rf",  "targetInputIndex": 2, "sourceOutputIndex": 1, "netName": "RD" },
+    { "id": "w_wb_rf_data",  "sourceId": "wb_mux", "targetId": "rf", "targetInputIndex": 3, "sourceOutputIndex": 0, "netName": "WB_DATA" },
+    { "id": "w_cu_rf_we",    "sourceId": "cu",  "targetId": "rf",  "targetInputIndex": 4, "sourceOutputIndex": 1, "netName": "REG_WE" },
+    { "id": "w_rf_clk",      "sourceId": "clk", "targetId": "rf",  "targetInputIndex": 5, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_rf_alu_a",    "sourceId": "rf",  "targetId": "alu", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "A" },
+    { "id": "w_rf_alu_b",    "sourceId": "rf",  "targetId": "alu", "targetInputIndex": 1, "sourceOutputIndex": 1, "netName": "B" },
+    { "id": "w_cu_alu_op",   "sourceId": "cu",  "targetId": "alu", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "ALU_OP" },
+
+    { "id": "w_rf_mux_addr",  "sourceId": "rf",  "targetId": "mux_addr", "targetInputIndex": 0, "sourceOutputIndex": 1, "netName": "FUNC_ADDR" },
+    { "id": "w_rf_mux_data",  "sourceId": "rf",  "targetId": "mux_data", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "FUNC_DATA" },
+    { "id": "w_cu_mux_we",    "sourceId": "cu",  "targetId": "mux_we",   "targetInputIndex": 0, "sourceOutputIndex": 2, "netName": "FUNC_WE" },
+    { "id": "w_cu_mux_re",    "sourceId": "cu",  "targetId": "mux_re",   "targetInputIndex": 0, "sourceOutputIndex": 3, "netName": "FUNC_RE" },
+
+    { "id": "w_mbist_mux_addr", "sourceId": "mbist", "targetId": "mux_addr", "targetInputIndex": 1, "sourceOutputIndex": 5, "netName": "TEST_ADDR" },
+    { "id": "w_mbist_mux_data", "sourceId": "mbist", "targetId": "mux_data", "targetInputIndex": 1, "sourceOutputIndex": 6, "netName": "TEST_DATA" },
+    { "id": "w_mbist_mux_we",   "sourceId": "mbist", "targetId": "mux_we",   "targetInputIndex": 1, "sourceOutputIndex": 7, "netName": "TEST_WE" },
+    { "id": "w_mbist_mux_re",   "sourceId": "mbist", "targetId": "mux_re",   "targetInputIndex": 1, "sourceOutputIndex": 8, "netName": "TEST_RE" },
+
+    { "id": "w_mbist_sel_addr", "sourceId": "mbist", "targetId": "mux_addr", "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "TEST_MODE" },
+    { "id": "w_mbist_sel_data", "sourceId": "mbist", "targetId": "mux_data", "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "TEST_MODE" },
+    { "id": "w_mbist_sel_we",   "sourceId": "mbist", "targetId": "mux_we",   "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "TEST_MODE" },
+    { "id": "w_mbist_sel_re",   "sourceId": "mbist", "targetId": "mux_re",   "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "TEST_MODE" },
+
+    { "id": "w_mux_ram_addr",  "sourceId": "mux_addr", "targetId": "ram", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "MEM_ADDR" },
+    { "id": "w_mux_ram_data",  "sourceId": "mux_data", "targetId": "ram", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "MEM_DATA" },
+    { "id": "w_mux_ram_we",    "sourceId": "mux_we",   "targetId": "ram", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "MEM_WE" },
+    { "id": "w_mux_ram_re",    "sourceId": "mux_re",   "targetId": "ram", "targetInputIndex": 3, "sourceOutputIndex": 0, "netName": "MEM_RE" },
+    { "id": "w_ram_clk",       "sourceId": "clk",      "targetId": "ram", "targetInputIndex": 4, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_ram_mbist_din", "sourceId": "ram", "targetId": "mbist", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "MBIST_DIN" },
+
+    { "id": "w_mbist_clk",   "sourceId": "clk",          "targetId": "mbist", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_mbist_start", "sourceId": "mbist_start",  "targetId": "mbist", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_mbist_reset", "sourceId": "mbist_reset",  "targetId": "mbist", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+
+    { "id": "w_mbist_done_out",  "sourceId": "mbist", "targetId": "mbist_done_out",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_mbist_pass_out",  "sourceId": "mbist", "targetId": "mbist_pass_out",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_mbist_fail_out",  "sourceId": "mbist", "targetId": "mbist_fail_out",  "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_mbist_tm_out",    "sourceId": "mbist", "targetId": "mbist_tm_out",    "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w_mbist_state_out", "sourceId": "mbist", "targetId": "mbist_state_out", "targetInputIndex": 0, "sourceOutputIndex": 4 },
+    { "id": "w_mbist_addr_out",  "sourceId": "mbist", "targetId": "mbist_addr_out",  "targetInputIndex": 0, "sourceOutputIndex": 5 },
+
+    { "id": "w_alu_wbmux",   "sourceId": "alu", "targetId": "wb_mux", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "ALU_RESULT" },
+    { "id": "w_ram_wbmux",   "sourceId": "ram", "targetId": "wb_mux", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "MEM_OUT" },
+    { "id": "w_cu_wbmux_sel","sourceId": "cu",  "targetId": "wb_mux", "targetInputIndex": 2, "sourceOutputIndex": 3, "netName": "MEM_RE_SEL" },
+
+    { "id": "w_pc_out",  "sourceId": "pc",  "targetId": "out_pc",   "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_alu_out", "sourceId": "alu", "targetId": "out_alur", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_halt_out","sourceId": "cu",  "targetId": "out_halt", "targetInputIndex": 0, "sourceOutputIndex": 5 },
+    { "id": "w_rfa_out", "sourceId": "rf",  "targetId": "out_rfa",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_rfb_out", "sourceId": "rf",  "targetId": "out_rfb",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+
+    { "id": "w_dft_pc_split",  "sourceId": "pc",            "targetId": "dft_pc_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "PC_BUS" },
+
+    { "id": "w_dft_s0_d",   "sourceId": "dft_pc_split", "targetId": "dft_s0", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s0_ti",  "sourceId": "dft_si",       "targetId": "dft_s0", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s0_te",  "sourceId": "dft_te",       "targetId": "dft_s0", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s0_clk", "sourceId": "clk",          "targetId": "dft_s0", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s1_d",   "sourceId": "dft_pc_split", "targetId": "dft_s1", "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_dft_s1_ti",  "sourceId": "dft_s0",       "targetId": "dft_s1", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s1_te",  "sourceId": "dft_te",       "targetId": "dft_s1", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s1_clk", "sourceId": "clk",          "targetId": "dft_s1", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s2_d",   "sourceId": "dft_pc_split", "targetId": "dft_s2", "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_dft_s2_ti",  "sourceId": "dft_s1",       "targetId": "dft_s2", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s2_te",  "sourceId": "dft_te",       "targetId": "dft_s2", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s2_clk", "sourceId": "clk",          "targetId": "dft_s2", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_s3_d",   "sourceId": "dft_pc_split", "targetId": "dft_s3", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+    { "id": "w_dft_s3_ti",  "sourceId": "dft_s2",       "targetId": "dft_s3", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s3_te",  "sourceId": "dft_te",       "targetId": "dft_s3", "targetInputIndex": 2, "sourceOutputIndex": 0 },
+    { "id": "w_dft_s3_clk", "sourceId": "clk",          "targetId": "dft_s3", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_scan_out", "sourceId": "dft_s3", "targetId": "dft_scan_out", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+
+    { "id": "w_dft_alu_split", "sourceId": "rf", "targetId": "dft_alu_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "RF_A_OBS" },
+
+    { "id": "w_dft_misr_0", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_misr_1", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 1, "sourceOutputIndex": 1 },
+    { "id": "w_dft_misr_2", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 2, "sourceOutputIndex": 2 },
+    { "id": "w_dft_misr_3", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 3, "sourceOutputIndex": 3 },
+    { "id": "w_dft_misr_4", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 4, "sourceOutputIndex": 4 },
+    { "id": "w_dft_misr_5", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 5, "sourceOutputIndex": 5 },
+    { "id": "w_dft_misr_6", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 6, "sourceOutputIndex": 6 },
+    { "id": "w_dft_misr_7", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 7, "sourceOutputIndex": 7 },
+    { "id": "w_dft_misr_clk", "sourceId": "clk", "targetId": "dft_misr", "targetInputIndex": 8, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_sig_out", "sourceId": "dft_misr", "targetId": "dft_sig_out", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+
+    { "id": "w_dft_bist_start", "sourceId": "dft_start", "targetId": "dft_bist", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_bist_reset", "sourceId": "dft_reset", "targetId": "dft_bist", "targetInputIndex": 1, "sourceOutputIndex": 0 },
+    { "id": "w_dft_bist_sig",   "sourceId": "dft_misr",  "targetId": "dft_bist", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "SIG_IN" },
+    { "id": "w_dft_bist_clk",   "sourceId": "clk",       "targetId": "dft_bist", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
+
+    { "id": "w_dft_done",  "sourceId": "dft_bist", "targetId": "dft_done_out",  "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_pass",  "sourceId": "dft_bist", "targetId": "dft_pass_out",  "targetInputIndex": 0, "sourceOutputIndex": 1 },
+    { "id": "w_dft_tm",    "sourceId": "dft_bist", "targetId": "dft_tm_out",    "targetInputIndex": 0, "sourceOutputIndex": 2 },
+    { "id": "w_dft_state", "sourceId": "dft_bist", "targetId": "dft_state_out", "targetInputIndex": 0, "sourceOutputIndex": 3 },
+
+    { "id": "w_dft_lfsr_clk", "sourceId": "clk",      "targetId": "dft_lfsr",     "targetInputIndex": 0, "sourceOutputIndex": 0, "isClockWire": true },
+    { "id": "w_dft_lfsr_out", "sourceId": "dft_lfsr", "targetId": "dft_lfsr_out", "targetInputIndex": 0, "sourceOutputIndex": 0 }
+  ]
+}

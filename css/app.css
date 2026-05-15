@@ -3380,6 +3380,42 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 .dft-chain-te-source { color: #ffd0a0; }
 .dft-chain-te-source.warn { color: #ff8060; font-style: italic; }
 
+/* MBIST cell-fault injection grid — rows = addresses, cols = bits + a
+   WORD column. Each cell is a clickable chip cycling clean → s-a-1 → s-a-0. */
+.dft-mbist-faults {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed #3a2a1a;
+}
+.dft-mbist-faults-title {
+  color: #876; text-transform: uppercase; font-size: 9px;
+  letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.dft-mbist-grid {
+  display: grid; column-gap: 3px; row-gap: 3px;
+  align-items: center; font-size: 10px; font-family: 'JetBrains Mono', monospace;
+}
+.dft-mbist-corner, .dft-mbist-bitlabel {
+  color: #876; text-align: center; font-size: 9px;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.dft-mbist-addrlabel {
+  color: #ffd0a0; text-align: right; font-size: 9px;
+  font-family: 'JetBrains Mono', monospace; padding-right: 2px;
+}
+.dft-mbist-cell {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 18px; padding: 0 2px;
+  border-radius: 3px; cursor: pointer; user-select: none;
+  border: 1px solid #2a2018; background: #0a0f14;
+  color: #506070; transition: background 0.1s, color 0.1s;
+}
+.dft-mbist-cell.clean       { background: #0a0f14; color: #506070; border-color: #2a2018; }
+.dft-mbist-cell.clean:hover { background: #14202a; color: #80b0e0; }
+.dft-mbist-cell.sa1         { background: #2a1a08; color: #ffb878; border-color: #6a4a2a; }
+.dft-mbist-cell.sa1:hover   { background: #3a2a18; }
+.dft-mbist-cell.sa0         { background: #2a0a14; color: #ff8060; border-color: #6a2030; }
+.dft-mbist-cell.sa0:hover   { background: #3a1a24; }
+
 /* Pattern Generators (LFSR) — uses the same chain-block frame so the
    panel stays visually consistent. The 4-row inner grid lays out
    key/value pairs (seed, poly, period, drives) in a tidy column. */
@@ -4066,10 +4102,11 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 }
 .iv-answer-head {
   font-weight: bold;
-  font-size: 11px;
-  letter-spacing: 1px;
+  font-size: 16px;
+  letter-spacing: 4px;
   color: #80f0a0;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
 }
 .iv-answer-body {
   font-size: 13px;
@@ -5134,4 +5171,75 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 .iv-trace-fs .iv-trace-keys {
   background: #0a1828;
   padding: 6px 16px 12px;
+}
+
+/* ── DFT-layer reveal floating button (demo-specific, e.g. the
+   CPU+MBIST showcase). Bottom-right corner, large, prominent, with
+   a subtle pulse animation to invite the click. ───────────────── */
+#btn-dft-reveal {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9000;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #ffb878;
+  background: linear-gradient(135deg, #2a1a08 0%, #3a2410 50%, #2a1a08 100%);
+  border: 1.5px solid #aa6a2a;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px #1a0a04,
+    0 4px 20px rgba(255, 184, 120, 0.25),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+              color 0.2s ease, border-color 0.2s ease;
+  animation: dftRevealPulse 2.4s ease-in-out infinite;
+}
+#btn-dft-reveal:hover {
+  transform: translateY(-2px);
+  color: #ffd49a;
+  border-color: #d68a3a;
+  box-shadow:
+    0 0 0 1px #1a0a04,
+    0 6px 28px rgba(255, 184, 120, 0.4),
+    0 10px 50px rgba(0, 0, 0, 0.6);
+}
+#btn-dft-reveal:active {
+  transform: translateY(0);
+}
+#btn-dft-reveal .dft-reveal-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 4px rgba(255, 184, 120, 0.6));
+}
+#btn-dft-reveal.revealed {
+  color: #80f0a0;
+  border-color: #3a8a5a;
+  background: linear-gradient(135deg, #0a2018 0%, #103024 50%, #0a2018 100%);
+  box-shadow:
+    0 0 0 1px #04140a,
+    0 4px 20px rgba(128, 240, 160, 0.25),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+  animation: none;
+}
+#btn-dft-reveal.revealed:hover {
+  color: #a0ffc0;
+  border-color: #5aaa7a;
+  box-shadow:
+    0 0 0 1px #04140a,
+    0 6px 28px rgba(128, 240, 160, 0.4),
+    0 10px 50px rgba(0, 0, 0, 0.6);
+}
+#btn-dft-reveal.revealed .dft-reveal-icon {
+  filter: drop-shadow(0 0 4px rgba(128, 240, 160, 0.6));
+}
+@keyframes dftRevealPulse {
+  0%, 100% { box-shadow: 0 0 0 1px #1a0a04, 0 4px 20px rgba(255, 184, 120, 0.25), 0 8px 40px rgba(0, 0, 0, 0.5); }
+  50%      { box-shadow: 0 0 0 1px #1a0a04, 0 4px 28px rgba(255, 184, 120, 0.55), 0 8px 40px rgba(0, 0, 0, 0.5); }
 }

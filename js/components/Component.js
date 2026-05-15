@@ -53,6 +53,7 @@ export const COMPONENT_TYPES = {
   BIST_CONTROLLER: 'BIST_CONTROLLER',
   JTAG_TAP:           'JTAG_TAP',
   BOUNDARY_SCAN_CELL: 'BOUNDARY_SCAN_CELL',
+  MBIST_CONTROLLER:   'MBIST_CONTROLLER',
 };
 
 /**
@@ -88,7 +89,7 @@ export const FF_TYPE_SET = new Set([
 
 /** Set of all memory component types (sequential, clocked) */
 export const MEMORY_TYPE_SET = new Set([
-  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR', 'MISR', 'BIST_CONTROLLER', 'JTAG_TAP', 'BOUNDARY_SCAN_CELL'
+  'REGISTER', 'SHIFT_REG', 'COUNTER', 'RAM', 'ROM', 'CACHE', 'REG_FILE', 'FIFO', 'STACK', 'PC', 'IR', 'PIPE_REG', 'REG_FILE_DP', 'LFSR', 'MISR', 'BIST_CONTROLLER', 'JTAG_TAP', 'BOUNDARY_SCAN_CELL', 'MBIST_CONTROLLER'
 ]);
 
 export const LATCH_TYPES_LIST = ['D_LATCH', 'SR_LATCH'];
@@ -122,6 +123,19 @@ export function createComponent(type, x, y) {
       // are bit positions (0-indexed from LSB) XORed to form the new
       // bit. Default: 4-bit, taps [3, 0] → x^4+x+1, period 15.
       return { ...base, bitWidth: 4, taps: [3, 0], seed: 1, label: 'LFSR' };
+    case COMPONENT_TYPES.MBIST_CONTROLLER:
+      // Memory BIST Controller — walks a connected RAM through the
+      // March C− algorithm and asserts PASS / FAIL. Pin layout:
+      //   Inputs : START(0), RESET(1), DATA_IN(2, dataBits), CLK(3)
+      //   Outputs: DONE(0), PASS(1), FAIL(2), TEST_MODE(3),
+      //            STATE(4, 3-bit), ADDR(5, addrBits),
+      //            DATA_OUT(6, dataBits), WE(7), RE(8)
+      // States  : 0 IDLE, 1 SETUP, 2 W0_UP, 3 RW1_UP, 4 RW0_UP,
+      //           5 RW1_DN, 6 RW0_DN, 7 READ_FINAL, 8 DONE, 9 FAIL.
+      return { ...base,
+        addrBits: 4, dataBits: 8,
+        algorithm: 'MARCH_C_MINUS',
+        label: 'MBIST' };
     case COMPONENT_TYPES.BIST_CONTROLLER:
       // Built-In Self-Test Controller — a small state machine that
       // orchestrates a BIST run: assert TEST_MODE, count `runLength`

@@ -266,6 +266,20 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
   };
   const _origSet  = wireValues.set.bind(wireValues);
   wireValues.set  = (id, val) => _origSet(id, _applyWireFault(_wireById.get(id), val));
+  // Apply per-cell stuck-at fault for RAM nodes. Mirrors _applyWireFault.
+  // node.cellFaults: { [addr]: { stuckAt: 0|1, bit: number|null } } where
+  // bit:null means the whole word is stuck. Applied on BOTH read and write
+  // paths so faults are storage-transparent and test-order-resilient.
+  const _applyCellFault = (node, addr, val, dataBits) => {
+    const cf = node.cellFaults && node.cellFaults[addr];
+    if (!cf) return val;
+    const mask = _mask(dataBits || 4);
+    if (cf.bit == null) {
+      return (cf.stuckAt ? mask : 0) & mask;
+    }
+    const bm = (1 << cf.bit) & mask;
+    return cf.stuckAt ? ((val | bm) & mask) : ((val & ~bm) & mask);
+  };
   // Slot-aware reader. When a downstream consumer pulls a value via an
   // input slot, this helper applies the wire's faults before returning.
   // Use this anywhere a slot read can replace a hand-rolled
@@ -735,7 +749,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const addr = _readSlotR(addrSlot);
         const re   = reSlot ? _readSlotR(reSlot) : 1;
         const dMaskAsync = _mask(node.dataBits || 4);
-        if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMaskAsync;
+        if (re) ms.q = _applyCellFault(node, addr, ((ms.memory && ms.memory[addr]) ?? 0) & dMaskAsync, node.dataBits);
         value = ms.q ?? 0;
       }
       // CACHE — combinational lookup. Body factored into
@@ -793,6 +807,49 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         nodeValues.set(id + '__out1', (s === 4)      ? 1 : 0);   // PASS
         nodeValues.set(id + '__out2', (s === 1 || s === 2) ? 1 : 0);  // TEST_MODE
         nodeValues.set(id + '__out3', s);
+      }
+      // MBIST_CONTROLLER: 9 outputs derived combinationally from FSM state
+      // so the RAM under test sees them at the same rising edge that
+      // advances the FSM.
+      //   out0 = DONE      (state ∈ {DONE, FAIL})
+      //   out1 = PASS      (state == DONE only)
+      //   out2 = FAIL      (state == FAIL only)
+      //   out3 = TEST_MODE (state ∉ {IDLE, DONE, FAIL})
+      //   out4 = STATE     (3-bit truncation of mbistState)
+      //   out5 = ADDR      (addrCounter, addrBits wide)
+      //   out6 = DATA_OUT  (pattern for current step / sub-phase)
+      //   out7 = WE        (1 when this cycle writes to RAM)
+      //   out8 = RE        (1 when this cycle reads from RAM)
+      if (node.type === 'MBIST_CONTROLLER') {
+        const s     = ms.mbistState ?? 0;
+        const step  = ms.marchStep ?? 0;
+        const addr  = ms.addrCounter ?? 0;
+        const sub   = ms.subPhase ?? 0;
+        const dBits = Math.max(1, (node.dataBits | 0) || 8);
+        const ones  = _mask(dBits);
+        // 3-sub-phase RW per cell:
+        //   sub 0  → drive RE+ADDR (RAM reads at this clock edge)
+        //   sub 1  → quiet (we sample DATA_IN inside Phase 2b)
+        //   sub 2  → drive WE+DATA_OUT (RAM stores the inverted pattern)
+        // W0_UP writes every cycle.
+        // READ_FINAL uses sub 0 → drive RE, sub 1 → sample.
+        const isWriteStep = (s === 2) || ((s >= 3 && s <= 6) && sub === 2);
+        const isReadStep  = ((s >= 3 && s <= 6) && sub === 0) || (s === 7 && sub === 0);
+        // DATA_OUT mirrors the write value of the current step:
+        //   W0_UP (state=2) → 0
+        //   RW states write sub-phase → writeValueFor(step)
+        let dataOut = 0;
+        if (s === 2) dataOut = 0;
+        else if (isWriteStep) dataOut = (step === 1 || step === 3) ? ones : 0;
+        nodeValues.set(id,            (s === 8 || s === 9) ? 1 : 0);                      // DONE
+        nodeValues.set(id + '__out1', (s === 8) ? 1 : 0);                                 // PASS
+        nodeValues.set(id + '__out2', (s === 9) ? 1 : 0);                                 // FAIL
+        nodeValues.set(id + '__out3', (s !== 0 && s !== 8 && s !== 9) ? 1 : 0);           // TEST_MODE
+        nodeValues.set(id + '__out4', s & 0x7);                                           // STATE
+        nodeValues.set(id + '__out5', addr & _mask(Math.max(1, (node.addrBits | 0) || 4))); // ADDR
+        nodeValues.set(id + '__out6', dataOut & ones);                                    // DATA_OUT
+        nodeValues.set(id + '__out7', isWriteStep ? 1 : 0);                               // WE
+        nodeValues.set(id + '__out8', isReadStep  ? 1 : 0);                               // RE
       }
       // JTAG_TAP: out0 = TDO (1 bit), out1 = STATE (4 bits), out2 = IR
       if (node.type === 'JTAG_TAP') {
@@ -906,13 +963,22 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       value = merged & outMask;
 
     } else if (node.type === 'BUS_MUX') {
-      // Bus MUX: inputs D0..Dn-1, SEL (last input) → Y
+      // Bus MUX: inputs D0..Dn-1, SEL (last input) → Y.
+      // Reads each input through its wire's sourceOutputIndex so that
+      // multi-output drivers (MBIST_CONTROLLER, ALU, IR, …) deliver the
+      // intended specific output rather than just their primary value.
       const inputSlots = inputs.get(id);
       const n = node.inputCount || 2;
+      const _readBusSlot = (slot) => {
+        if (!slot) return 0;
+        const outIdx = slot.wire.sourceOutputIndex || 0;
+        const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+        return nodeValues.get(key) ?? 0;
+      };
       const selSlot = inputSlots.find(s => s.inputIndex === n);
-      const sel = selSlot ? (nodeValues.get(selSlot.sourceId) ?? 0) : 0;
+      const sel = _readBusSlot(selSlot);
       const dataSlot = inputSlots.find(s => s.inputIndex === (sel % n));
-      value = dataSlot ? (nodeValues.get(dataSlot.sourceId) ?? 0) : 0;
+      value = _readBusSlot(dataSlot);
 
     } else if (node.type === 'SUB_CIRCUIT') {
       // Evaluate internal sub-circuit
@@ -1141,7 +1207,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
     const addr = _readR(addrSlot);
     const re   = reSlot ? _readR(reSlot) : 1;
     const dMask = _mask(node.dataBits || 4);
-    if (re) ms.q = ((ms.memory && ms.memory[addr]) ?? 0) & dMask;
+    if (re) ms.q = _applyCellFault(node, addr, ((ms.memory && ms.memory[addr]) ?? 0) & dMask, node.dataBits);
     nodeValues.set(node.id, ms.q ?? 0);
   };
   for (let pass = 0; pass < _cacheNodesP15.length + 1; pass++) {
@@ -1377,7 +1443,7 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const addr = _w(dataSlots[0]);
         const re   = _w(dataSlots[3]) ?? 1;
         const dMask = _mask(node.dataBits || 4);
-        if (re) ms.q = (ms.memory[addr] ?? 0) & dMask;
+        if (re) ms.q = _applyCellFault(node, addr, (ms.memory[addr] ?? 0) & dMask, node.dataBits);
 
       } else if (node.type === 'ROM') {
         // Inputs: ADDR(0), RE(1), CLK
@@ -1517,6 +1583,148 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         }
         // Outputs (multi-output via __out keys; primary Q = STATE).
         ms.q = ms.bistState;        // exposes STATE on the primary out
+
+      } else if (node.type === 'MBIST_CONTROLLER') {
+        // Memory BIST controller — walks a connected RAM through the
+        // March C− algorithm. Pins:
+        //   START(0), RESET(1), DATA_IN(2, dataBits), CLK(3)
+        // States (4-bit numeric, exposed as 3-bit STATE output):
+        //   0 IDLE, 1 SETUP, 2 W0_UP, 3 RW1_UP, 4 RW0_UP,
+        //   5 RW1_DN, 6 RW0_DN, 7 READ_FINAL, 8 DONE, 9 FAIL.
+        // marchStep ∈ {0..5} maps to the six March C− elements:
+        //   0: ⇕ w0   1: ⇑ r0,w1   2: ⇑ r1,w0
+        //   3: ⇓ r0,w1   4: ⇓ r1,w0   5: ⇕ r0
+        // subPhase ∈ {0,1}: 0 = RE/check phase, 1 = WE phase.
+        const addrBits = Math.max(1, (node.addrBits | 0) || 4);
+        const dataBits = Math.max(1, (node.dataBits | 0) || 8);
+        const N        = 1 << addrBits;
+        const allOnes  = _mask(dataBits);
+        const start    = (_w(dataSlots[0]) || 0) & 1;
+        const reset    = (_w(dataSlots[1]) || 0) & 1;
+        const dataIn   = (_w(dataSlots[2]) || 0) & allOnes;
+        if (typeof ms.mbistState  !== 'number') ms.mbistState  = 0;
+        if (typeof ms.marchStep   !== 'number') ms.marchStep   = 0;
+        if (typeof ms.addrCounter !== 'number') ms.addrCounter = 0;
+        if (typeof ms.subPhase    !== 'number') ms.subPhase    = 0;
+        if (ms.failAddr === undefined) ms.failAddr = null;
+        if (ms.failBit  === undefined) ms.failBit  = null;
+
+        // March C− element table:
+        //   step 0  w0        — write 0
+        //   step 1  r0,w1     — expect 0,  then write allOnes
+        //   step 2  r1,w0     — expect allOnes, then write 0
+        //   step 3  r0,w1     — expect 0,  then write allOnes
+        //   step 4  r1,w0     — expect allOnes, then write 0
+        //   step 5  r0        — expect 0  (READ_FINAL)
+        const readExpectedFor  = (step) => (step === 2 || step === 4) ? allOnes : 0;
+        const writeValueFor    = (step) => (step === 1 || step === 3) ? allOnes : 0;
+
+        // Mismatch detector — returns the first differing bit index, or -1.
+        const firstMismatchBit = (expected, observed) => {
+          const diff = (expected ^ observed) & allOnes;
+          if (!diff) return -1;
+          for (let b = 0; b < dataBits; b++) if ((diff >> b) & 1) return b;
+          return -1;
+        };
+
+        if (reset) {
+          ms.mbistState = 0; ms.marchStep = 0; ms.addrCounter = 0; ms.subPhase = 0;
+          ms.failAddr = null; ms.failBit = null;
+        } else {
+          switch (ms.mbistState) {
+            case 0: // IDLE — wait for START
+              if (start) {
+                ms.mbistState = 1;
+                ms.marchStep = 0; ms.addrCounter = 0; ms.subPhase = 0;
+                ms.failAddr = null; ms.failBit = null;
+              }
+              break;
+            case 1: // SETUP — one tick to assert TEST_MODE before first write
+              ms.mbistState = 2; ms.marchStep = 0; ms.addrCounter = 0; ms.subPhase = 0;
+              break;
+            case 2: // W0_UP — ascending w0
+              // Output stage (computed in Phase 1) already drove WE=1, DATA=0 this cycle.
+              // Just advance addr.
+              if (ms.addrCounter < N - 1) {
+                ms.addrCounter++;
+              } else {
+                ms.addrCounter = 0; ms.marchStep = 1; ms.subPhase = 0; ms.mbistState = 3;
+              }
+              break;
+            case 3:   // RW1_UP — asc r0,w1
+            case 4:   // RW0_UP — asc r1,w0
+            case 5:   // RW1_DN — desc r0,w1
+            case 6: { // RW0_DN — desc r1,w0
+              // 3-sub-phase read-modify-write per cell:
+              //   sub=0: drive RE+ADDR (RAM samples & updates ms.q THIS edge)
+              //   sub=1: sample DATA_IN (now reflects RAM's freshly-read ms.q,
+              //          which Phase 1 propagated to our wire)
+              //   sub=2: drive WE+DATA_OUT (RAM stores the inverted pattern)
+              const readExpected = readExpectedFor(ms.marchStep);
+              if (ms.subPhase === 0) {
+                ms.subPhase = 1;       // RAM read fired this edge; sample next tick.
+              } else if (ms.subPhase === 1) {
+                if ((dataIn & allOnes) !== readExpected) {
+                  ms.failAddr   = ms.addrCounter;
+                  ms.failBit    = firstMismatchBit(readExpected, dataIn);
+                  ms.mbistState = 9; // FAIL
+                  break;
+                }
+                ms.subPhase = 2;       // proceed to write phase.
+              } else /* subPhase === 2 */ {
+                ms.subPhase = 0;
+                const ascending = (ms.mbistState === 3 || ms.mbistState === 4);
+                if (ascending) {
+                  if (ms.addrCounter < N - 1) {
+                    ms.addrCounter++;
+                  } else {
+                    ms.marchStep++;
+                    ms.mbistState++;
+                    // Transition to next state's starting address.
+                    if (ms.mbistState === 5) ms.addrCounter = N - 1;
+                    else                     ms.addrCounter = 0;
+                  }
+                } else {
+                  if (ms.addrCounter > 0) {
+                    ms.addrCounter--;
+                  } else {
+                    ms.marchStep++;
+                    ms.mbistState++;
+                    if (ms.mbistState === 7) ms.addrCounter = 0;
+                    else                     ms.addrCounter = N - 1;
+                  }
+                }
+              }
+              break;
+            }
+            case 7: { // READ_FINAL — asc r0 (2 sub-phases per cell)
+              // sub=0: drive RE+ADDR; sub=1: sample.
+              const readExpected = 0;
+              if (ms.subPhase === 0) {
+                ms.subPhase = 1;
+              } else {
+                if ((dataIn & allOnes) !== readExpected) {
+                  ms.failAddr   = ms.addrCounter;
+                  ms.failBit    = firstMismatchBit(readExpected, dataIn);
+                  ms.mbistState = 9; // FAIL
+                  break;
+                }
+                ms.subPhase = 0;
+                if (ms.addrCounter < N - 1) {
+                  ms.addrCounter++;
+                } else {
+                  ms.mbistState = 8; // DONE
+                }
+              }
+              break;
+            }
+            case 8: // DONE — terminal
+            case 9: // FAIL — terminal
+              break;
+          }
+        }
+        // Primary Q = state (3-bit truncation for STATE output).
+        ms.q = ms.mbistState & 0x7;
 
       } else if (node.type === 'JTAG_TAP') {
         // IEEE 1149.1 TAP controller. Pins:
@@ -1752,6 +1960,19 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           nodeValues.set(node.id + '__out2', (s === 1 || s === 2) ? 1 : 0);
           nodeValues.set(node.id + '__out3', s);
         }
+        if (node.type === 'MBIST_CONTROLLER') {
+          // Set primary out (DONE) and leave the per-output __outN values
+          // intact — they were set by the Phase 1 projection from the
+          // pre-edge state and represent the commands that the RAM
+          // sampled on THIS rising edge. Re-projecting here would
+          // overwrite them and cause Phase 4c2 to miss the final write
+          // at the W0_UP boundary (the BUS_MUX collar between MBIST and
+          // RAM re-evaluates in Phase 4c3 and would propagate the
+          // post-edge outputs instead). The next Phase 1 (next tick)
+          // will re-project from the now-current state.
+          const s = ms.mbistState ?? 0;
+          ms.q = (s === 8 || s === 9) ? 1 : 0;
+        }
         if (node.type === 'JTAG_TAP') {
           ms.q = (ms.tdo | 0) & 1;
           nodeValues.set(node.id + '__out1', (ms.tapState | 0) & 0xf);
@@ -1952,6 +2173,21 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
           nodeValues.set(id + '__out1', fwdB);
           value = fwdA;
         }
+      } else if (node.type === 'BUS_MUX') {
+        // Re-evaluate so multi-output sources (MBIST_CONTROLLER channels,
+        // ALU multi-out, IR fields) deliver the right post-edge values
+        // to data + select inputs. Mirror the Phase 1 implementation.
+        const n = node.inputCount || 2;
+        const _readBusSlot = (slot) => {
+          if (!slot) return 0;
+          const outIdx = slot.wire.sourceOutputIndex || 0;
+          const key = outIdx === 0 ? slot.sourceId : (slot.sourceId + '__out' + outIdx);
+          return nodeValues.get(key) ?? 0;
+        };
+        const selSlot = inputSlots.find(s => s.inputIndex === n);
+        const sel = _readBusSlot(selSlot);
+        const dataSlot = inputSlots.find(s => s.inputIndex === (sel % n));
+        value = _readBusSlot(dataSlot);
       } else if (node.type === 'ALU') {
         const _readSlot = (slot) => {
           if (!slot) return 0;
@@ -2107,6 +2343,23 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
       propagate(id);
     }
 
+    // 4c1.5: BUS_MUX pre-eval before RAM write. When an MBIST collar
+    // (4 muxes) sits between RF/CU and RAM, the mux outputs must
+    // reflect the FRESH Phase 4 CU values (not the stale Phase 1
+    // values) before Phase 4c2 reads them to write the RAM.
+    for (const node of nodes) {
+      if (node.type !== 'BUS_MUX') continue;
+      const id = node.id;
+      const inputSlots = inputs.get(id);
+      const n = node.inputCount || 2;
+      const selSlot = inputSlots.find(s => s.inputIndex === n);
+      const sel = selSlot ? _wv(selSlot.wire.id) : 0;
+      const dataSlot = inputSlots.find(s => s.inputIndex === (sel % n));
+      const val = dataSlot ? _wv(dataSlot.wire.id) : 0;
+      nodeValues.set(id, val);
+      propagate(id);
+    }
+
     // 4c2: RAM write + read with fresh RF/CU values (for STORE/LOAD)
     for (const node of nodes) {
       if (node.type !== 'RAM') continue;
@@ -2123,8 +2376,8 @@ export function evaluate(nodes, wires, ffStates, stepCount) {
         const we   = dataSlots[2] ? _wv(dataSlots[2].wire.id) : 0;
         const re   = dataSlots[3] ? _wv(dataSlots[3].wire.id) : 1;
         const dMask = _mask(node.dataBits || 4);
-        if (we) ms.memory[addr] = data & dMask;
-        if (re) ms.q = (ms.memory[addr] ?? 0) & dMask;
+        if (we) ms.memory[addr] = _applyCellFault(node, addr, data & dMask, node.dataBits);
+        if (re) ms.q = _applyCellFault(node, addr, (ms.memory[addr] ?? 0) & dMask, node.dataBits);
         nodeValues.set(node.id, ms.q);
         propagate(node.id);
       }

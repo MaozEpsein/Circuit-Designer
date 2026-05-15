@@ -22,6 +22,15 @@ function nodeBitWidth(node, outIdx = 0) {
   // BIST_CONTROLLER outputs:
   //   out0 DONE (1), out1 PASS (1), out2 TEST_MODE (1), out3 STATE (3-bit)
   if (node?.type === 'BIST_CONTROLLER')          return outIdx === 3 ? 3 : 1;
+  // MBIST_CONTROLLER outputs:
+  //   out0 DONE, out1 PASS, out2 FAIL, out3 TEST_MODE, out4 STATE (3-bit),
+  //   out5 ADDR (addrBits), out6 DATA_OUT (dataBits), out7 WE, out8 RE.
+  if (node?.type === 'MBIST_CONTROLLER') {
+    if (outIdx === 4) return 3;
+    if (outIdx === 5) return Math.max(1, (node.addrBits | 0) || 4);
+    if (outIdx === 6) return Math.max(1, (node.dataBits | 0) || 8);
+    return 1;
+  }
   // JTAG_TAP outputs: out0 TDO (1), out1 STATE (4), out2 IR (irBits)
   if (node?.type === 'JTAG_TAP') {
     if (outIdx === 0) return 1;

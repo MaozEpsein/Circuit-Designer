@@ -1109,9 +1109,10 @@ function _nodeOutputAnchor(node, outputIndex) {
     }
     // Multi-output DFT-orchestrator types — distribute pins down the
     // right edge so each output gets its own anchor.
-    if (node.type === 'BIST_CONTROLLER' || node.type === 'JTAG_TAP' || node.type === 'BOUNDARY_SCAN_CELL') {
-      const outCount = node.type === 'BIST_CONTROLLER' ? 4
-                     : node.type === 'JTAG_TAP'        ? 3
+    if (node.type === 'BIST_CONTROLLER' || node.type === 'JTAG_TAP' || node.type === 'BOUNDARY_SCAN_CELL' || node.type === 'MBIST_CONTROLLER') {
+      const outCount = node.type === 'BIST_CONTROLLER'  ? 4
+                     : node.type === 'JTAG_TAP'         ? 3
+                     : node.type === 'MBIST_CONTROLLER' ? 9
                      : 2;
       const spread = Math.max(14, (h - 16) / Math.max(1, outCount - 1 || 1));
       const startY = node.y - ((outCount - 1) * spread) / 2;
@@ -3214,6 +3215,7 @@ function _memoryInputLabel(node, i) {
     return i < w ? ('D' + i) : 'CLK';
   }
   if (node.type === 'BIST_CONTROLLER') return ['START', 'RESET', 'SIG', 'CLK'][i] || '';
+  if (node.type === 'MBIST_CONTROLLER') return ['START', 'RESET', 'DIN', 'CLK'][i] || '';
   if (node.type === 'JTAG_TAP')        return ['TCK', 'TMS', 'TDI', 'TRST'][i] || '';
   if (node.type === 'BOUNDARY_SCAN_CELL') return ['PI', 'SI', 'MODE', 'SHIFT', 'CLK'][i] || '';
   return i.toString();
@@ -3225,6 +3227,7 @@ function _memoryNodeSize(node) {
     (node.type === 'FIFO' || node.type === 'STACK') ? 3 :
     node.type === 'COUNTER' ? 2 :
     node.type === 'BIST_CONTROLLER' ? 4 :
+    node.type === 'MBIST_CONTROLLER' ? 9 :
     node.type === 'JTAG_TAP' ? 3 :
     node.type === 'BOUNDARY_SCAN_CELL' ? 2 :
     1;
@@ -3255,7 +3258,7 @@ function _drawMemoryNode(node, val, hovered, ffStates) {
   ctx.shadowBlur = 0;
 
   // Type label
-  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', JTAG_TAP: 'JTAG TAP', BOUNDARY_SCAN_CELL: 'BSC' };
+  const typeLabels = { REGISTER: 'REG', SHIFT_REG: 'SHREG', COUNTER: 'CNT', RAM: 'RAM', ROM: 'ROM', CACHE: 'CACHE', REG_FILE: 'REG FILE', REG_FILE_DP: 'RF-DP', FIFO: 'FIFO', STACK: 'STACK', PC: 'PC', LFSR: 'LFSR', MISR: 'MISR', BIST_CONTROLLER: 'BIST', MBIST_CONTROLLER: 'MBIST', JTAG_TAP: 'JTAG TAP', BOUNDARY_SCAN_CELL: 'BSC' };
   ctx.fillStyle = '#c0a0f0';
   ctx.font = 'bold 11px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
@@ -3307,6 +3310,11 @@ function _drawMemoryNode(node, val, hovered, ffStates) {
     const spread = Math.max(14, (h - 16) / 3);
     const startY = node.y - 1.5 * spread;
     for (let i = 0; i < 4; i++) ctx.fillText(labels[i], x + w - 26, startY + i * spread + 1);
+  } else if (node.type === 'MBIST_CONTROLLER') {
+    const labels = ['DONE', 'PASS', 'FAIL', 'TM', 'STATE', 'ADDR', 'DOUT', 'WE', 'RE'];
+    const spread = Math.max(12, (h - 16) / 8);
+    const startY = node.y - 4 * spread;
+    for (let i = 0; i < 9; i++) ctx.fillText(labels[i], x + w - 30, startY + i * spread + 1);
   } else if (node.type === 'JTAG_TAP') {
     const labels = ['TDO', 'STATE', 'IR'];
     const spread = Math.max(14, (h - 16) / 2);
@@ -3954,6 +3962,7 @@ function _getNodeInputCount(node) {
   if (node.type === 'LFSR')    return 1;     // CLK only
   if (node.type === 'MISR')    return (node.bitWidth || 4) + 1;   // D[0..N-1] + CLK
   if (node.type === 'BIST_CONTROLLER') return 4;     // START, RESET, SIG_IN, CLK
+  if (node.type === 'MBIST_CONTROLLER') return 4;    // START, RESET, DATA_IN, CLK
   if (node.type === 'JTAG_TAP') return 4;            // TCK, TMS, TDI, TRST
   if (node.type === 'BOUNDARY_SCAN_CELL') return 5;  // PI, SI, MODE, SHIFT, CLK
   if (node.type === 'MUX') {
@@ -4076,6 +4085,8 @@ export function getInputAnchors(node) {
       label = i < w ? ('D' + i) : 'CLK';
     } else if (node.type === 'BIST_CONTROLLER') {
       label = ['START', 'RESET', 'SIG', 'CLK'][i] || '';
+    } else if (node.type === 'MBIST_CONTROLLER') {
+      label = ['START', 'RESET', 'DIN', 'CLK'][i] || '';
     } else if (node.type === 'JTAG_TAP') {
       label = ['TCK', 'TMS', 'TDI', 'TRST'][i] || '';
     } else if (node.type === 'BOUNDARY_SCAN_CELL') {

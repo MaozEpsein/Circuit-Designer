@@ -156,6 +156,48 @@ export function describeLfsrSinks(lfsr, allNodes, wires) {
   return { sinks, drivesScan: sinks.some(s => s.isScanIn) };
 }
 
+/**
+ * Resolve which RAM an MBIST_CONTROLLER is testing. The controller's
+ * four "test" outputs (ADDR=5, DATA_OUT=6, WE=7, RE=8) usually run
+ * through a 4-mux collar that selects between MBIST and functional
+ * drivers under TEST_MODE. Walk each wire one hop (and through one
+ * BUS_MUX hop if needed) and check whether all four converge on the
+ * same RAM. Returns:
+ *   { ram: RamNode|null, reason: 'ok'|'mismatched'|'partial'|'none',
+ *     throughMux: bool }
+ */
+export function describeMbistDut(mbist, allNodes, wires) {
+  if (!mbist || mbist.type !== 'MBIST_CONTROLLER') return { ram: null, reason: 'none', throughMux: false };
+  const nodeById = new Map(allNodes.map(n => [n.id, n]));
+  // For each MBIST output, walk forward: direct → RAM, or → BUS_MUX → RAM.
+  const followToRam = (outIdx) => {
+    const w = wires.find(w => w.sourceId === mbist.id && (w.sourceOutputIndex || 0) === outIdx);
+    if (!w) return { ram: null, throughMux: false };
+    const dst = nodeById.get(w.targetId);
+    if (!dst) return { ram: null, throughMux: false };
+    if (dst.type === 'RAM') return { ram: dst, throughMux: false };
+    if (dst.type === 'BUS_MUX') {
+      // Walk one more hop from the MUX's output.
+      const w2 = wires.find(w => w.sourceId === dst.id);
+      if (!w2) return { ram: null, throughMux: true };
+      const dst2 = nodeById.get(w2.targetId);
+      if (dst2 && dst2.type === 'RAM') return { ram: dst2, throughMux: true };
+    }
+    return { ram: null, throughMux: false };
+  };
+  const r5 = followToRam(5);
+  const r6 = followToRam(6);
+  const r7 = followToRam(7);
+  const r8 = followToRam(8);
+  const allRams = [r5.ram, r6.ram, r7.ram, r8.ram].filter(Boolean);
+  const throughMux = r5.throughMux || r6.throughMux || r7.throughMux || r8.throughMux;
+  if (allRams.length === 0) return { ram: null, reason: 'none', throughMux };
+  if (allRams.length < 4) return { ram: null, reason: 'partial', throughMux };
+  const firstId = allRams[0].id;
+  if (!allRams.every(r => r.id === firstId)) return { ram: null, reason: 'mismatched', throughMux };
+  return { ram: allRams[0], reason: 'ok', throughMux };
+}
+
 export function detectScanChains(scanFFs, wires) {
   if (scanFFs.length === 0) return [];
   const ffById = new Map(scanFFs.map(n => [n.id, n]));
@@ -287,6 +329,44 @@ export class DFTPanel {
             else              this._collapsedSections.delete(id);
             const tog = headerTrg.querySelector('.dft-section-toggle');
             if (tog) tog.textContent = nowCollapsed ? '▸' : '▾';
+          }
+          return;
+        }
+        // MBIST cell-fault toggle: cycle clean → s-a-1 → s-a-0 → clean.
+        // Click on a cell in the per-DUT injection grid mutates
+        // `ram.cellFaults[addr]` directly (mirrors how wire faults
+        // live on the wire object) and re-renders so the new state
+        // shows up next tick.
+        const cellTrg = e.target.closest('[data-action="mbist-cell-toggle"]');
+        if (cellTrg) {
+          e.preventDefault();
+          const ramId = cellTrg.dataset.ramId;
+          const addr  = parseInt(cellTrg.dataset.addr, 10);
+          const bitRaw = cellTrg.dataset.bit;
+          const ram = this._scene?.nodes?.find(n => n.id === ramId);
+          if (ram && ram.type === 'RAM' && Number.isFinite(addr)) {
+            if (!ram.cellFaults) ram.cellFaults = {};
+            const isWord = (bitRaw === 'word');
+            const bit = isWord ? null : parseInt(bitRaw, 10);
+            const cur = ram.cellFaults[addr] || null;
+            const matches = cur && ((isWord && cur.bit === null) || (!isWord && cur.bit === bit));
+            // Cycle: clean → s-a-1 → s-a-0 → clean (only for this addr/bit slot)
+            if (!matches) {
+              ram.cellFaults[addr] = { stuckAt: 1, bit: isWord ? null : bit };
+            } else if (cur.stuckAt === 1) {
+              ram.cellFaults[addr] = { stuckAt: 0, bit: isWord ? null : bit };
+            } else {
+              delete ram.cellFaults[addr];
+            }
+            // Also clear matching ffStates entry so the new memory layout
+            // takes effect from the next clock edge.
+            const ffStates = window.state?.ffStates;
+            if (ffStates?.get && ffStates.get(ram.id)) {
+              // Don't blow away the whole ms — just allow the next
+              // _applyCellFault to use the fresh ram.cellFaults map.
+            }
+            bus.emit('node:edited', { node: ram, field: 'cellFaults' });
+            if (this._visible) this._render();
           }
           return;
         }
@@ -539,6 +619,7 @@ export class DFTPanel {
       this._renderPatternGenerators() +
       this._renderSignatureCompactors() +
       this._renderBistControllers() +
+      this._renderMbistControllers() +
       this._renderJtagTaps() +
       this._renderFaultList(wires);
 
@@ -1457,6 +1538,178 @@ export class DFTPanel {
               <code>${sigBits}</code> <small>bits — set to match the connected MISR's width</small>
             </span>
           </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="dft-bist-header dft-section-header">${headerHtml}</div>${infoPanel}
+      <div class="dft-perf-row">
+        <span class="k">Controllers</span><span class="v">${ctls.length}</span>
+      </div>
+      ${blocks}
+    `;
+  }
+
+  // ── MEMORY BIST CONTROLLERS ────────────────────────────────
+  // One block per MBIST_CONTROLLER node: live FSM state (March C−),
+  // marchStep / addr / sub-phase counters, pass/fail/idle pill, and a
+  // per-cell fault-injection grid for the auto-detected RAM-under-test.
+  _renderMbistControllers() {
+    const allNodes = this._scene?.nodes || [];
+    const wires    = this._scene?.wires || [];
+    const ctls     = allNodes.filter(n => n.type === 'MBIST_CONTROLLER');
+
+    const headerHtml = `<span class="dft-section-title">MEMORY BIST` +
+      `<button class="dft-info-btn" data-action="toggle-info" data-section="mbist" title="What does this section show?">i</button>` +
+      `</span>`;
+    const infoPanel = this._infoOpen.has('mbist') ? `
+      <div class="dft-info-panel">
+        <div class="dft-info-lead">Each MBIST_CONTROLLER walks a connected RAM through the March C− algorithm: { ⇕w0; ⇑r0,w1; ⇑r1,w0; ⇓r0,w1; ⇓r1,w0; ⇕r0 }. Drives ADDR / DATA / WE / RE through an optional 4-mux TEST_MODE collar; monitors RAM.Q via DATA_IN. Detects stuck-at faults on memory cells.</div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">idle</span>
+          <span class="dft-info-text">Waiting for START. Pulse START to begin the March test (≈ 15·N cycles for N cells).</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status warn">running</span>
+          <span class="dft-info-text">FSM in SETUP / W0_UP / RW1_UP / RW0_UP / RW1_DN / RW0_DN / READ_FINAL — TEST_MODE high.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status ok">pass</span>
+          <span class="dft-info-text">All cells passed every March element — RAM is fault-free under this test.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-chain-status bad">fail</span>
+          <span class="dft-info-text">First mismatch detected — <code>failAddr</code> / <code>failBit</code> pin the offending cell.</span>
+        </div>
+        <div class="dft-info-row">
+          <span class="dft-info-text"><b>Cell-fault grid:</b> click a cell (rows = address, columns = bit, plus WORD = whole-cell) to cycle clean → s-a-1 → s-a-0 → clean. Edits mutate <code>ram.cellFaults</code> and become visible the next cycle — re-pulse START to re-test.</span>
+        </div>
+      </div>` : '';
+
+    if (ctls.length === 0) {
+      return `
+        <div class="dft-bist-header dft-section-header">${headerHtml}</div>${infoPanel}
+        <div class="dft-empty">No MBIST_CONTROLLER in scene — drop one (TEST tab) to run a March C− test on a connected RAM.</div>
+      `;
+    }
+
+    const ffStates = window.state?.ffStates;
+    const STATE_NAMES = ['IDLE', 'SETUP', 'W0_UP', 'RW1_UP', 'RW0_UP', 'RW1_DN', 'RW0_DN', 'READ_FINAL', 'DONE', 'FAIL'];
+    const STEP_NAMES  = ['⇕ w0', '⇑ r0,w1', '⇑ r1,w0', '⇓ r0,w1', '⇓ r1,w0', '⇕ r0'];
+
+    const blocks = ctls.map(ctl => {
+      const aBits   = Math.max(1, (ctl.addrBits | 0) || 4);
+      const dBits   = Math.max(1, (ctl.dataBits | 0) || 8);
+      const N       = 1 << aBits;
+      const ms      = ffStates?.get?.(ctl.id);
+      const stateN  = (ms && typeof ms.mbistState  === 'number') ? ms.mbistState  : 0;
+      const step    = (ms && typeof ms.marchStep   === 'number') ? ms.marchStep   : 0;
+      const addr    = (ms && typeof ms.addrCounter === 'number') ? ms.addrCounter : 0;
+      const sub     = (ms && typeof ms.subPhase    === 'number') ? ms.subPhase    : 0;
+      const failAddr = (ms && ms.failAddr !== undefined) ? ms.failAddr : null;
+      const failBit  = (ms && ms.failBit  !== undefined) ? ms.failBit  : null;
+      const sName   = STATE_NAMES[stateN] || '?';
+      const stepName = STEP_NAMES[step] || '—';
+
+      let cls, label;
+      if (stateN === 8)      { cls = 'ok';   label = 'pass'; }
+      else if (stateN === 9) { cls = 'bad';  label = 'fail'; }
+      else if (stateN === 0) { cls = 'warn'; label = 'idle'; }
+      else                   { cls = 'warn'; label = 'running'; }
+
+      // Resolve the RAM under test (walks ADDR/DATA/WE/RE wires, one BUS_MUX hop allowed).
+      const dut = describeMbistDut(ctl, allNodes, wires);
+
+      // Cell-fault injection grid for the auto-detected DUT.
+      let cellGrid = '';
+      if (dut.ram) {
+        const cellFaults = dut.ram.cellFaults || {};
+        const dutAddrBits = Math.max(1, (dut.ram.addrBits | 0) || 4);
+        const dutDataBits = Math.max(1, (dut.ram.dataBits | 0) || 8);
+        const cells = 1 << dutAddrBits;
+        const bitCols = Array.from({ length: dutDataBits }, (_, i) => dutDataBits - 1 - i); // MSB-first display
+        // Cap rendered cell count to keep the panel responsive on huge RAMs.
+        const renderedCells = Math.min(cells, 64);
+        const cellRows = Array.from({ length: renderedCells }, (_, a) => {
+          const f = cellFaults[a];
+          const wordState = !f ? '·' : (f.bit == null ? (f.stuckAt === 1 ? '1' : '0') : '·');
+          const wordCls   = !f ? 'clean' : (f.bit == null ? (f.stuckAt === 1 ? 'sa1' : 'sa0') : 'clean');
+          const bitCells = bitCols.map(b => {
+            let state = '·'; let bcls = 'clean';
+            if (f && f.bit === null) {
+              state = (f.stuckAt === 1) ? '1' : '0';
+              bcls  = (f.stuckAt === 1) ? 'sa1' : 'sa0';
+            } else if (f && f.bit === b) {
+              state = (f.stuckAt === 1) ? '1' : '0';
+              bcls  = (f.stuckAt === 1) ? 'sa1' : 'sa0';
+            }
+            return `<span class="dft-mbist-cell ${bcls}" data-action="mbist-cell-toggle"
+                          data-ram-id="${dut.ram.id}" data-addr="${a}" data-bit="${b}"
+                          title="addr ${a} · bit ${b} — click to cycle clean → s-a-1 → s-a-0">${state}</span>`;
+          }).join('');
+          return `
+            <span class="dft-mbist-addrlabel">${a}</span>
+            <span class="dft-mbist-cell ${wordCls}" data-action="mbist-cell-toggle"
+                  data-ram-id="${dut.ram.id}" data-addr="${a}" data-bit="word"
+                  title="addr ${a} · WORD (every bit) — click to cycle clean → s-a-1 → s-a-0">${wordState}</span>
+            ${bitCells}`;
+        }).join('');
+        const bitHeader = bitCols.map(b => `<span class="dft-mbist-bitlabel">b${b}</span>`).join('');
+        const truncatedNote = cells > renderedCells
+          ? `<div class="dft-info-text" style="margin-top:6px">Showing first ${renderedCells} of ${cells} cells — edit larger RAMs via JSON.</div>`
+          : '';
+        cellGrid = `
+          <div class="dft-mbist-faults">
+            <div class="dft-mbist-faults-title">CELL FAULTS · ${dut.ram.label || dut.ram.id} (${cells}×${dutDataBits})</div>
+            <div class="dft-mbist-grid" style="grid-template-columns: 28px 36px repeat(${dutDataBits}, 26px)">
+              <span class="dft-mbist-corner">addr</span>
+              <span class="dft-mbist-bitlabel">WORD</span>
+              ${bitHeader}
+              ${cellRows}
+            </div>
+            ${truncatedNote}
+          </div>`;
+      }
+
+      // DUT line — friendly summary of what's connected.
+      let dutLine;
+      if (dut.ram) {
+        dutLine = `<code>${dut.ram.label || dut.ram.id}</code> <small>${dut.throughMux ? '(via TEST_MODE mux collar)' : '(direct)'} — ${(1 << (dut.ram.addrBits|0)) || 1}×${dut.ram.dataBits|0 || 1}</small>`;
+      } else {
+        const why = dut.reason === 'mismatched' ? 'wires diverge to multiple RAMs'
+                  : dut.reason === 'partial' ? 'not all 4 output wires reach a RAM'
+                  : 'no RAM connected';
+        dutLine = `<small>— ${why} —</small>`;
+      }
+
+      // failAddr / failBit summary (only meaningful in FAIL state).
+      const failLine = (stateN === 9)
+        ? `<code>${failAddr}</code> <small>${failBit !== null ? '(bit ' + failBit + ')' : '(whole word)'}</small>`
+        : `<small>—</small>`;
+
+      const blockId = `mbist_${ctl.id}`;
+      const collapsed = this._collapsedBlocks.has(blockId);
+      return `
+        <div class="dft-chain-block${collapsed ? ' collapsed' : ''}" data-block-id="${blockId}">
+          <div class="dft-chain-header" title="Click to collapse / expand">
+            <span class="dft-chain-toggle">${collapsed ? '▸' : '▾'}</span>
+            <span class="dft-chain-title">${ctl.label || ctl.id}</span>
+            <span class="dft-chain-len">${aBits}-bit addr · ${dBits}-bit data · March C−</span>
+            <span class="dft-chain-status ${cls}">${label}</span>
+          </div>
+          <div class="dft-lfsr-grid">
+            <span class="dft-lfsr-k">state</span>
+            <span class="dft-lfsr-v"><code>${sName}</code> <small>(code ${stateN})</small></span>
+            <span class="dft-lfsr-k">march step</span>
+            <span class="dft-lfsr-v"><code>${step}</code> <small>${stepName}</small></span>
+            <span class="dft-lfsr-k">addr</span>
+            <span class="dft-lfsr-v"><code>${addr}</code> <small>of ${N - 1} · sub-phase ${sub}</small></span>
+            <span class="dft-lfsr-k">failAddr</span>
+            <span class="dft-lfsr-v">${failLine}</span>
+            <span class="dft-lfsr-k">DUT</span>
+            <span class="dft-lfsr-v">${dutLine}</span>
+          </div>
+          ${cellGrid}
         </div>`;
     }).join('');
 

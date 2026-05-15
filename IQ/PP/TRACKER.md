@@ -63,9 +63,9 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 53 | קוד | 36 | `code_s36_1.png` | algorithms | 8036 | pending | |
 | 54 | קוד | 37 | `—` | algorithms | 8037 | pending | |
 | 55 | קוד | 38 | `—` | algorithms | 8038 | pending | |
-| 56 | מעגלים | 1 | `circuits_s01_1.png` | ??? | ???? | pending | |
-| 57 | מעגלים | 2 | `circuits_s02_1.png` | ??? | ???? | pending | |
-| 58 | מעגלים | 3 | `circuits_s03_1.png` | ??? | ???? | pending | |
+| 56 | מעגלים | 1 | `circuits_s01_1.png` | sequential | 2009 | done | Room men/women ratio monitor — one-hot 4-bit sensor, signed diff counter, 3-lamp decode |
+| 57 | מעגלים | 2 | `circuits_s02_1.png` | sequential | 2010 | done | FSM divisibility by 3 — 3-state Moore (mod 0/1/2), MSB-first, new = (2·s+x) mod 3 |
+| 58 | מעגלים | 3 | `circuits_s03_1.png` | logic | 1005 | done | FA from 3 × 2:1 MUX — T=a⊕b, sum=T?¬c:c, carry=T?c:a (+verilog) |
 | 59 | מעגלים | 4 | `circuits_s04_1.png` | ??? | ???? | pending | |
 | 60 | מעגלים | 5 | `circuits_s05_1.png` | ??? | ???? | pending | |
 | 61 | מעגלים | 6 | `circuits_s06_1.png` | ??? | ???? | pending | |
