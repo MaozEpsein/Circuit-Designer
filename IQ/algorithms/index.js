@@ -1003,6 +1003,450 @@ function _twoSumSvg(arr, cur, seen, need, found, matchIdx) {
   </svg>`;
 }
 
+// hex → array of bits (MSB-first) of the requested width. Used by
+// the 32-bit register reverse trace so we don't have to hand-author
+// 32 0/1 values per step.
+function _hexBits(hex, width = 32) {
+  const v = parseInt(hex, 16) >>> 0;
+  return Array.from({ length: width }, (_, i) => (v >>> (width - 1 - i)) & 1);
+}
+// Generate the swap pairs for D&C step `s` (1..log2(width)) on a width-N
+// register. Step 1 swaps halves; step 2 swaps quarters within each half;
+// etc.  Returns all (a, b) pairs (both directions) so the SVG can pick
+// a representative subset.
+function _dcSwaps(width, step) {
+  const group = width >>> step;          // 16,8,4,2,1 for width=32
+  const swaps = [];
+  for (let i = 0; i < width; i += group * 2) {
+    for (let k = 0; k < group; k++) {
+      swaps.push([i + k, i + group + k]);
+      swaps.push([i + group + k, i + k]);
+    }
+  }
+  return swaps;
+}
+
+// ─── Bit-reverse SVG — 1 or 2 rows of bit cells with swap arrows ────
+// Used by the three parts of 8012 (byte naive / byte D&C / register).
+//   bitsBefore : array of 8 (or N) ints (0 or 1) — pre-step state
+//   bitsAfter  : same length — post-step state (omit for single-row)
+//   swaps      : array of [iBefore, jAfter] pairs that get drawn as
+//                connecting arrows (so the user sees what moved where)
+//   stepLabel  : short banner text
+//   done       : final-frame flag → gold theming
+function _bitsReverseSvg({ bitsBefore, bitsAfter, swaps = [], stepLabel, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const n = (bitsBefore || bitsAfter).length;
+  const CELL = n > 16 ? 26 : 44;
+  const CELL_H = CELL + 8;
+  const W = Math.max(680, n * CELL + 120);
+  const top = 90;
+  const rowGap = 120;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+
+  const swapFrom = new Set(swaps.map(([i]) => i));
+  const swapTo = new Set(swaps.map(([_, j]) => j));
+
+  const renderRow = (bits, y, side) => bits.map((bit, i) => {
+    const isHl = side === 'before' ? swapFrom.has(i) : swapTo.has(i);
+    const stroke = isHl ? (done ? '#ffd060' : '#39ff80') : '#3a5575';
+    const fill   = isHl ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = isHl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    const bitColor = bit ? (isHl ? '#fff0c0' : '#80f0a0') : '#5a7090';
+    return `
+      <g style="animation: ${D.animPop} 240ms ${i * 18}ms both;">
+        <text x="${left + i * CELL + CELL / 2}" y="${y - 8}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="${n > 16 ? 9 : 11}"
+              fill="#7090b0">[${i}]</text>
+        <rect x="${left + i * CELL + 2}" y="${y}" width="${CELL - 4}" height="${CELL_H}" rx="${n > 16 ? 4 : 6}"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isHl ? 2.4 : 1.2}" ${filter}/>
+        <text x="${left + i * CELL + CELL / 2}" y="${y + CELL_H * 0.7}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="${n > 16 ? 18 : 26}" font-weight="bold"
+              fill="${bitColor}">${bit}</text>
+      </g>`;
+  }).join('');
+
+  const bottomY = top + rowGap;
+
+  // Swap arrows: bezier curves connecting before[i] → after[j]
+  let arrows = '';
+  if (bitsBefore && bitsAfter && swaps.length > 0) {
+    // Cap displayed arrows so the view stays readable; the user gets the
+    // *idea* of the pattern without 32 lines of spaghetti.
+    const display = swaps.slice(0, Math.min(swaps.length, n > 16 ? 6 : 8));
+    arrows = display.map(([i, j], pi) => {
+      const xi = left + i * CELL + CELL / 2;
+      const xj = left + j * CELL + CELL / 2;
+      const midY = (top + CELL_H + bottomY) / 2;
+      return `
+        <path d="M ${xi} ${top + CELL_H + 2} C ${xi} ${midY}, ${xj} ${midY}, ${xj} ${bottomY - 4}"
+              stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="1.6" fill="none"
+              opacity="0.7"
+              marker-end="${done ? D.arrowGold : D.arrowCyan}"
+              style="animation: ${D.animFade} 380ms ${300 + pi * 40}ms both;"/>`;
+    }).join('');
+  }
+
+  const labels = `
+    <text x="${left - 20}" y="${top + CELL_H * 0.7}" text-anchor="end"
+          font-family="'JetBrains Mono', monospace" font-size="14"
+          fill="#80a0c0" font-weight="bold">${bitsBefore ? 'לפני' : ''}</text>
+    ${bitsAfter ? `<text x="${left - 20}" y="${bottomY + CELL_H * 0.7}" text-anchor="end"
+                       font-family="'JetBrains Mono', monospace" font-size="14"
+                       fill="${done ? '#ffd060' : '#80f0a0'}" font-weight="bold">${done ? 'מוכן' : 'אחרי'}</text>` : ''}`;
+
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 260}" y="14" width="520" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + stepLabel : stepLabel}
+      </text>
+    </g>`;
+
+  const H = bottomY + (bitsAfter ? CELL_H : 0) + 30;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${labels}
+    ${renderRow(bitsBefore, top, 'before')}
+    ${arrows}
+    ${bitsAfter ? renderRow(bitsAfter, bottomY, 'after') : ''}
+  </svg>`;
+}
+
+// ─── Random7-grid SVG — 5×5 lottery grid with rejection cells ───────
+// Used by 8013 to show rejection sampling visually.
+//   pickA, pickB : current Random5() picks (1..5, or null for init)
+//   accepted     : true if the idx (a-1)*5 + (b-1) + 1 is ≤ 21
+//   returnedVal  : the final 1..7 value (on done frame)
+function _random7GridSvg({ pickA, pickB, accepted, returnedVal, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 720, CELL = 84;
+  const top = 110, gridLeft = (W - 5 * CELL) / 2;
+
+  // Color each cell by (idx % 7) for accepted cells; reject cells = grey
+  const valueColors = ['#80d4ff','#39ff80','#ffd060','#ff9a70','#c080ff','#80f0a0','#f070c0'];
+
+  const cells = [];
+  for (let a = 1; a <= 5; a++) {
+    for (let b = 1; b <= 5; b++) {
+      const idx = (a - 1) * 5 + (b - 1) + 1;     // 1..25
+      const isPick = a === pickA && b === pickB;
+      const isReject = idx > 21;
+      const colorIdx = isReject ? -1 : ((idx - 1) % 7);
+      const val = isReject ? '✗' : `${(((idx - 1) % 7) + 1)}`;
+      const x = gridLeft + (b - 1) * CELL;
+      const y = top + (a - 1) * CELL;
+      const stroke = isPick ? (done && accepted ? '#ffd060' : (accepted === false ? '#ff6060' : '#39ff80'))
+                   : isReject ? '#5a3030' : '#3a5575';
+      const fill = isPick ? D.matchGrad : (isReject ? '#1a0808' : D.idleGrad);
+      const filter = isPick ? `filter="${done && accepted ? D.glowGold : (accepted === false ? D.glowGold : D.glowCyan)}"` : '';
+      const valColor = isReject ? '#a05050' : (colorIdx >= 0 ? valueColors[colorIdx] : '#e8f0fa');
+      cells.push(`
+        <g style="animation: ${D.animPop} 240ms ${((a - 1) * 5 + (b - 1)) * 15}ms both;">
+          <rect x="${x + 4}" y="${y + 4}" width="${CELL - 8}" height="${CELL - 8}" rx="10"
+                fill="${fill}" stroke="${stroke}" stroke-width="${isPick ? 3 : 1.4}" ${filter}/>
+          <text x="${x + CELL / 2}" y="${y + 26}" text-anchor="middle"
+                font-family="'JetBrains Mono', monospace" font-size="13"
+                fill="#5a7090">${idx}</text>
+          <text x="${x + CELL / 2}" y="${y + CELL / 2 + 14}" text-anchor="middle"
+                font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+                fill="${valColor}">${val}</text>
+        </g>`);
+    }
+  }
+
+  // Row / col headers (a, b)
+  const headers = [];
+  for (let i = 0; i < 5; i++) {
+    // top labels (b)
+    headers.push(`<text x="${gridLeft + i * CELL + CELL / 2}" y="${top - 14}" text-anchor="middle"
+                       font-family="'JetBrains Mono', monospace" font-size="16"
+                       fill="${pickB === i + 1 ? '#39ff80' : '#7090b0'}"
+                       font-weight="bold">b=${i + 1}</text>`);
+    // left labels (a)
+    headers.push(`<text x="${gridLeft - 14}" y="${top + i * CELL + CELL / 2 + 5}" text-anchor="end"
+                       font-family="'JetBrains Mono', monospace" font-size="16"
+                       fill="${pickA === i + 1 ? '#39ff80' : '#7090b0'}"
+                       font-weight="bold">a=${i + 1}</text>`);
+  }
+
+  // Return value chip (on done)
+  const returnChip = (done && returnedVal != null) ? `
+    <g style="animation: ${D.animFade} 420ms 250ms both;">
+      <rect x="${W - 220}" y="80" width="180" height="60" rx="12"
+            fill="${D.matchGrad}" stroke="#ffd060" stroke-width="3"
+            filter="${D.glowGold}"/>
+      <text x="${W - 130}" y="105" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="13"
+            fill="#ffd060" font-weight="bold" letter-spacing="2">RETURN</text>
+      <text x="${W - 130}" y="132" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="30" font-weight="bold"
+            fill="#fff0c0">${returnedVal}</text>
+    </g>` : '';
+
+  // Banner
+  let bannerText = 'Random7 — 5×5 grid';
+  if (pickA && !pickB)       bannerText = `a = Random5() = ${pickA}`;
+  else if (pickA && pickB)   bannerText = `b = Random5() = ${pickB}  →  idx = ${(pickA-1)*5 + (pickB-1) + 1}`;
+  if (accepted === false)    bannerText = `idx = ${(pickA-1)*5 + (pickB-1) + 1} > 21 → REJECT, retry`;
+  if (done && accepted)      bannerText = `idx ≤ 21 → accept, return ${returnedVal}`;
+  const bannerColor = (accepted === false) ? '#ff6060' : (done ? '#ffd060' : '#80d4ff');
+  const bannerFill  = (accepted === false) ? '#2a1010' : (done ? D.bannerGold : D.bannerCyan);
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 260}" y="14" width="520" height="42" rx="21"
+            fill="${bannerFill}" stroke="${bannerColor}" stroke-width="2"
+            filter="${done && accepted ? D.glowGold : (accepted === false ? D.glowGold : D.glowCyan)}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${bannerColor}" font-weight="bold" letter-spacing="1">${bannerText}</text>
+    </g>`;
+
+  const H = top + 5 * CELL + 30;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${headers.join('')}
+    ${cells.join('')}
+    ${returnChip}
+  </svg>`;
+}
+
+// ─── Topological-sort graph SVG — nodes/edges + queue + result ──────
+// Hand-positioned layout for our 5-node example
+// (a, b, c, x, y with edges a→b, c→a, x→y, y→a).
+//   inDegree : current in-degree of each node (object)
+//   removed  : Set of node ids already added to the result
+//   queue    : array of node ids currently in the BFS queue
+//   result   : ordered list of node ids accumulated so far
+//   highlight: optional — the node "being processed this step"
+function _topoGraphSvg({ inDegree, removed, queue, result, highlight, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 900, H = 480;
+
+  // Hand-placed node positions (DAG laid out left-to-right by depth)
+  const positions = {
+    c: { x: 130, y: 130 },
+    x: { x: 130, y: 320 },
+    y: { x: 340, y: 320 },
+    a: { x: 520, y: 220 },
+    b: { x: 720, y: 220 },
+  };
+  // Edges: from → to  (meaning from < to)
+  const edges = [
+    { from: 'a', to: 'b' },
+    { from: 'c', to: 'a' },
+    { from: 'x', to: 'y' },
+    { from: 'y', to: 'a' },
+  ];
+
+  const removedSet = removed instanceof Set ? removed : new Set(removed || []);
+  const queueSet   = new Set(queue || []);
+
+  // Render edges (lines) — fade if either endpoint was removed
+  const edgesHtml = edges.map(e => {
+    const p1 = positions[e.from], p2 = positions[e.to];
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy);
+    const offset = 36;
+    const x1 = p1.x + dx / len * offset;
+    const y1 = p1.y + dy / len * offset;
+    const x2 = p2.x - dx / len * offset;
+    const y2 = p2.y - dy / len * offset;
+    const faded = removedSet.has(e.from);
+    return `
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+            stroke="${faded ? '#3a4050' : '#7090b0'}"
+            stroke-width="${faded ? 1.4 : 2}"
+            opacity="${faded ? 0.4 : 0.9}"
+            marker-end="${D.arrowCyan}"
+            style="animation: ${D.animFade} 360ms both;"/>`;
+  }).join('');
+
+  // Render nodes
+  const nodesHtml = Object.entries(positions).map(([id, p]) => {
+    const isRemoved = removedSet.has(id);
+    const isInQueue = queueSet.has(id);
+    const isHl = id === highlight;
+    const inDeg = isRemoved ? 0 : (inDegree[id] || 0);
+    let stroke = '#3a5575', fill = D.idleGrad, filter = '', textColor = '#c0d8e0';
+    if (isRemoved)         { stroke = done ? '#ffd060' : '#39ff80'; fill = done ? D.matchGrad : D.curGrad; filter = `filter="${done ? D.glowGold : D.glowCyan}"`; textColor = '#c8f8d0'; }
+    else if (isHl)         { stroke = '#ffd060'; fill = D.matchGrad; filter = `filter="${D.glowGold}"`; textColor = '#fff0c0'; }
+    else if (isInQueue)    { stroke = '#80d4ff'; fill = D.curGrad; filter = `filter="${D.glowCyan}"`; textColor = '#a8e0b8'; }
+    return `
+      <g style="animation: ${D.animPop} 320ms both;">
+        <circle cx="${p.x}" cy="${p.y}" r="36" fill="${fill}" stroke="${stroke}" stroke-width="${isHl || isRemoved ? 3 : 1.8}" ${filter}/>
+        <text x="${p.x}" y="${p.y + 9}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+              fill="${textColor}">${id}</text>
+        <text x="${p.x}" y="${p.y - 48}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#7090b0" font-weight="bold">in-deg: ${inDeg}</text>
+      </g>`;
+  }).join('');
+
+  // Queue + result side panel
+  const panelX = 40, panelTopY = H - 110;
+  const queueChips = (queue || []).length === 0
+    ? `<text x="${panelX + 90}" y="${panelTopY + 25}" font-family="'JetBrains Mono', monospace"
+            font-size="16" fill="#5a7090" font-style="italic">(empty)</text>`
+    : (queue || []).map((id, i) => `
+        <g style="animation: ${D.animSlide} 260ms ${i * 40}ms both;">
+          <rect x="${panelX + 90 + i * 56}" y="${panelTopY}" width="46" height="38" rx="10"
+                fill="${D.chipGrad}" stroke="#80d4ff" stroke-width="1.6"
+                filter="${D.glowCyan}"/>
+          <text x="${panelX + 90 + i * 56 + 23}" y="${panelTopY + 26}" text-anchor="middle"
+                font-family="'JetBrains Mono', monospace" font-size="20" font-weight="bold"
+                fill="#a8e0b8">${id}</text>
+        </g>`).join('');
+  const queueLabel = `<text x="${panelX + 80}" y="${panelTopY + 25}" text-anchor="end"
+                            font-family="'JetBrains Mono', monospace" font-size="15"
+                            fill="#80c0e0" font-weight="bold" letter-spacing="2">QUEUE →</text>`;
+
+  const resultY = panelTopY + 55;
+  const resultChips = (result || []).length === 0
+    ? `<text x="${panelX + 90}" y="${resultY + 25}" font-family="'JetBrains Mono', monospace"
+            font-size="16" fill="#5a7090" font-style="italic">(empty)</text>`
+    : (result || []).map((id, i) => `
+        <g style="animation: ${D.animSlide} 260ms ${i * 40}ms both;">
+          <rect x="${panelX + 90 + i * 56}" y="${resultY}" width="46" height="38" rx="10"
+                fill="${D.matchGrad}" stroke="#39ff80" stroke-width="1.6"
+                filter="${D.glowCyan}"/>
+          <text x="${panelX + 90 + i * 56 + 23}" y="${resultY + 26}" text-anchor="middle"
+                font-family="'JetBrains Mono', monospace" font-size="20" font-weight="bold"
+                fill="#c8f8d0">${id}</text>
+        </g>`).join('');
+  const resultLabel = `<text x="${panelX + 80}" y="${resultY + 25}" text-anchor="end"
+                             font-family="'JetBrains Mono', monospace" font-size="15"
+                             fill="#80f0a0" font-weight="bold" letter-spacing="2">RESULT →</text>`;
+
+  // Banner
+  const bannerText = done ? `✓ topological order: ${(result || []).join(' < ')}` : 'Kahn\'s algorithm — peel zero-in-degree nodes';
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">${bannerText}</text>
+    </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${edgesHtml}
+    ${nodesHtml}
+    ${queueLabel}
+    ${queueChips}
+    ${resultLabel}
+    ${resultChips}
+  </svg>`;
+}
+
+// ─── Bitwise-multiply SVG — three binary registers (a/b/result) ─────
+// Shows the shift-and-add iteration step-by-step:
+//   a, b      : current values (decimal)
+//   result    : accumulator
+//   bitTested : whether (b & 1) was non-zero this step
+//   action    : 'init' | 'add' | 'skip' | 'shift' | 'done'
+function _bitMultiplySvg({ a, b, result, bitTested, action, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 820, H = 380;
+  const cardW = 240, cardH = 80;
+  const cards = [
+    { name: 'A', val: a,      desc: 'multiplicand', x: 40 },
+    { name: 'B', val: b,      desc: 'multiplier',   x: 290 },
+    { name: 'result', val: result, desc: 'sum so far',  x: 540 },
+  ];
+
+  // Convert decimal → 8-bit binary string
+  const bin = (v) => (v & 0xFF).toString(2).padStart(8, '0');
+
+  // For B, highlight the LSB (bit being tested THIS step)
+  const renderCard = ({ name, val, desc, x }) => {
+    const isB = name === 'B';
+    const isResult = name === 'result';
+    const isHl = (isB && action !== 'init' && action !== 'done')
+              || (isResult && action === 'add')
+              || (done && isResult);
+    const stroke = isHl ? (done && isResult ? '#ffd060' : '#39ff80') : '#3a5575';
+    const fill = isHl ? (done && isResult ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = isHl ? `filter="${done && isResult ? D.glowGold : D.glowCyan}"` : '';
+    const cardY = 100;
+    return `
+      <g style="animation: ${D.animPop} 320ms both;">
+        <rect x="${x}" y="${cardY}" width="${cardW}" height="${cardH}" rx="12"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isHl ? 3 : 1.6}" ${filter}/>
+        <text x="${x + 14}" y="${cardY + 22}"
+              font-family="'JetBrains Mono', monospace" font-size="16"
+              fill="${isHl ? '#c8f8d0' : '#80a0c0'}" font-weight="bold" letter-spacing="2">${name}</text>
+        <text x="${x + cardW - 14}" y="${cardY + 22}" text-anchor="end"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#5a7090" font-style="italic">${desc}</text>
+        <text x="${x + cardW / 2}" y="${cardY + 56}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="28" font-weight="bold"
+              fill="${isHl ? '#fff0c0' : '#e8f0fa'}">${val}</text>
+      </g>
+      <g style="animation: ${D.animFade} 360ms 100ms both;">
+        ${bin(val).split('').map((b, i) => {
+          const cell = 22;
+          const cx = x + 14 + i * cell;
+          const lsb = isB && i === 7;
+          const bitColor = b === '1' ? (lsb ? '#ffd060' : '#80f0a0') : '#5a7090';
+          const bitFill = lsb ? D.matchGrad : '#0a1320';
+          const bitStroke = lsb ? '#ffd060' : '#2a4060';
+          return `
+            <rect x="${cx}" y="${cardY + cardH + 8}" width="${cell - 4}" height="${cell + 4}" rx="3"
+                  fill="${bitFill}" stroke="${bitStroke}" stroke-width="${lsb ? 2 : 1}"
+                  ${lsb ? `filter="${D.glowGold}"` : ''}/>
+            <text x="${cx + (cell - 4) / 2}" y="${cardY + cardH + 24}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="14" font-weight="bold"
+                  fill="${bitColor}">${b}</text>`;
+        }).join('')}
+      </g>`;
+  };
+
+  // Action label
+  const actionMap = {
+    init:  'init',
+    add:   `b & 1 = 1 → result += a`,
+    skip:  `b & 1 = 0 → skip add`,
+    shift: 'a <<= 1, b >>= 1',
+    done:  `b = 0 → return ${result}`,
+  };
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 240}" y="14" width="480" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' : ''}${actionMap[action] || ''}
+      </text>
+    </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${cards.map(renderCard).join('')}
+  </svg>`;
+}
+
 // ─── Parentheses-stack SVG — string + LIFO stack visualisation ──────
 // `s`     : full input string
 // `idx`   : current char index being processed (-1 for "init" / "done")
@@ -3370,5 +3814,932 @@ def min_merges(arr):
     ],
     source: 'PP - שאלות קוד (slide 10)',
     tags: ['algorithms', 'array', 'two-pointer', 'greedy', 'palindrome', 'in-place', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8011 — Check power of 2 in a single line
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'power-of-two',
+    difficulty: 'easy',
+    title: 'בדיקת חזקה של 2 — שורה אחת',
+    intro:
+`נתון מספר שלם חיובי \`n\`. כתבו פונקציה שמחזירה \`True\` אם הוא **חזקה של 2**, אחרת \`False\`.
+
+\`\`\`
+Input: 64       Output: True   (= 2⁶)
+Input: 65       Output: False
+Input: 1        Output: True   (= 2⁰)
+Input: 0        Output: False  (לא חזקה של 2 לפי הגדרה)
+\`\`\`
+
+**אילוץ:** שורת קוד יחידה. \`O(1)\` זמן ומקום.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Naive — חלוקה בלולאה',
+            time: 'O(log n)', space: 'O(1)',
+            summary: 'חלקו ב-2 חוזרות עד שמגיעים ל-1 או למספר אי-זוגי.',
+            code:
+`def is_pow2_naive(n):
+    if n <= 0: return False
+    while n > 1:
+        if n % 2: return False
+        n //= 2
+    return True`,
+          },
+          {
+            name: 'Bitwise — שורה אחת',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'לחזקה של 2 יש בדיוק **ביט אחד** דולק. \`n & (n-1)\` מוחק את הביט התחתון הזה — והתוצאה היא 0 אם זה היה הביט היחיד.',
+            code:
+`def is_pow2(n):
+    return n > 0 and (n & (n - 1)) == 0`,
+          },
+        ],
+        starterCode:
+`def is_pow2(n):
+    """Return True iff n is a positive power of 2."""
+    # TODO: one-line bit trick
+    pass
+
+
+# print(is_pow2(64))    # True
+# print(is_pow2(65))    # False
+# print(is_pow2(0))     # False
+`,
+        question:
+`ממשו את \`is_pow2(n)\` ב-Python. למה ה-bit trick \`n & (n-1) == 0\` עובד?`,
+        hints: [
+          'איך נראה הייצוג הבינארי של 64? של 32? של 16? מה משותף לכולם?',
+          'לחזקה של 2 — בדיוק ביט יחיד דולק. \`n - 1\` הופך אותו ל-0 וכל הביטים הנמוכים יותר ל-1. שילוב AND ביניהם?',
+          'בדיוק שורה אחת: \`return n > 0 and (n & (n - 1)) == 0\`. ה-\`n > 0\` מטפל ב-edge case של \`0\`.',
+        ],
+        answer:
+`**Bit-trick של חזקה של 2.** \`O(1)\` זמן ומקום.
+
+**למה זה עובד?** ייצוג בינארי של חזקות של 2 הוא תמיד **ביט יחיד דולק:**
+
+\`\`\`
+1   = 0000 0001    2⁰
+2   = 0000 0010    2¹
+4   = 0000 0100    2²
+8   = 0000 1000    2³
+64  = 0100 0000    2⁶
+\`\`\`
+
+**ה-trick:** עבור מספר שיש לו ביט יחיד דולק במיקום \`k\`, \`n - 1\` הופך את הביט הזה ל-0 ואת כל הביטים מתחתיו ל-1:
+
+\`\`\`
+n     = 0100 0000   (64)
+n - 1 = 0011 1111   (63)
+n & (n-1) = 0000 0000   ← אין שום ביט משותף → 0
+\`\`\`
+
+**עבור מספר שאינו חזקה של 2** — יש לפחות שני ביטים דולקים. \`n-1\` מאפס רק את הביט התחתון והופך את שכניו ל-1, אבל ביט גבוה יותר נשאר:
+
+\`\`\`
+n     = 0100 0010   (66)
+n - 1 = 0100 0001   (65)
+n & (n-1) = 0100 0000   ← הביט הגבוה שורד → != 0
+\`\`\`
+
+**מקרה הקצה \`n = 0\`:** \`0 & -1 = 0\` בייצוג two's-complement → היה מחזיר \`True\` בטעות. ה-\`n > 0\` סוגר את הפרצה.
+
+---
+
+**שלבי החשיבה:**
+
+1. **חזקה של 2 ⇔ ביט יחיד דולק** — זו הבסיסיות שכל מועמד חייב לזהות מיד.
+2. **\`n & (n-1)\` מסיר את הביט התחתון** — bit-pattern קלאסי. עוזר גם בבעיות כמו "ספירת ביטים דולקים" (Brian Kernighan's algorithm).
+3. **שלילת edge case** — לפעמים שורה אחת לא מספקת; \`n > 0\` נחוץ כדי להוציא את אפס מהתמונה.`,
+        interviewerMindset:
+`שאלת bit-tricks קלאסית של "האם אתה מכיר את העולם הביטוויז". המראיין רוצה לראות:
+
+1. **שאתה לא הולך לפתרון \`math.log2\` או חלוקה חוזרת** — שניהם עובדים, אבל \`O(log n)\` ולא \`O(1)\`. שורת קוד יחידה היא ההזדמנות לבזוק \`n & (n-1) == 0\`.
+
+2. **שאתה זוכר את \`n > 0\`** — מועמדים רבים שוכחים, ואז \`is_pow2(0)\` מחזיר True שגוי. הראיון בודק שאתה בודק edge cases.
+
+3. **שאתה מסביר *למה*** — לא רק "כי הכרתי את הטריק". להתחיל מ-"חזקה של 2 = ביט יחיד דולק" ומשם בנייה לוגית של ה-AND.
+
+**שאלת המשך טיפוסית:** "ספור כמה ביטים דולקים ב-n באמצעות אותו טריק." → Brian Kernighan: \`count = 0; while n: n &= n-1; count += 1\` — בכל איטרציה מורידים ביט דולק אחד. סיבוכיות \`O(popcount(n))\` במקום \`O(log n)\`.`,
+        expectedAnswers: ['n & (n-1)', 'n & (n - 1)', 'bit', 'אחד', 'single bit', 'n > 0'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 11)',
+    tags: ['algorithms', 'bit-manipulation', 'power-of-2', 'one-liner', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8012 — Reverse bits (byte / constant time / register)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'reverse-bits',
+    difficulty: 'medium',
+    title: 'היפוך סדר הביטים ביחידת זיכרון',
+    intro:
+`עליכם לכתוב פונקציה שלוקחת יחידת זיכרון ומחזירה אותה כשסדר הביטים שלה הפוך.
+
+\`\`\`
+byte 0b1011 0100  →  0b0010 1101    (MSB↔LSB, b6↔b1, b5↔b2, b4↔b3)
+\`\`\`
+
+יש שלוש דרישות עוצמה — לכל אחת ממשו פונקציה נפרדת.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(8) = O(bits)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def reverse_byte_naive(b):
+    """Return b (8-bit) with its bits in reverse order. Loop-based."""
+    # TODO: 8 iterations, build result bit by bit
+    pass
+
+
+# print(bin(reverse_byte_naive(0b10110100)))   # 0b101101
+`,
+        question:
+`ממשו פונקציה שמקבלת byte (\`0..255\`) ומחזירה אותו עם סדר ביטים הפוך. **גישה לולאתית**.`,
+        hints: [
+          'מה התפקיד של \`b & 1\`? של \`<<\` ו-\`>>\`?',
+          'איטרציה אחת = בודקים את הביט הנמוך ביותר של \`b\`, דוחפים אותו לתוצאה, ומזיזים את \`b\` שמאלה ואת \`result\` ימינה.',
+          'לולאה של 8 איטרציות. בכל אחת: \`result = (result << 1) | (b & 1); b >>= 1\`.',
+        ],
+        answer:
+`**Loop-based, 8 איטרציות.**
+
+\`\`\`python
+def reverse_byte_naive(b):
+    result = 0
+    for _ in range(8):
+        result = (result << 1) | (b & 1)
+        b >>= 1
+    return result & 0xFF
+\`\`\`
+
+**איך זה עובד? בכל איטרציה:**
+1. \`b & 1\` — מבודד את הביט הנמוך ביותר של b
+2. \`result << 1\` — מפנה מקום ל-LSB חדש בתוצאה
+3. \`|\` — מצמיד אותם יחד
+4. \`b >>= 1\` — זורק את הביט שכבר לקחנו
+
+הסיבוכיות: \`O(8)\` = \`O(bits)\`. גודל קלט קבוע ⇒ פורמלית \`O(1)\` — אבל לבעיה הזו של 1, 4, 8, 32 ביטים כתבנו "\`O(bits)\`" כדי להבדיל מפתרון "אמיתי" O(1) של חלקים ב/ג.
+
+---
+
+**שלבי החשיבה:**
+
+1. **בנייה ביט-בייט** — מעבירים ביטים אחד אחד מהקצה הנמוך של \`b\` לקצה הנמוך של \`result\`. כי \`result\` נדחף שמאלה כל איטרציה, מה שנכנס ראשון יוצא אחרון = היפוך.
+2. **\`& 0xFF\` בסוף** — שומר על תוצאה כ-byte נקי, גם אם בטעות חרגנו.`,
+        interviewerMindset:
+`חלק זה הוא ה"בסיס" — המראיין מוודא שאתה יודע bit manipulation בסיסי. הכישלון הקלאסי:
+
+1. **בנייה בכיוון הלא נכון** — מועמד שמנסה \`result |= (b & 1) << i\` עם i רץ מ-0 ל-7 → צריך לחשוב הפוך, אחרת מקבל את אותו ה-byte.
+2. **שכחה ש-Python ints אינסופיים** — בלי \`& 0xFF\` בסוף, אם המתודה חורגת מ-8 ביטים בטעות, התוצאה לא מוגבלת ל-byte.
+3. **כתיבת הפתרון של חלק ב' כתשובה לחלק א'** — חלק א' מבקש את הגישה הנאיבית כדי שהדיון לחלק ב' יהיה משמעותי.`,
+        expectedAnswers: ['b & 1', 'result << 1', '>>= 1', 'for _ in range(8)', '|', '<<'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1) — קבוע אמיתי' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def reverse_byte_const(b):
+    """Reverse the bits of a byte in CONSTANT time —
+    a fixed number of operations independent of bit count."""
+    # TODO: divide-and-conquer with bit masking
+    pass
+
+
+# print(bin(reverse_byte_const(0b10110100)))   # 0b101101
+`,
+        trace: {
+          title: 'Byte reverse — D&C על b = 0xB4 = 10110100',
+          steps: [
+            {
+              code: 'init: b = 1011 0100   (0xB4 = 180)',
+              explain: 'נקודת התחלה. 8 ביטים שצריך להפוך. הרעיון: 3 שלבים של divide-and-conquer במקום loop של 8.',
+              viz: _bitsReverseSvg({
+                bitsBefore: [1,0,1,1,0,1,0,0],
+                stepLabel: 'init — b = 0xB4',
+              }),
+            },
+            {
+              code: 'b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4)',
+              explain: '**שלב 1: החלף חצאים.** ה-4 הביטים העליונים (\\\`1011\\\`) ↔ ה-4 התחתונים (\\\`0100\\\`). פעולה ביטוויז אחת.',
+              viz: _bitsReverseSvg({
+                bitsBefore: [1,0,1,1,0,1,0,0],
+                bitsAfter:  [0,1,0,0,1,0,1,1],
+                swaps: [[0,4],[1,5],[2,6],[3,7],[4,0],[5,1],[6,2],[7,3]],
+                stepLabel: 'STEP 1 — swap halves (mask 0xF0/0x0F)',
+              }),
+            },
+            {
+              code: 'b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2)',
+              explain: '**שלב 2: החלף זוגות 2-ביט בתוך כל חצי.** \\\`01 / 00\\\` הופך ל-\\\`00 / 01\\\`, וכך גם בחצי השני.',
+              viz: _bitsReverseSvg({
+                bitsBefore: [0,1,0,0,1,0,1,1],
+                bitsAfter:  [0,0,0,1,1,1,1,0],
+                swaps: [[0,2],[1,3],[2,0],[3,1],[4,6],[5,7],[6,4],[7,5]],
+                stepLabel: 'STEP 2 — swap pairs (mask 0xCC/0x33)',
+              }),
+            },
+            {
+              code: 'b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1)',
+              explain: '**שלב 3: החלף ביטים בודדים בתוך כל זוג.** התוצאה: \\\`0010 1101\\\` = \\\`0x2D = 45\\\` — בדיוק ההיפוך של \\\`0xB4 = 180\\\`. שלוש פעולות = O(1) קבוע.',
+              viz: _bitsReverseSvg({
+                bitsBefore: [0,0,0,1,1,1,1,0],
+                bitsAfter:  [0,0,1,0,1,1,0,1],
+                swaps: [[0,1],[1,0],[2,3],[3,2],[4,5],[5,4],[6,7],[7,6]],
+                stepLabel: 'STEP 3 — swap bits (mask 0xAA/0x55)   →   0x2D ✓',
+                done: true,
+              }),
+            },
+          ],
+        },
+        question:
+`ממשו את היפוך הביטים של byte בזמן **קבוע** — מספר פעולות שאינו תלוי במספר הביטים. רמז: divide-and-conquer.`,
+        hints: [
+          'מה אם היינו מחליפים את החצי הימני עם החצי השמאלי של ה-byte בפעולה אחת?',
+          'אחרי החלפת חצאים — מחליפים זוגות (2-ביט) בתוך כל חצי. אחר כך מחליפים ביטים בתוך כל זוג.',
+          '3 שלבי מסכות: \`0xF0/0x0F\` (חצאים), \`0xCC/0x33\` (זוגות), \`0xAA/0x55\` (ביטים בודדים). שורה אחת לכל אחד עם shifts.',
+        ],
+        answer:
+`**Divide-and-conquer.** מקבל את הפלט ב-3 פעולות שלובות — בלי קשר למספר הביטים בקלט.
+
+\`\`\`python
+def reverse_byte_const(b):
+    # שלב 1: חצאים — 4 ביטים עליונים ↔ 4 ביטים תחתונים
+    b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4)
+    # שלב 2: זוגות 2-ביט בתוך כל חצי
+    b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2)
+    # שלב 3: ביטים בודדים בתוך כל זוג
+    b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1)
+    return b & 0xFF
+\`\`\`
+
+**מעקב על \`b = 0b10110100\` (0xB4):**
+
+| שלב            | ערך binary    | hex   |
+|----------------|---------------|-------|
+| התחלה          | 1011 0100     | 0xB4  |
+| אחרי חצאים     | 0100 1011     | 0x4B  |
+| אחרי זוגות     | 0001 1110     | 0x1E  |
+| אחרי ביטים     | 0010 1101     | 0x2D  ✓ |
+
+\`0x2D = 0b00101101\` — זה אכן ההיפוך של \`0xB4\`.
+
+**למה זה O(1) אמיתי?** מספר הפעולות (6 ANDs, 3 ORs, 6 shifts) קבוע — לא תלוי ב-\`b\`. בניגוד ל-loop, אין branching דינמי.
+
+---
+
+**שלבי החשיבה:**
+
+1. **Divide-and-conquer בביטים** — הרעיון: במקום להעביר ביט-ביט, נחליף **חצאים שלמים** בפעולה אחת.
+2. **רקורסיה ביטוויז** — כל שלב מחלק את היחידה הקודמת ל-2. אחרי 3 שלבים (log₂(8)=3) הגענו לרזולוציה של ביט בודד = ההיפוך הסופי.
+3. **המסכות הן ביסיט** — \`0xF0\` בוחר את ה-4 העליונים, \`0x0F\` את ה-4 התחתונים. \`0xCC = 11001100\` בוחר את הזוגות העליונים של כל חצי. \`0xAA = 10101010\` בוחר את הביטים הזוגיים. הקשר ל-fractals מהמם.`,
+        interviewerMindset:
+`חלק זה מפריד בין מועמדים "ידעו לכתוב לולאה" לבין "מכירים את הטריקים המתקדמים". המראיין רוצה לראות:
+
+1. **שאתה רואה את divide-and-conquer בביטים.** אם אתה תקוע ב-loop — סימן שלא חשבת לעומק.
+2. **שאתה זוכר את המסכות.** \`0xF0/0x0F\`, \`0xCC/0x33\`, \`0xAA/0x55\` — לא צריך לזכור בעל-פה, אבל אם תוציא את הביטוויז כ-pattern (\`1111 0000\`, \`1100 1100\`, \`1010 1010\`) המראיין רואה שיש לך הבנה.
+3. **שאתה מסביר מדוע זה O(1) ולא O(log n).** 3 שלבים זה log₂(byte size), אבל "size" קבוע = "3" קבוע = O(1).
+
+**הרחבה נפוצה:** "כיצד תרחיב ל-32 ביט?" → 5 שלבים (log₂(32)=5). מסכות גדולות יותר: \`0xFFFF0000\`, \`0xFF00FF00\`, \`0xF0F0F0F0\`, \`0xCCCCCCCC\`, \`0xAAAAAAAA\`. אותה הרעיון.`,
+        expectedAnswers: ['0xF0', '0x0F', '0xCC', '0x33', '0xAA', '0x55', 'divide', 'mask'],
+      },
+      {
+        label: 'ג',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def reverse_register(x, width=32):
+    """Reverse the bits of a width-bit register in constant time.
+    Generalises part ב to any power-of-2 width."""
+    # TODO: log2(width) divide-and-conquer steps
+    pass
+
+
+# print(hex(reverse_register(0x12345678, 32)))    # 0x1E6A2C48
+`,
+        trace: {
+          title: 'Register reverse — 0x12345678 → 0x1E6A2C48 (32 ביט)',
+          steps: [
+            {
+              code: 'init: x = 0x12345678',
+              explain: 'נקודת התחלה. \\\`log₂(32) = 5\\\` שלבים נדרשים. כל שלב מחליף בלוקים בגודל \\\`2^k\\\` בהיררכיה.',
+              viz: _bitsReverseSvg({ bitsBefore: _hexBits('12345678'), stepLabel: 'init — 0x12345678 (32-bit)' }),
+            },
+            {
+              code: 'step 1: 16 ↔ 16   (mask 0xFFFF0000 / 0x0000FFFF)',
+              explain: 'מחליפים שני חצאי-מילה. \\\`0x12345678\\\` → \\\`0x56781234\\\`.',
+              viz: _bitsReverseSvg({
+                bitsBefore: _hexBits('12345678'),
+                bitsAfter:  _hexBits('56781234'),
+                swaps: _dcSwaps(32, 1),
+                stepLabel: 'STEP 1 — 16 ↔ 16',
+              }),
+            },
+            {
+              code: 'step 2: 8 ↔ 8   (mask 0xFF00FF00 / 0x00FF00FF)',
+              explain: 'בתוך כל מחצית-מילה, מחליפים את שני הבייטים. \\\`0x56781234\\\` → \\\`0x78563412\\\`.',
+              viz: _bitsReverseSvg({
+                bitsBefore: _hexBits('56781234'),
+                bitsAfter:  _hexBits('78563412'),
+                swaps: _dcSwaps(32, 2),
+                stepLabel: 'STEP 2 — 8 ↔ 8',
+              }),
+            },
+            {
+              code: 'step 3: 4 ↔ 4   (mask 0xF0F0F0F0 / 0x0F0F0F0F)',
+              explain: 'מחליפים nibbles בתוך כל בייט. \\\`0x78563412\\\` → \\\`0x87654321\\\`.',
+              viz: _bitsReverseSvg({
+                bitsBefore: _hexBits('78563412'),
+                bitsAfter:  _hexBits('87654321'),
+                swaps: _dcSwaps(32, 3),
+                stepLabel: 'STEP 3 — 4 ↔ 4',
+              }),
+            },
+            {
+              code: 'step 4: 2 ↔ 2   (mask 0xCCCCCCCC / 0x33333333)',
+              explain: 'מחליפים זוגות 2-ביט בתוך כל nibble.',
+              viz: _bitsReverseSvg({
+                bitsBefore: _hexBits('87654321'),
+                bitsAfter:  _hexBits('2D951C84'),
+                swaps: _dcSwaps(32, 4),
+                stepLabel: 'STEP 4 — 2 ↔ 2',
+              }),
+            },
+            {
+              code: 'step 5: 1 ↔ 1   (mask 0xAAAAAAAA / 0x55555555)',
+              explain: 'הצעד האחרון — מחליפים ביטים בודדים. **התוצאה: \\\`0x1E6A2C48\\\` = ההיפוך של \\\`0x12345678\\\`** ✓',
+              viz: _bitsReverseSvg({
+                bitsBefore: _hexBits('2D951C84'),
+                bitsAfter:  _hexBits('1E6A2C48'),
+                swaps: _dcSwaps(32, 5),
+                stepLabel: 'STEP 5 — 1 ↔ 1   →   0x1E6A2C48 ✓',
+                done: true,
+              }),
+            },
+          ],
+        },
+        question:
+`הרחיבו את הפתרון מחלק ב' ל-register כללי ברוחב **32 ביט** (או באופן כללי — כל רוחב שהוא חזקה של 2).`,
+        hints: [
+          'אותו רעיון כמו בחלק ב, אבל יותר שלבים. כמה?',
+          '\`log₂(32) = 5\` שלבים. מסכות גדולות יותר. כל שלב מחליף "יחידות" באורך \`2^k\`.',
+          'בכל שלב, המסכה לוקחת \`width/2/2^k\` "בלוקים" באורך \`2^k\` שכן זה לצד זה.',
+        ],
+        answer:
+`**Divide-and-conquer מוכלל.** \`log₂(width)\` שלבים.
+
+\`\`\`python
+def reverse_register(x, width=32):
+    # שלב 1: 16 ↔ 16
+    x = ((x & 0xFFFF0000) >> 16) | ((x & 0x0000FFFF) << 16)
+    # שלב 2: 8 ↔ 8 בתוך כל חצי
+    x = ((x & 0xFF00FF00) >> 8)  | ((x & 0x00FF00FF) << 8)
+    # שלב 3: 4 ↔ 4
+    x = ((x & 0xF0F0F0F0) >> 4)  | ((x & 0x0F0F0F0F) << 4)
+    # שלב 4: 2 ↔ 2
+    x = ((x & 0xCCCCCCCC) >> 2)  | ((x & 0x33333333) << 2)
+    # שלב 5: 1 ↔ 1
+    x = ((x & 0xAAAAAAAA) >> 1)  | ((x & 0x55555555) << 1)
+    return x & 0xFFFFFFFF
+\`\`\`
+
+**Pattern של המסכות:** כל מסכה היא repeat של \`{1×2^k}{0×2^k}\` או הפוך, על פני כל ה-32 ביט.
+
+**Generalisation:** עבור width = 64, מוסיפים שלב ראשון של \`0xFFFFFFFF00000000\` ↔ \`0x00000000FFFFFFFF\` (32-bit halves). 6 שלבים בסך הכל.
+
+**ב-CPU אמיתיים** — לפעמים יש הוראה \`RBIT\` ייעודית (ARM, RISC-V Zbb extension) שעושה את כל זה במחזור יחיד. אחרת — divide-and-conquer הוא הגישה הסטנדרטית.
+
+---
+
+**שלבי החשיבה:**
+
+1. **Pattern recognition** — \`log₂(width)\` שלבים, מסכות עם תבנית \`0/1\` חוזרת. כתבת אחד פעם, ראית את הסידור.
+2. **Hex masks הם אסתטיים** — \`0xFFFF0000\` קל לזיהוי. אם כותב מסכה בעצמך בלי לזכור — מבטא כ-binary של 1ים ו-0ים. ה-shifts הם \`width/2, width/4, ..., 1\`.
+3. **\`& 0xFFFFFFFF\` בסוף** — חיוני ב-Python כי int הוא אינסופי. ב-C/Rust עם uint32 לא צריך.`,
+        interviewerMindset:
+`חלק זה הוא הרחבה שמאמתת שמועמד תפש את התבנית, לא רק שיינן 3 שורות מ-ב'. ההבדל בין מועמד טוב למצוין:
+
+1. **טוב:** כותב 5 שורות לפי הדפוס.
+2. **מצוין:** מציע parametric loop שמייצר את המסכות אוטומטית מתוך \`width\`:
+   \`\`\`python
+   shift = width >> 1
+   while shift > 0:
+       mask = ...  # constructed
+       x = ((x & ~mask) >> shift) | ((x & mask) << shift)
+       shift >>= 1
+   \`\`\`
+   זה O(log width) במקום O(1) חוקי, אבל המראיין יעריך את החשיבה התבניתית.
+
+**מועמד מעולה גם מזכיר שזה ניתן לסנתז כ-hardware**: וקטור 32-ביט עם 5 layers של MUX — בדיוק כמו barrel shifter. שווה במיוחד אם השאלה קורית בראיון לעמדת ASIC engineer.`,
+        expectedAnswers: ['0xFFFF0000', '0xFF00FF00', '0xF0F0F0F0', '0xCCCCCCCC', '0xAAAAAAAA', 'log', 'width'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 12)',
+    tags: ['algorithms', 'bit-manipulation', 'divide-and-conquer', 'reverse-bits', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8013 — Random7() from Random5() (rejection sampling)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'random7-from-random5',
+    difficulty: 'medium',
+    title: 'Random7() מ-Random5() — שוב rejection sampling',
+    intro:
+`נתונה הפונקציה \`Random5()\` שמחזירה ערך **רנדומלי** בין \`1\` ל-\`5\` בהסתברות שווה (\`⅕\` לכל אחד). עליכם לממש \`Random7()\` שמחזירה ערך בין \`1\` ל-\`7\`, **כל אחד ב-⅐**.
+
+זוהי הרחבה של שאלה #8006 (Rand3 מ-BinaryRand). אותו עיקרון — **rejection sampling** — אבל בקנה מידה גדול יותר.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time (avg)',   value: 'O(1)' },
+          { label: 'Time (worst)', value: '∞ (rejection)' },
+          { label: 'Space',        value: 'O(1)' },
+        ],
+        starterCode:
+`def Random5():
+    """Black box — returns 1..5 with probability 1/5 each."""
+    import random
+    return random.randint(1, 5)
+
+
+def Random7():
+    """Return 1..7 with equal probability. Use only Random5()."""
+    # TODO: rejection sampling on a 5×5 grid
+    pass
+`,
+        trace: {
+          title: 'Random7 — דגימת רשת 5×5 (כולל דחייה אחת)',
+          steps: [
+            {
+              code: 'init — 25 תוצאות שווי-הסתברות, 21 מקובלות + 4 דחויות',
+              explain: 'הרשת מציגה את כל מרחב המדגם של 2 קריאות ל-Random5: \\\`a × b\\\` = 25 תאים. תאים 22-25 (\\\`✗\\\`) ידחו ויחזירו ניסיון חדש. שאר ה-21 נחלקים שווה בשווה ל-7 קבוצות.',
+              viz: _random7GridSvg({}),
+            },
+            {
+              code: 'a = Random5() = 5',
+              explain: 'קריאה ראשונה. נבחרה השורה a=5 — שורת התאים 21-25 בלוח.',
+              viz: _random7GridSvg({ pickA: 5 }),
+            },
+            {
+              code: 'b = Random5() = 5  →  idx = 25',
+              explain: 'קריאה שנייה. \\\`b=5\\\` → תא הימני בשורה החמישית, \\\`idx = (5-1)×5 + (5-1) + 1 = 25\\\`. **זה תא דחייה.**',
+              viz: _random7GridSvg({ pickA: 5, pickB: 5, accepted: false }),
+            },
+            {
+              code: 'idx = 25 > 21 → REJECT, retry',
+              explain: 'התא נופל מחוץ ל-21 הראשונים → דוחים ומחזירים ל-\\\`while True\\\`. הסתברות לדחייה: \\\`4/25 = 16%\\\`.',
+              viz: _random7GridSvg({ pickA: 5, pickB: 5, accepted: false }),
+            },
+            {
+              code: 'retry: a = Random5() = 2',
+              explain: 'ניסיון חוזר. \\\`a=2\\\` → שורה שנייה.',
+              viz: _random7GridSvg({ pickA: 2 }),
+            },
+            {
+              code: 'retry: b = Random5() = 4  →  idx = (2-1)*5 + (4-1) + 1 = 9',
+              explain: '\\\`b=4\\\` → תא במקום 9. **\\\`9 ≤ 21\\\` → מתקבל!**',
+              viz: _random7GridSvg({ pickA: 2, pickB: 4, accepted: true }),
+            },
+            {
+              code: 'return ((9-1) % 7) + 1 = 2',
+              explain: 'התא 9 ממופה ל-\\\`((9-1) mod 7) + 1 = 2\\\`. שימו לב שכל ערך \\\`1..7\\\` מקבל בדיוק 3 תאים מתוך ה-21 → סבירות אחידה \\\`3/21 = 1/7\\\`. ✓\\n\\nניסיונות בממוצע: \\\`25/21 ≈ 1.19\\\`. קריאות ל-Random5 בממוצע: \\\`~2.38\\\`.',
+              viz: _random7GridSvg({ pickA: 2, pickB: 4, accepted: true, returnedVal: 2, done: true }),
+            },
+          ],
+        },
+        question:
+`ממשו את \`Random7()\`. מהי הסיבוכיות הצפויה? מה היחס למקרה של Random3 מ-BinaryRand?`,
+        hints: [
+          'אם תקרא ל-Random5 פעמיים, כמה תוצאות שונות אפשריות? באיזו הסתברות?',
+          'שתי קריאות → 25 תוצאות שווי-הסתברות (1..5 × 1..5). 25 לא מתחלק ב-7. איך תבחר 21 (= 3 × 7) ותדחה 4?',
+          'נמספר את 25 התוצאות \`(a-1)*5 + (b-1) + 1\` = \`1..25\`. אם \`≤ 21\` → החזר \`((idx - 1) % 7) + 1\`. אחרת — חזור.',
+        ],
+        answer:
+`**Rejection sampling על רשת 5×5.** מתוך 25 תוצאות שווי-הסתברות בוחרים 21 (כפולה של 7) ומחלקים ל-7 קבוצות שוות.
+
+\`\`\`python
+def Random7():
+    while True:
+        a = Random5()
+        b = Random5()
+        idx = (a - 1) * 5 + (b - 1) + 1   # 1..25
+        if idx <= 21:
+            return ((idx - 1) % 7) + 1
+        # else: 22..25 — reject and retry
+\`\`\`
+
+**ניתוח הסתברות.**
+
+\`P(idx ≤ 21) = 21/25\`. מספר הניסיונות עד הצלחה: התפלגות גיאומטרית עם \`p = 21/25\` ⇒
+\`E[ניסיונות] = 25/21 ≈ 1.19\`. כל ניסיון = 2 קריאות ל-Random5 ⇒ **בממוצע ~2.38 קריאות**.
+
+**מתי כל ערך?** הקבוצות:
+- 1→{1,8,15}
+- 2→{2,9,16}
+- 3→{3,10,17}
+- 4→{4,11,18}
+- 5→{5,12,19}
+- 6→{6,13,20}
+- 7→{7,14,21}
+
+3 הופעות לכל ערך, מתוך 21 — בדיוק \`3/21 = 1/7\`. ✓
+
+---
+
+**שלבי החשיבה:**
+
+1. **\`k\` מטבעות m-מצביות → m^k תוצאות שווות.** 2 קריאות ל-Random5 = 25 תוצאות. כל הרחבה דורשת **k** כך ש-\`5^k ≥ 7\`.
+2. **בחר את הכפולה הגדולה ביותר של 7 שלא חורגת מ-25.** = \`21\`. דוחים 22..25.
+3. **map ב-mod.** \`((idx-1) % 7) + 1\` ⇒ ערכים \`1..7\`.
+
+**הרחבה: Random7 מ-Random5 בלי modulo.** מותר רק חיבור/חיסור/השוואות? ניתן עם 7 if-im. בסט מצומצם של אופרטורים, modulo חוסך זמן.
+
+**שאלה שיותר עמוקה ביותר:** "ממש \`RandM\` מ-\`RandN\` כללי." → אם \`gcd(M, N) = 1\` ו-\`M ≤ N^k\` קיים, נוסחה כללית עובדת.`,
+        interviewerMindset:
+`ההמשך של 8006. המראיין מצפה לראות:
+
+1. **שאתה מזהה שזה rejection sampling.** "פעמיים 5 = 25, אבל 25 לא מתחלק ב-7" — צריך לדחות עודף. מועמד שמנסה \`(Random5() + Random5() - 1) % 7\` או חישובים אריתמטיים אחרים נופל כי ההסתברויות לא יוצאות אחידות.
+
+2. **שאתה זוכר את הניתוח.** \`E[calls] = 50/21 ≈ 2.38\`. מי שאומר "צריך פעמיים" בלי לחשב — איבד נקודה.
+
+3. **שאתה מבין את הקשר ל-8006.** Rand3 מ-BinaryRand היה rejection על 4 תוצאות (קח 3, דחה 1). Random7 מ-Random5 הוא אותו רעיון בקנה מידה גדול יותר.`,
+        expectedAnswers: ['rejection', 'while', '5*5', '25', '21', '7', '% 7', 'mod'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 13)',
+    tags: ['algorithms', 'probability', 'rejection-sampling', 'random', 'extending', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8014 — Topological sort from "<" pairs
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'topological-sort-from-pairs',
+    difficulty: 'medium',
+    title: 'מיון משתנים לפי יחסי גודל — Topological Sort',
+    intro:
+`נתונה טבלה של זוגות יחסי-גודל בין משתנים: למשל \`a < b\`, \`x > y\`,
+\`c < a\`. תארו אלגוריתם שמסדר את כל המשתנים ב**סדר עולה**, אם הדבר אפשרי.
+
+\`\`\`
+Input:  pairs = [("a", "b"), ("c", "a"), ("x", "y"), ("y", "a")]
+        # i.e.  a < b, c < a, x < y, y < a
+Output: ["c", "x", "y", "a", "b"]    (אחד מהסדרים החוקיים)
+\`\`\`
+
+**שאלות לשלוט עליהן:** איך מזהים שאין סדר חוקי (יש מעגל)?`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(V + E)' },
+          { label: 'Space', value: 'O(V + E)' },
+        ],
+        starterCode:
+`from collections import defaultdict, deque
+
+
+def sort_by_pairs(pairs):
+    """pairs: list of (smaller, larger) tuples.
+    Return a list of variable names in ascending order, or None
+    if no valid order exists (cycle)."""
+    # TODO: build graph, run Kahn's topological sort
+    pass
+
+
+# print(sort_by_pairs([("a", "b"), ("c", "a"), ("x", "y"), ("y", "a")]))
+# → ["c", "x", "y", "a", "b"]  (or another valid order)
+`,
+        trace: {
+          title: 'Topological sort — pairs=[(a,b),(c,a),(x,y),(y,a)]',
+          steps: [
+            {
+              code: 'init: build graph + in_degree counts',
+              explain: 'בנינו את הגרף המכוון. \\\`c → a → b\\\`, \\\`x → y → a\\\`. ה-in_degree של כל קודקוד: \\\`a:2, b:1, c:0, x:0, y:1\\\`. \\\`c\\\` ו-\\\`x\\\` הם "שורשים" — תלות-אפס.',
+              viz: _topoGraphSvg({
+                inDegree: { a: 2, b: 1, c: 0, x: 0, y: 1 },
+                removed: [], queue: [], result: [],
+              }),
+            },
+            {
+              code: 'enqueue all zero-in-degree: queue = [c, x]',
+              explain: 'הקודקודים \\\`c\\\` ו-\\\`x\\\` (in_deg=0) נכנסים לתור. הם ה"קודמים" — אין מי שמופיע לפניהם.',
+              viz: _topoGraphSvg({
+                inDegree: { a: 2, b: 1, c: 0, x: 0, y: 1 },
+                removed: [], queue: ['c', 'x'], result: [],
+              }),
+            },
+            {
+              code: 'pop c → result = [c]; decrement a (2→1)',
+              explain: 'מוציאים את \\\`c\\\`. מוסיפים לתוצאה. כל הקשתות היוצאות ממנו — מעדכנים את ה-in_deg של ה"שכנים". \\\`a\\\` יורד מ-2 ל-1 (עדיין לא מוכן).',
+              viz: _topoGraphSvg({
+                inDegree: { a: 1, b: 1, c: 0, x: 0, y: 1 },
+                removed: ['c'], queue: ['x'], result: ['c'],
+                highlight: 'c',
+              }),
+            },
+            {
+              code: 'pop x → result = [c, x]; decrement y (1→0) → queue',
+              explain: 'מוציאים את \\\`x\\\`. \\\`y\\\` מצטמצם ל-0 → נכנס לתור.',
+              viz: _topoGraphSvg({
+                inDegree: { a: 1, b: 1, c: 0, x: 0, y: 0 },
+                removed: ['c', 'x'], queue: ['y'], result: ['c', 'x'],
+                highlight: 'x',
+              }),
+            },
+            {
+              code: 'pop y → result = [c, x, y]; decrement a (1→0) → queue',
+              explain: '\\\`y\\\` יוצא. \\\`a\\\` יורד ל-0 → לתור. עכשיו כל הקודקודים שלפני \\\`a\\\` "טופלו".',
+              viz: _topoGraphSvg({
+                inDegree: { a: 0, b: 1, c: 0, x: 0, y: 0 },
+                removed: ['c', 'x', 'y'], queue: ['a'], result: ['c', 'x', 'y'],
+                highlight: 'y',
+              }),
+            },
+            {
+              code: 'pop a → result = [c, x, y, a]; decrement b (1→0) → queue',
+              explain: '\\\`a\\\` יוצא. \\\`b\\\` מצטמצם ל-0.',
+              viz: _topoGraphSvg({
+                inDegree: { a: 0, b: 0, c: 0, x: 0, y: 0 },
+                removed: ['c', 'x', 'y', 'a'], queue: ['b'], result: ['c', 'x', 'y', 'a'],
+                highlight: 'a',
+              }),
+            },
+            {
+              code: 'pop b → result = [c, x, y, a, b]   queue empty',
+              explain: '\\\`b\\\` יוצא. התור ריק, כל הקודקודים בתוצאה. \\\`len(result) == len(nodes)\\\` ⇒ אין מעגל ⇒ הסדר חוקי. **c < x < y < a < b** ✓',
+              viz: _topoGraphSvg({
+                inDegree: { a: 0, b: 0, c: 0, x: 0, y: 0 },
+                removed: ['c', 'x', 'y', 'a', 'b'], queue: [], result: ['c', 'x', 'y', 'a', 'b'],
+                done: true,
+              }),
+            },
+          ],
+        },
+        question:
+`תארו וממשו אלגוריתם. איך מטפלים במצב של "אין סדר חוקי" (e.g. \`a<b, b<c, c<a\`)?`,
+        hints: [
+          'אם נחשוב על הזוגות כעל יחסים בגרף, מה הקודקודים? מה הקשתות?',
+          'גרף מכוון: כל זוג \`a < b\` הוא קשת \`a → b\`. הסדר העולה = topological sort.',
+          'אלגוריתם Kahn: שמרו מונה in-degree לכל קודקוד. תור עם כל ה-in-degree=0. הוציאו, הוסיפו לתוצאה, הקטינו את ה-in-degree של השכנים. מעגל ⇒ נשארו קודקודים עם in-degree>0 בסוף.',
+        ],
+        answer:
+`**Topological sort (Kahn).** \`O(V + E)\` זמן.
+
+\`\`\`python
+from collections import defaultdict, deque
+
+
+def sort_by_pairs(pairs):
+    # 1. Build directed graph: smaller → larger
+    graph    = defaultdict(set)
+    in_degree = defaultdict(int)
+    nodes     = set()
+    for s, b in pairs:
+        nodes.add(s); nodes.add(b)
+        if b not in graph[s]:
+            graph[s].add(b)
+            in_degree[b] += 1
+    # nodes that appear only as 'smaller' have in_degree 0 by default
+
+    # 2. Initialise queue with all in_degree == 0 nodes
+    queue = deque([n for n in nodes if in_degree[n] == 0])
+    result = []
+
+    # 3. Repeatedly take an in_degree-0 node, append to result,
+    #    decrement neighbours' in_degree, enqueue new zeros
+    while queue:
+        n = queue.popleft()
+        result.append(n)
+        for nb in graph[n]:
+            in_degree[nb] -= 1
+            if in_degree[nb] == 0:
+                queue.append(nb)
+
+    # 4. Cycle check: if not every node made it to the result,
+    #    a cycle prevented some from ever hitting in_degree 0.
+    return result if len(result) == len(nodes) else None
+\`\`\`
+
+**הרצה על הדוגמה:**
+
+| שלב | result | queue | in_degree |
+|---|---|---|---|
+| init | [] | [c, x] | a:2, b:1, y:1 |
+| pop c | [c] | [x] | a:1, b:1, y:1 |
+| pop x | [c, x] | [y] | a:1, b:1, y:0 |
+| pop y | [c, x, y] | [a] | a:0, b:1 |
+| pop a | [c, x, y, a] | [b] | b:0 |
+| pop b | [c, x, y, a, b] | [] | (all 0) |
+
+**מעגל = הימצאות שאריות.** עבור \`pairs = [("a","b"), ("b","c"), ("c","a")]\`: כל הקודקודים מתחילים ב-in_degree=1 ⇒ התור הראשוני ריק ⇒ \`result = []\` ⇒ \`len < len(nodes)\` ⇒ \`None\`.
+
+**גישה חלופית:** DFS עם 3 צבעים (לבן/אפור/שחור). מעגל מזוהה כשנתקלים בקודקוד אפור (currently-being-explored). post-order של DFS היא topological sort הפוכה.
+
+---
+
+**שלבי החשיבה:**
+
+1. **זוגות = קשתות, משתנים = קודקודים.** "מי קטן ממי" מומפ לכיוון קשת. סדר עולה = topological sort.
+2. **Kahn vs DFS** — Kahn אינטואיטיבי ("מי הקטן ביותר עכשיו"); DFS פוטוגני יותר ויותר מהיר ב-coding בעיון. שניהם O(V+E).
+3. **זיהוי מעגל מובנה.** Kahn לא ימצא קודקודים שכלולים במעגל ⇒ אם התוצאה קצרה — יש מעגל. DFS — מזהה ע"י "נתקלת בקודקוד אפור".`,
+        interviewerMindset:
+`קלאסיקה של ראיוני graph algorithms. המראיין רוצה לראות:
+
+1. **שאתה מזהה את הבעיה כ-topological sort.** מועמד שמתחיל לחשוב על "מיון כללי" ולא רואה את הגרף — איבד כיוון.
+2. **שאתה זוכר את שני האלגוריתמים** (Kahn ו-DFS) ויכול לבחור. Kahn טוב כשרוצים "level-by-level" עיבוד; DFS טוב כשהגרף קטן ויש זרימה רקורסיבית טבעית.
+3. **שאתה מטפל בקלט המעוות** — מעגל, קודקודים מבודדים, זוג כפול. מועמד שאומר "אהבה, אחזיר את התוצאה גם אם יש מעגל" — לא יציל.
+
+**שאלת המשך שכיחה:** "מה אם רוצים *את הסדר היציב יחסי* — אלפבית בין קודקודים שווי-עדיפות?" → תחליפו את ה-\`deque\` ב-\`heapq\` — תור עדיפויות עם מילים lexically.`,
+        expectedAnswers: ['topological', 'top sort', 'Kahn', 'in-degree', 'queue', 'cycle', 'מעגל'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 14)',
+    tags: ['algorithms', 'graph', 'topological-sort', 'kahn', 'BFS', 'cycle-detection', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8015 — Multiply two integers using ONLY bitwise operators
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'bitwise-multiply',
+    difficulty: 'medium',
+    title: 'כפל באמצעות bitwise בלבד',
+    intro:
+`המעבד שאתה עובד עליו תומך **רק** ב-\`bitwise operators\` — \`&\`, \`|\`,
+\`^\`, \`~\`, \`<<\`, \`>>\`. אין הוראת \`MUL\`, אין \`ADD\` ישיר, אין
+לולאות מובנות (לולאות מותרות באלגוריתם, אבל הפעולות עצמן ביטוויז בלבד).
+
+ממשו את \`multiply(a, b)\` שמחזירה \`a * b\`.
+
+**הנחה לפשטות:** \`a, b\` חיוביים. הרחבה לערכים שליליים — בונוס.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(log b)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def add_bits(x, y):
+    """Add two ints using only bitwise operators (no '+')."""
+    while y != 0:
+        carry = (x & y) << 1
+        x = x ^ y
+        y = carry
+    return x
+
+
+def multiply(a, b):
+    """a * b using only bitwise operators (+ add_bits as helper)."""
+    # TODO: shift-and-add (Russian peasant)
+    pass
+
+
+# print(multiply(13, 9))    # 117
+# print(multiply(7, 0))     # 0
+`,
+        trace: {
+          title: 'Bitwise multiply — 3 × 5 = 15',
+          steps: [
+            {
+              code: 'init: a=3, b=5, result=0',
+              explain: 'a הוא הכפלן (\\\`011\\\`), b הוא המכפיל (\\\`101\\\`). result יצטבר עם כל ביט דולק של b.',
+              viz: _bitMultiplySvg({ a: 3, b: 5, result: 0, action: 'init' }),
+            },
+            {
+              code: 'iter 1: b & 1 = 1   →   result += a',
+              explain: 'ה-LSB של b דולק. מוסיפים \\\`a=3\\\` ל-result (באמצעות \\\`add_bits\\\`, לא \\\`+\\\` כי אסור).',
+              viz: _bitMultiplySvg({ a: 3, b: 5, result: 3, action: 'add' }),
+            },
+            {
+              code: 'iter 1: a <<= 1 (=6),  b >>= 1 (=2)',
+              explain: 'מקדמים: a מוכפל ב-2, b מחולק ב-2. עכשיו ה-LSB של b הוא \\\`0\\\`.',
+              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'shift' }),
+            },
+            {
+              code: 'iter 2: b & 1 = 0   →   skip add',
+              explain: 'הביט דלוק כבוי → לא מוסיפים. רק מקדמים.',
+              viz: _bitMultiplySvg({ a: 6, b: 2, result: 3, action: 'skip' }),
+            },
+            {
+              code: 'iter 2: a <<= 1 (=12),  b >>= 1 (=1)',
+              explain: 'a הוכפל פעמיים כבר, b קטן ל-1.',
+              viz: _bitMultiplySvg({ a: 12, b: 1, result: 3, action: 'shift' }),
+            },
+            {
+              code: 'iter 3: b & 1 = 1   →   result += a',
+              explain: 'הביט הדלוק האחרון של b. מוסיפים \\\`a=12\\\` ל-result. \\\`3 + 12 = 15\\\`.',
+              viz: _bitMultiplySvg({ a: 12, b: 1, result: 15, action: 'add' }),
+            },
+            {
+              code: 'iter 3: a <<= 1 (=24),  b >>= 1 (=0)',
+              explain: 'אחרי ההזזה b=0. הלולאה תסיים.',
+              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'shift' }),
+            },
+            {
+              code: 'b == 0 → return 15',
+              explain: '**\\\`3 × 5 = 15\\\`** ✓. סה"כ 3 איטרציות (= מספר הביטים הדלוקים ב-b הכי גבוה). זה bitwise shift-and-add = Russian-peasant multiplication.',
+              viz: _bitMultiplySvg({ a: 24, b: 0, result: 15, action: 'done', done: true }),
+            },
+          ],
+        },
+        question:
+`ממשו את \`multiply(a, b)\` באמצעות ביטוויז בלבד. רמז: כפל = חיבור חוזר עם הזזות. למה זה O(log b)?`,
+        hints: [
+          'כפל אריתמטי \`a × b\` = סכום של \`a × 2^k\` לכל ביט \`k\` שדולק ב-\`b\`. למה זה עוזר?',
+          'בכל איטרציה: אם ה-LSB של \`b\` דולק, מוסיפים \`a\` לתוצאה. אז \`a <<= 1\` (כפל ב-2) ו-\`b >>= 1\` (חלוקה ב-2). מסיימים כש-\`b == 0\`.',
+          'מספר הצעדים = מספר הביטים של \`b\` = \`log₂(b)\`. החיבור הביטוויז (\`add_bits\`) נדרש כי גם \`+\` אסור.',
+        ],
+        answer:
+`**Russian peasant multiplication / shift-and-add.** \`O(log b)\` איטרציות. כל אחת מתאדה את הביט הנמוך של \`b\` ומכפילה את \`a\` ב-2.
+
+\`\`\`python
+def add_bits(x, y):
+    """x + y באמצעות bitwise בלבד."""
+    while y != 0:
+        carry = (x & y) << 1     # מקומות שבהם יש carry
+        x = x ^ y                  # סכום בלי carry
+        y = carry                  # carry-in לאיטרציה הבאה
+    return x
+
+
+def multiply(a, b):
+    result = 0
+    while b > 0:
+        if b & 1:                  # אם הביט הנמוך של b דולק
+            result = add_bits(result, a)
+        a <<= 1                    # כפל a ב-2
+        b >>= 1                    # b /= 2
+    return result
+\`\`\`
+
+**מעקב על \`3 × 5 = 15\`:**
+
+| iter | a (binary) | b (binary) | b & 1 | result |
+|---|---|---|---|---|
+| 0 | 0011 | 0101 | 1 | 0 → 3 |
+| 1 | 0110 | 0010 | 0 | 3 |
+| 2 | 1100 | 0001 | 1 | 3 → 15 |
+| 3 | (loop exits, b=0) | | | **15** ✓ |
+
+**איך \`add_bits\` עובד? סימולציה של full-adder.** \`x ^ y\` = סכום בלי carry. \`(x & y) << 1\` = carry של full-adder, מועתק לקלט של האיטרציה הבאה. בעצם זה כפי שהמעבד החומרתי עושה את החיבור — fully-parallel, אבל מסומלץ סדרתית עד שה-carry נעלם.
+
+**ערכים שליליים?** אם משתמשים ב-Python int, אין צורך לטפל בסימן — \`>>\` שומר על סימן ב-Python ב-ints שליליים. ב-C/Rust: צריך לזכור את הסימן של תוצאה, להפוך את \`a, b\` ל-abs, ולהחיל סימן בסוף.
+
+---
+
+**שלבי החשיבה:**
+
+1. **כפל = חיבור עם הזזה** — כל ביט דולק ב-\`b\` מוסיף \`a\` שמוזז שמאלה ב-k מקומות. זה בדיוק long multiplication שלמדנו בכיתה ב, רק בבסיס 2.
+2. **חיבור גם דורש סימולציה ביטוויז.** \`+\` אסור — חייבים \`add_bits\`. ה-trick של \`carry = (x & y) << 1; x = x ^ y\` הוא הקלאסיקה.
+3. **לולאה לא ביטוויז = OK.** השאלה מגבילה את ה**פעולות** ל-bitwise, לא את structure-of-code.`,
+        interviewerMindset:
+`שאלת bit-tricks קלאסית — בגרסה ICS / ASIC. המראיין רוצה לראות:
+
+1. **שאתה ראית את ה-decomposition \`a × b = Σ (b_k × 2^k) × a\`.** זה לא "טריק" — זה ההגדרה של כפל בבסיס 2. מי שלא רואה את זה — חוסר fluency ביטוויז.
+2. **שאתה ממש את \`add_bits\` במקום להתעלם מההגבלה.** מועמדים פעמים אומרים "אני אשתמש ב-+" — נופלים על ההגבלה הקטנונית.
+3. **שאתה מסביר את הקשר ל-hardware.** Shift-and-add multiplier הוא בלוק קלאסי ב-ASIC. \`add_bits\` הוא ripple-carry adder. מועמד שמזכיר את זה — בונוס ל-hardware roles.
+
+**שאלת המשך שכיחה:** "אבל \`add_bits\` חוזרת על carry — זה O(bits) במקרה הגרוע. אפשר ב-O(1)?" → רמז ל-CLA (carry-lookahead adder), שהוא O(log n) במספר השלבים אבל O(n²) חומרה. דיון מעולה ל-architecture interview.`,
+        expectedAnswers: ['a <<= 1', 'b >>= 1', 'b & 1', 'add_bits', 'shift', 'add', 'russian peasant'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 15)',
+    tags: ['algorithms', 'bit-manipulation', 'multiplication', 'shift-and-add', 'hardware', 'classic', 'python'],
   },
 ];

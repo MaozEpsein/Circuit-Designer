@@ -35,11 +35,11 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 25 | קוד | 8 | `code_s08_1.png` | algorithms | 8008 | done | Valid Parentheses — stack + part-ב with `\|\|` |
 | 26 | קוד | 9 | `code_s09_1.png` | algorithms | 8009 | done | Single Number — XOR trick |
 | 27 | קוד | 10 | `code_s10_1.png` | algorithms | 8010 | done | Min merges to palindrome — two-pointer greedy |
-| 28 | קוד | 11 | `code_s11_1.png` | algorithms | 8011 | pending | |
-| 29 | קוד | 12 | `code_s12_1.png` | algorithms | 8012 | pending | |
-| 30 | קוד | 13 | `code_s13_1.png` | algorithms | 8013 | pending | |
-| 31 | קוד | 14 | `code_s14_1.png` | algorithms | 8014 | pending | |
-| 32 | קוד | 15 | `code_s15_1.png` | algorithms | 8015 | pending | |
+| 28 | קוד | 11 | `code_s11_1.png` | algorithms | 8011 | done | Power-of-2 — `n & (n-1) == 0` one-liner |
+| 29 | קוד | 12 | `code_s12_1.png` | algorithms | 8012 | done | Reverse bits — naive / O(1) byte / 32-bit register (3 parts) |
+| 30 | קוד | 13 | `code_s13_1.png` | algorithms | 8013 | done | Random7 from Random5 — 5×5 rejection sampling |
+| 31 | קוד | 14 | `code_s14_1.png` | algorithms | 8014 | done | Topological sort from "<" pairs — Kahn's algorithm |
+| 32 | קוד | 15 | `code_s15_1.png` | algorithms | 8015 | done | Bitwise multiply — shift & add + add_bits helper |
 | 33 | קוד | 16 | `code_s16_1.png` | algorithms | 8016 | pending | |
 | 34 | קוד | 17 | `code_s17_1.png` | algorithms | 8017 | pending | |
 | 35 | קוד | 18 | `code_s18_1.png` | algorithms | 8018 | pending | |
