@@ -45,11 +45,11 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 35 | קוד | 18 | `code_s18_1.png` | algorithms | 8018 | done | Error-rate monitor — sliding-window over 1ms ticks |
 | 36 | קוד | 19 | `code_s19_1.png` | algorithms | 8019 | done | "if-less" flip — subtraction / XOR / midpoint |
 | 37 | קוד | 20 | `code_s20_1.png` | algorithms | 8020 | done | Max profit stock — single-pass min/best (+trace) |
-| 38 | קוד | 21 | `code_s21_1.png` | algorithms | 8021 | pending | |
-| 39 | קוד | 22 | `code_s22_1.png` | algorithms | 8022 | pending | |
-| 40 | קוד | 23 | `code_s23_1.png` | algorithms | 8023 | pending | |
-| 41 | קוד | 24 | `code_s24_1.png` | algorithms | 8024 | pending | |
-| 42 | קוד | 25 | `code_s25_1.png` | algorithms | 8025 | pending | |
+| 38 | קוד | 21 | `code_s21_1.png` | algorithms | 8021 | done | Min binary string — stack pop on "01"/"11" (+trace) |
+| 39 | קוד | 22 | `code_s22_1.png` | algorithms | 8022 | done | Highest set bit — bit-smear in O(1) |
+| 40 | קוד | 23 | `code_s23_1.png` | algorithms | 8023 | done | Two stacks one array — share dynamically (+trace) |
+| 41 | קוד | 24 | `code_s24_1.png` | algorithms | 8024 | done | Add without operators — half-adder simulation |
+| 42 | קוד | 25 | `code_s25_1.png` | algorithms | 8025 | done | Matrix transpose in-place — `j > i` only (+trace) |
 | 43 | קוד | 26 | `code_s26_1.png` | algorithms | 8026 | pending | |
 | 44 | קוד | 27 | `code_s27_1.png` | algorithms | 8027 | pending | |
 | 45 | קוד | 28 | `code_s28_1.png` | algorithms | 8028 | pending | |
