@@ -4941,6 +4941,40 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 .iv-diff-swatch.iv-diff-del  { background: rgba(255, 80, 80, 0.35); border-right: 3px solid #ff6060; }
 .iv-diff-swatch.iv-diff-add  { background: rgba(80, 220, 120, 0.35); border-right: 3px solid #39ff80; }
 
+/* ── Syntax highlighting (highlight.js tokens) ─────────────────────
+   Dark theme tuned to the panel's palette (deep navy bg, cyan/green
+   accents). Applied to <code class="hljs"> nodes injected by
+   _highlightCodeBlocks() in InterviewPanel.js — works the same in
+   iv-code blocks, approach cards, the compare modal, and the
+   trace-fullscreen source pane. */
+.hljs                     { color: #c8d8f0; background: transparent; }
+.hljs-comment,
+.hljs-quote               { color: #6a8090; font-style: italic; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section             { color: #c08aff; font-weight: 600; }   /* def, return, if, True */
+.hljs-built_in,
+.hljs-type                { color: #80d4ff; }                      /* range, len, print */
+.hljs-string,
+.hljs-attr,
+.hljs-symbol,
+.hljs-doctag              { color: #ffc080; }                      /* "hello", 'x' */
+.hljs-number              { color: #ff9070; }                      /* 1, 0xFF, 3.14 */
+.hljs-function .hljs-title,
+.hljs-title.function_,
+.hljs-title               { color: #80f0a0; font-weight: 600; }   /* function names */
+.hljs-params              { color: #c8d8f0; }
+.hljs-operator,
+.hljs-punctuation         { color: #a0c0d0; }
+.hljs-variable,
+.hljs-template-variable   { color: #f0c060; }
+.hljs-meta                { color: #ff7080; }                      /* decorators, @ */
+.hljs-deletion            { background: rgba(255, 80, 80, 0.18); }
+.hljs-addition            { background: rgba(80, 220, 120, 0.18); }
+.hljs-emphasis            { font-style: italic; }
+.hljs-strong              { font-weight: bold; }
+
 /* ── Trace full-screen modal (code + viz side-by-side) ───────────── */
 .iv-trace-fs {
   position: fixed; inset: 0; z-index: 10001;

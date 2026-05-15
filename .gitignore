@@ -2,3 +2,7 @@
 # at any time via `python IQ/PP/extract.py`, so we don't ship them.
 IQ/PP/slides/
 IQ/PP/extracted.json
+
+# Microsoft Office lock files (Word/Excel/PowerPoint creates ~$* files
+# while the document is open). Strictly per-machine — never commit.
+~$*
