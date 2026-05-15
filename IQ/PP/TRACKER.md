@@ -40,11 +40,11 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 30 | קוד | 13 | `code_s13_1.png` | algorithms | 8013 | done | Random7 from Random5 — 5×5 rejection sampling |
 | 31 | קוד | 14 | `code_s14_1.png` | algorithms | 8014 | done | Topological sort from "<" pairs — Kahn's algorithm |
 | 32 | קוד | 15 | `code_s15_1.png` | algorithms | 8015 | done | Bitwise multiply — shift & add + add_bits helper |
-| 33 | קוד | 16 | `code_s16_1.png` | algorithms | 8016 | pending | |
-| 34 | קוד | 17 | `code_s17_1.png` | algorithms | 8017 | pending | |
-| 35 | קוד | 18 | `code_s18_1.png` | algorithms | 8018 | pending | |
-| 36 | קוד | 19 | `code_s19_1.png` | algorithms | 8019 | pending | |
-| 37 | קוד | 20 | `code_s20_1.png` | algorithms | 8020 | pending | |
+| 33 | קוד | 16 | `code_s16_1.png` | algorithms | 8016 | done | Cyclic right shift — reverse trick (+trace) |
+| 34 | קוד | 17 | `code_s17_1.png` | algorithms | 8017 | done | Low-ones bit pattern check — `(v & (v+1)) == 0` |
+| 35 | קוד | 18 | `code_s18_1.png` | algorithms | 8018 | done | Error-rate monitor — sliding-window over 1ms ticks |
+| 36 | קוד | 19 | `code_s19_1.png` | algorithms | 8019 | done | "if-less" flip — subtraction / XOR / midpoint |
+| 37 | קוד | 20 | `code_s20_1.png` | algorithms | 8020 | done | Max profit stock — single-pass min/best (+trace) |
 | 38 | קוד | 21 | `code_s21_1.png` | algorithms | 8021 | pending | |
 | 39 | קוד | 22 | `code_s22_1.png` | algorithms | 8022 | pending | |
 | 40 | קוד | 23 | `code_s23_1.png` | algorithms | 8023 | pending | |

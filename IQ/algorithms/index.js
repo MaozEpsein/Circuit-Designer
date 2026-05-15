@@ -1026,6 +1026,496 @@ function _dcSwaps(width, step) {
   return swaps;
 }
 
+// ─── Low-ones-pattern SVG (8017) — three bit-rows: v / v+1 / AND ────
+function _lowOnesSvg({ v, label, valid }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const width = 16;
+  const CELL = 36, CELL_H = 38;
+  const W = Math.max(700, width * CELL + 220);
+  const rowGap = 60;
+  const rowsY = [120, 120 + rowGap, 120 + 2 * rowGap];
+  const left = (W - width * CELL) / 2;
+  const done = valid !== undefined;
+
+  const toBits = (x) => Array.from({ length: width }, (_, i) => (x >>> (width - 1 - i)) & 1);
+  const bitsV    = toBits(v);
+  const bitsPlus = toBits((v + 1) & ((1 << width) - 1));
+  const bitsAnd  = toBits((v & (v + 1)) & ((1 << width) - 1));
+  const allZeros = bitsAnd.every(b => b === 0);
+
+  const renderRow = (bits, y, lab, accent) => `
+    <text x="${left - 14}" y="${y + CELL_H / 2 + 5}" text-anchor="end"
+          font-family="'JetBrains Mono', monospace" font-size="16"
+          fill="${accent}" font-weight="bold">${lab}</text>
+    ${bits.map((bit, i) => `
+      <g style="animation: ${D.animPop} 200ms ${i * 12}ms both;">
+        <rect x="${left + i * CELL + 2}" y="${y}" width="${CELL - 4}" height="${CELL_H}" rx="5"
+              fill="${D.idleGrad}" stroke="${bit ? accent : '#3a5575'}" stroke-width="${bit ? 2 : 1.2}"/>
+        <text x="${left + i * CELL + CELL / 2}" y="${y + 26}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold"
+              fill="${bit ? accent : '#5a7090'}">${bit}</text>
+      </g>`).join('')}`;
+
+  const verdict = done ? `
+    <g style="animation: ${D.animFade} 380ms 200ms both;">
+      <rect x="${W - 200}" y="100" width="160" height="60" rx="12"
+            fill="${valid ? D.matchGrad : '#2a1010'}" stroke="${valid ? '#ffd060' : '#ff6060'}" stroke-width="3"
+            filter="${D.glowGold}"/>
+      <text x="${W - 120}" y="124" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="13"
+            fill="${valid ? '#ffd060' : '#ff6060'}" font-weight="bold" letter-spacing="2">RESULT</text>
+      <text x="${W - 120}" y="150" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold"
+            fill="${valid ? '#fff0c0' : '#ffa0a0'}">${valid ? 'True' : 'False'}</text>
+    </g>` : '';
+
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? (valid ? D.bannerGold : '#2a1010') : D.bannerCyan}"
+            stroke="${done ? (valid ? '#ffd060' : '#ff6060') : '#80d4ff'}" stroke-width="2"
+            filter="${D.glowGold}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? (valid ? '#ffd060' : '#ff6060') : '#80d4ff'}" font-weight="bold" letter-spacing="1">${label}</text>
+    </g>`;
+
+  const H_ = rowsY[2] + CELL_H + 30;
+  return `<svg viewBox="0 0 ${W} ${H_}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${verdict}
+    ${renderRow(bitsV,    rowsY[0], 'v',    '#80f0a0')}
+    ${renderRow(bitsPlus, rowsY[1], 'v+1',  '#80d4ff')}
+    ${renderRow(bitsAnd,  rowsY[2], 'AND',  allZeros ? '#80f0a0' : '#ff6060')}
+  </svg>`;
+}
+
+// ─── Flip SVG (8019) — input → two formula paths → outputs ──────────
+function _flipSvg({ x, sub, xor, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 800, H = 360;
+
+  const card = (lab, val, x0, y, accent, glow) => `
+    <g style="animation: ${D.animPop} 280ms both;">
+      <rect x="${x0}" y="${y}" width="160" height="80" rx="12"
+            fill="${glow ? D.matchGrad : D.idleGrad}"
+            stroke="${accent}" stroke-width="${glow ? 3 : 1.6}"
+            ${glow ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${x0 + 80}" y="${y + 22}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="13"
+            fill="${accent}" font-weight="bold" letter-spacing="2">${lab}</text>
+      <text x="${x0 + 80}" y="${y + 60}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="32" font-weight="bold"
+            fill="#fff0c0">${val}</text>
+    </g>`;
+
+  const input  = card('INPUT  x',  x,   80,  140, '#80d4ff', false);
+  const subOut = card('20 − x',    sub, 560, 80,  '#80f0a0', done);
+  const xorOut = card('17 ^ 3 ^ x', xor, 560, 220, '#a060ff', done);
+
+  const arrow = (x1, y1, x2, y2, color, txt) => `
+    <g style="animation: ${D.animFade} 460ms 200ms both;">
+      <path d="M ${x1} ${y1} C ${(x1 + x2) / 2} ${y1}, ${(x1 + x2) / 2} ${y2}, ${x2} ${y2}"
+            stroke="${color}" stroke-width="2.5" fill="none"
+            stroke-dasharray="6 4"
+            filter="${D.glowCyan}"
+            marker-end="${D.arrowCyan}"
+            style="animation: ${D.animDash} 1.4s linear infinite;"/>
+      <text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="14"
+            fill="${color}" font-weight="bold">${txt}</text>
+    </g>`;
+
+  const arrows = `
+    ${arrow(240, 165, 560, 120, '#80f0a0', '20 − x')}
+    ${arrow(240, 185, 560, 260, '#a060ff', '17 ^ 3 ^ x')}`;
+
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 220}" y="14" width="440" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        flip(${x})  →  ${sub}   ${done ? '✓' : ''}
+      </text>
+    </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${input}
+    ${subOut}
+    ${xorOut}
+    ${arrows}
+  </svg>`;
+}
+
+// ─── Error-monitor SVG — ms-scale timeline + deque + faulty flag ────
+// Mirrors the structure of _rateLimiterSvg but tuned to the
+// 1ms-tick / 1000ms-window scenario of 8018 (and labeled "FAULTY"
+// instead of "SUSPECT" to keep the questions visually distinct).
+function _errorMonitorSvg({ nowMs, errors, faulty, justArrived, justDropped, subtitle, bannerOverride }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 900, H = 360;
+  const WINDOW = 1000;       // ms
+  const THRESHOLD = 10;
+  const tMax = 1500;
+  const axisLeft = 60, axisRight = W - 100, axisY = 175;
+  const pxPerMs = (axisRight - axisLeft) / tMax;
+  const xOf = (t) => axisLeft + t * pxPerMs;
+
+  const inWindow = (errors || []).filter(t => t > nowMs - WINDOW && t <= nowMs);
+  const count = inWindow.length;
+  const overThreshold = count > THRESHOLD;
+  const isFaulty = faulty || overThreshold;
+  const banner = bannerOverride || (isFaulty ? 'FAULTY  ⚠' : 'monitoring…');
+  const arrivedSet = new Set(Array.isArray(justArrived) ? justArrived : (justArrived != null ? [justArrived] : []));
+  const droppedSet = new Set(Array.isArray(justDropped) ? justDropped : (justDropped != null ? [justDropped] : []));
+
+  // Sliding window rectangle
+  const wLo = Math.max(0, nowMs - WINDOW);
+  const wX  = xOf(wLo);
+  const wW  = xOf(nowMs) - wX;
+  const windowRect = `
+    <rect x="${wX}" y="${axisY - 60}" width="${wW}" height="80" rx="6"
+          fill="${isFaulty ? D.matchGrad : D.curGrad}"
+          stroke="${isFaulty ? '#ffd060' : '#39ff80'}" stroke-width="1.6"
+          opacity="0.55"
+          filter="${isFaulty ? D.glowGold : D.glowCyan}"
+          style="animation: ${D.animFade} 320ms both;"/>
+    <text x="${wX + wW / 2}" y="${axisY - 66}" text-anchor="middle"
+          font-family="'JetBrains Mono', monospace" font-size="13"
+          fill="${isFaulty ? '#ffd060' : '#80f0a0'}" font-weight="bold">
+      sliding window (1000ms)
+    </text>`;
+
+  // Axis line + tick marks every 100ms (extra label every 500ms)
+  const ticks = [];
+  for (let t = 0; t <= tMax; t += 100) {
+    const x = xOf(t);
+    const big = t % 500 === 0;
+    ticks.push(`
+      <line x1="${x}" y1="${axisY}" x2="${x}" y2="${axisY + (big ? 8 : 4)}"
+            stroke="${big ? '#7090b0' : '#4a6080'}" stroke-width="1"/>
+      ${big ? `<text x="${x}" y="${axisY + 24}" text-anchor="middle"
+                     font-family="'JetBrains Mono', monospace" font-size="12"
+                     fill="#7090b0">${t}ms</text>` : ''}`);
+  }
+  const axisLine = `<line x1="${axisLeft}" y1="${axisY}" x2="${axisRight}" y2="${axisY}" stroke="#4a6080" stroke-width="2"/>`;
+  const nowMarker = `
+    <g style="animation: ${D.animFade} 280ms both;">
+      <line x1="${xOf(nowMs)}" y1="${axisY - 70}" x2="${xOf(nowMs)}" y2="${axisY + 30}"
+            stroke="${isFaulty ? '#ffd060' : '#39ff80'}" stroke-width="2.5" stroke-dasharray="4 3"/>
+      <text x="${xOf(nowMs)}" y="${axisY + 44}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="14"
+            fill="${isFaulty ? '#ffd060' : '#80f0a0'}" font-weight="bold">now=${nowMs}ms</text>
+    </g>`;
+
+  // Error events — short red bars above the axis
+  const all = Array.from(new Set([...(errors || []), ...droppedSet])).sort((a, b) => a - b);
+  const dots = all.map((t, i) => {
+    const inside = t > nowMs - WINDOW && t <= nowMs;
+    const arrived = arrivedSet.has(t);
+    const dropped = droppedSet.has(t);
+    const x = xOf(t);
+    let r = 5, color = '#4a5a70', filterAttr = '', extra = '';
+    if (arrived) {
+      r = 9;
+      color = '#ffd060';
+      filterAttr = `filter="${D.glowGold}"`;
+      extra = `<text x="${x}" y="${axisY - 46}" text-anchor="middle"
+                     font-family="'JetBrains Mono', monospace" font-size="13"
+                     fill="#ffd060" font-weight="bold">+err</text>`;
+    } else if (dropped) {
+      color = '#5a3030';
+      extra = `<line x1="${x - 6}" y1="${axisY - 27}" x2="${x + 6}" y2="${axisY - 13}" stroke="#a05050" stroke-width="2"/>`;
+    } else if (inside) {
+      color = isFaulty ? '#ffd060' : '#ff7060';
+      filterAttr = `filter="${isFaulty ? D.glowGold : D.glowCyan}"`;
+    }
+    return `
+      <g style="animation: ${D.animPop} 220ms ${i * 10}ms both;">
+        <circle cx="${x}" cy="${axisY - 24}" r="${r}" fill="${color}"
+                stroke="#0a1828" stroke-width="1.5" ${filterAttr}/>
+        ${extra}
+      </g>`;
+  }).join('');
+
+  // Counter card
+  const cardX = W - 150, cardY = 95;
+  const counterCard = `
+    <g style="animation: ${D.animFade} 320ms both;">
+      <rect x="${cardX}" y="${cardY}" width="120" height="58" rx="8"
+            fill="${isFaulty ? D.matchGrad : D.idleGrad}"
+            stroke="${isFaulty ? '#ffd060' : '#3a5575'}" stroke-width="${isFaulty ? 3 : 1.5}"
+            ${isFaulty ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${cardX + 60}" y="${cardY + 18}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="12"
+            fill="${isFaulty ? '#ffd060' : '#80a0c0'}" font-weight="bold" letter-spacing="2">ERRORS</text>
+      <text x="${cardX + 60}" y="${cardY + 47}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="24" font-weight="bold"
+            fill="${overThreshold ? '#ffd060' : (isFaulty ? '#ffd060' : '#ff7060')}">${count} / ${THRESHOLD}</text>
+    </g>`;
+
+  // Deque chips with index numbers (so the popleft dynamics are visible)
+  const dequeY = 245;
+  const chipsLeft = 40 + 14;
+  const availW = W - 80 - 28;
+  const chipW = Math.max(46, Math.min(78, availW / Math.max(1, inWindow.length)));
+  const chipsHtml = inWindow.length === 0
+    ? `<text x="${chipsLeft}" y="${dequeY + 30}" font-family="'JetBrains Mono', monospace"
+            font-size="16" fill="#5a7090" font-style="italic">(empty)</text>`
+    : inWindow.map((t, i) => {
+        const x = chipsLeft + i * (chipW + 4);
+        const isNew = arrivedSet.has(t);
+        const stroke = isNew ? '#ffd060' : (isFaulty ? '#ffd060' : '#ff7060');
+        return `
+          <g style="animation: ${D.animSlide} 280ms ${i * 30}ms both;">
+            <text x="${x + chipW / 2}" y="${dequeY - 6}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="11"
+                  fill="${isNew ? '#ffd060' : '#7090b0'}" font-weight="bold">
+              ${isNew ? 'NEW' : `[${i}]`}
+            </text>
+            <rect x="${x}" y="${dequeY}" width="${chipW}" height="40" rx="6"
+                  fill="${isNew ? D.matchGrad : D.chipGrad}"
+                  stroke="${stroke}" stroke-width="${isNew ? 2.8 : 1.5}"
+                  ${isNew || isFaulty ? `filter="${D.glowGold}"` : ''}/>
+            <text x="${x + chipW / 2}" y="${dequeY + 25}" text-anchor="middle"
+                  font-family="'JetBrains Mono', monospace" font-size="15" font-weight="bold"
+                  fill="${isNew ? '#fff0c0' : (isFaulty ? '#fff0c0' : '#ffb8a8')}">${t}ms</text>
+          </g>`;
+      }).join('');
+
+  const dequeLabel = `<text x="40" y="${dequeY + 25}"
+                           font-family="'JetBrains Mono', monospace" font-size="14"
+                           fill="#80a0c0" font-weight="bold" letter-spacing="1">deque →</text>`;
+
+  // Drops note (separate row beneath the deque)
+  const dropsY = dequeY + 60;
+  const drops = droppedSet.size > 0
+    ? `<text x="${chipsLeft}" y="${dropsY}" font-family="'JetBrains Mono', monospace"
+             font-size="13" fill="#a05050">expired this step:
+        <tspan fill="#a05050" font-weight="bold"> [${Array.from(droppedSet).map(t => `${t}ms`).join(', ')}]</tspan>
+       </text>`
+    : '';
+
+  // Top banner
+  const bannerHtml = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 180}" y="14" width="360" height="42" rx="21"
+            fill="${isFaulty ? D.bannerGold : D.bannerCyan}"
+            stroke="${isFaulty ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${isFaulty ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="19"
+            fill="${isFaulty ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">${banner}</text>
+    </g>`;
+  const sub = subtitle ? `
+    <text x="${W/2}" y="80" text-anchor="middle"
+          font-family="'JetBrains Mono', monospace" font-size="14"
+          fill="#80a0c0" font-style="italic">${subtitle}</text>` : '';
+
+  return `<svg viewBox="0 0 ${W} ${H + 30}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${bannerHtml}
+    ${sub}
+    ${counterCard}
+    ${windowRect}
+    ${axisLine}
+    ${ticks.join('')}
+    ${dots}
+    ${nowMarker}
+    ${dequeLabel}
+    ${chipsHtml}
+    ${drops}
+  </svg>`;
+}
+
+// ─── Cyclic-shift SVG — array snapshot with highlighted slice ───────
+// Used by 8016 to walk the reverse-reverse-reverse trick.
+//   arr      : current array values
+//   hlLo/hi  : range [hlLo, hlHi) that was reversed THIS step
+//   label    : banner text
+//   done     : final-frame flag
+function _cyclicShiftSvg({ arr, hlLo, hlHi, label, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const CELL = 76, CELL_H = 64;
+  const n = arr.length;
+  const W = Math.max(720, n * CELL + 120);
+  const rowY = 110;
+  const left = (W - n * CELL) / 2;
+
+  const cells = arr.map((v, i) => {
+    const inHl = hlLo != null && i >= hlLo && i < hlHi;
+    const stroke = inHl ? (done ? '#ffd060' : '#39ff80') : '#3a5575';
+    const fill   = inHl ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = inHl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    const valColor = inHl ? (done ? '#fff0c0' : '#c8f8d0') : '#e8f0fa';
+    return `
+      <g style="animation: ${D.animPop} 240ms ${i * 25}ms both;">
+        <text x="${left + i * CELL + CELL / 2}" y="${rowY - 14}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#7090b0">[${i}]</text>
+        <rect x="${left + i * CELL + 4}" y="${rowY}" width="${CELL - 8}" height="${CELL_H}" rx="10"
+              fill="${fill}" stroke="${stroke}" stroke-width="${inHl ? 2.6 : 1.4}" ${filter}/>
+        <text x="${left + i * CELL + CELL / 2}" y="${rowY + 42}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+              fill="${valColor}">${v}</text>
+      </g>`;
+  }).join('');
+
+  // Show a curved double-headed arrow under the highlighted slice to
+  // hint at "reverse this range".
+  let arc = '';
+  if (hlLo != null && hlHi - hlLo > 1) {
+    const xL = left + hlLo * CELL + CELL / 2;
+    const xR = left + (hlHi - 1) * CELL + CELL / 2;
+    const arcY = rowY + CELL_H + 28;
+    arc = `
+      <g style="animation: ${D.animFade} 420ms both;">
+        <path d="M ${xL} ${rowY + CELL_H + 4} C ${xL} ${arcY + 18}, ${xR} ${arcY + 18}, ${xR} ${rowY + CELL_H + 4}"
+              stroke="${done ? '#ffd060' : '#80f0a0'}" stroke-width="2.5" fill="none"
+              stroke-dasharray="8 4"
+              filter="${done ? D.glowGold : D.glowCyan}"
+              style="animation: ${D.animDash} 1.4s linear infinite;"
+              marker-end="${done ? D.arrowGold : D.arrowCyan}"/>
+        <text x="${(xL + xR) / 2}" y="${arcY + 26}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="15"
+              fill="${done ? '#ffd060' : '#80f0a0'}" font-weight="bold">reverse [${hlLo}, ${hlHi})</text>
+      </g>`;
+  }
+
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 260}" y="14" width="520" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="18"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + label : label}
+      </text>
+    </g>`;
+
+  const H = rowY + CELL_H + (arc ? 90 : 40);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${cells}
+    ${arc}
+  </svg>`;
+}
+
+// ─── Max-profit SVG — price chart + min/best markers ────────────────
+// Used by 8020 to walk through the single-pass max-profit scan.
+//   prices    : array of daily prices
+//   day       : current day index
+//   minSoFar  : running min price up to `day` inclusive
+//   minIdx    : which day `minSoFar` came from
+//   best      : best profit so far
+//   bestBuy   : day we'd buy for the running-best profit
+//   bestSell  : day we'd sell for it
+//   done      : final-frame flag
+function _maxProfitSvg({ prices, day, minSoFar, minIdx, best, bestBuy, bestSell, done }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const n = prices.length;
+  const W = Math.max(820, n * 80 + 120);
+  const chartTop = 100, chartH = 240;
+  const chartLeft = 60, chartRight = W - 60;
+  const maxP = Math.max(...prices);
+  const barW = (chartRight - chartLeft) / n - 8;
+  const yOf = (p) => chartTop + chartH - (p / maxP) * (chartH - 20);
+
+  // Bars
+  const bars = prices.map((p, i) => {
+    const x = chartLeft + i * ((chartRight - chartLeft) / n) + 4;
+    const y = yOf(p);
+    const h = chartTop + chartH - y;
+    const isCur = i === day;
+    const isMin = i === minIdx;
+    const isBuy = done && i === bestBuy;
+    const isSell = done && i === bestSell;
+    let stroke = '#3a5575', fill = D.idleGrad, filter = '', label = '';
+    if (isBuy) { stroke = '#39ff80'; fill = D.curGrad; filter = `filter="${D.glowCyan}"`; label = 'BUY'; }
+    if (isSell) { stroke = '#ffd060'; fill = D.matchGrad; filter = `filter="${D.glowGold}"`; label = 'SELL'; }
+    if (isCur && !done)  { stroke = '#80d4ff'; fill = D.curGrad; filter = `filter="${D.glowCyan}"`; }
+    if (isMin && !done && !isCur) { stroke = '#a060ff'; fill = '#1a1030'; }
+    return `
+      <g style="animation: ${D.animPop} 240ms ${i * 30}ms both;">
+        <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3"
+              fill="${fill}" stroke="${stroke}" stroke-width="${(isCur || isBuy || isSell) ? 2.6 : 1.4}" ${filter}/>
+        <text x="${x + barW / 2}" y="${y - 8}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="16" font-weight="bold"
+              fill="${isBuy ? '#80f0a0' : (isSell ? '#ffd060' : (isCur ? '#80d4ff' : '#a0c0d0'))}">${p}</text>
+        <text x="${x + barW / 2}" y="${chartTop + chartH + 18}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="12"
+              fill="#7090b0">day ${i}</text>
+        ${label ? `<text x="${x + barW / 2}" y="${chartTop + chartH + 36}" text-anchor="middle"
+                         font-family="'JetBrains Mono', monospace" font-size="13" font-weight="bold"
+                         fill="${isBuy ? '#80f0a0' : '#ffd060'}">${label}</text>` : ''}
+      </g>`;
+  }).join('');
+
+  // Min marker (dashed horizontal line)
+  const minMarker = minSoFar != null ? `
+    <g style="animation: ${D.animFade} 380ms both;">
+      <line x1="${chartLeft}" y1="${yOf(minSoFar)}" x2="${chartRight}" y2="${yOf(minSoFar)}"
+            stroke="#a060ff" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.7"/>
+      <text x="${chartLeft - 8}" y="${yOf(minSoFar) + 5}" text-anchor="end"
+            font-family="'JetBrains Mono', monospace" font-size="13"
+            fill="#c090ff" font-weight="bold">min = ${minSoFar}</text>
+    </g>` : '';
+
+  // Best profit card
+  const cardX = W - 180, cardY = 100;
+  const card = `
+    <g style="animation: ${D.animFade} 320ms both;">
+      <rect x="${cardX}" y="${cardY}" width="160" height="70" rx="12"
+            fill="${done ? D.matchGrad : D.idleGrad}"
+            stroke="${done ? '#ffd060' : '#3a5575'}" stroke-width="${done ? 3 : 1.5}"
+            ${done ? `filter="${D.glowGold}"` : ''}/>
+      <text x="${cardX + 80}" y="${cardY + 22}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="13"
+            fill="${done ? '#ffd060' : '#80a0c0'}" font-weight="bold" letter-spacing="2">BEST PROFIT</text>
+      <text x="${cardX + 80}" y="${cardY + 56}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="30" font-weight="bold"
+            fill="${done ? '#ffd060' : '#80f0a0'}">$${best}</text>
+    </g>`;
+
+  const bannerText = done
+    ? `✓ buy@day ${bestBuy} ($${prices[bestBuy]}), sell@day ${bestSell} ($${prices[bestSell]})  →  $${best}`
+    : `day ${day}: price = $${prices[day]}, profit-if-sell-now = $${prices[day] - minSoFar}`;
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 320}" y="14" width="640" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">${bannerText}</text>
+    </g>`;
+
+  const H = chartTop + chartH + 60;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${card}
+    ${bars}
+    ${minMarker}
+  </svg>`;
+}
+
 // ─── Bit-reverse SVG — 1 or 2 rows of bit cells with swap arrows ────
 // Used by the three parts of 8012 (byte naive / byte D&C / register).
 //   bitsBefore : array of 8 (or N) ints (0 or 1) — pre-step state
@@ -4741,5 +5231,825 @@ def multiply(a, b):
     ],
     source: 'PP - שאלות קוד (slide 15)',
     tags: ['algorithms', 'bit-manipulation', 'multiplication', 'shift-and-add', 'hardware', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8016 — Cyclic right shift (reverse trick)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'cyclic-right-shift',
+    difficulty: 'medium',
+    title: 'הזזה ציקלית ימינה — Reverse Trick',
+    intro:
+`נתון מערך \`arr\` בגודל \`N\` ומספר שלם \`t\`. כתבו פונקציה (pseudo-code
+או Python) שמבצעת **הזזה ציקלית ימינה ב-\`t\` מקומות** במערך.
+
+\`\`\`
+arr = [1, 2, 3, 4, 5, 6],  t = 1   →   [6, 1, 2, 3, 4, 5]
+arr = [1, 2, 3, 4, 5, 6],  t = 2   →   [5, 6, 1, 2, 3, 4]
+\`\`\`
+
+**אילוץ:** \`O(N)\` זמן, \`O(1)\` זיכרון נוסף.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(N)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Naive — t shifts של מקום אחד',
+            time: 'O(N·t)', space: 'O(1)',
+            summary: 'מבצעים הזזה ימינה במקום אחד, \\\`t\\\` פעמים. פשוט אבל איטי.',
+            code:
+`def shift_naive(arr, t):
+    n = len(arr)
+    for _ in range(t):
+        last = arr[-1]
+        for i in range(n - 1, 0, -1):
+            arr[i] = arr[i - 1]
+        arr[0] = last`,
+          },
+          {
+            name: 'Extra buffer — O(N) זמן, O(N) זיכרון',
+            time: 'O(N)', space: 'O(N)',
+            summary: 'מערך עזר. \\\`buf[(i + t) % N] = arr[i]\\\`. פשוט מאוד.',
+            code:
+`def shift_buf(arr, t):
+    n = len(arr)
+    t %= n
+    buf = [0] * n
+    for i in range(n):
+        buf[(i + t) % n] = arr[i]
+    arr[:] = buf`,
+          },
+          {
+            name: 'Reverse trick — O(N) זמן, O(1) זיכרון',
+            time: 'O(N)', space: 'O(1)',
+            summary: '**3 היפוכים** במקום: כל המערך, \\\`t\\\` האיברים הראשונים, ה-\\\`N-t\\\` הנותרים.',
+            code:
+`def shift_inplace(arr, t):
+    n = len(arr)
+    t %= n
+    def rev(lo, hi):
+        while lo < hi:
+            arr[lo], arr[hi] = arr[hi], arr[lo]
+            lo += 1; hi -= 1
+    rev(0, n - 1)           # היפוך הכל
+    rev(0, t - 1)            # היפוך t הראשונים
+    rev(t, n - 1)            # היפוך השאר`,
+          },
+        ],
+        trace: {
+          title: 'Cyclic right-shift — reverse trick על arr=[1,2,3,4,5,6], t=2',
+          steps: [
+            {
+              code: 'init: arr = [1, 2, 3, 4, 5, 6],  t = 2',
+              explain: '**יעד:** הזזה ימינה ב-2 → \\\`[5, 6, 1, 2, 3, 4]\\\`. הרעיון: 3 היפוכים במקום הם O(N) זמן ו-O(1) מקום נוסף.',
+              viz: _cyclicShiftSvg({ arr: [1,2,3,4,5,6], label: 'init — shift right by t=2' }),
+            },
+            {
+              code: 'step 1: reverse(0, n-1)',
+              explain: 'הופכים את **כל המערך**: \\\`[1,2,3,4,5,6]\\\` → \\\`[6,5,4,3,2,1]\\\`. עכשיו \\\`t\\\` האיברים שהיו אמורים להגיע ל"רוץ" עכשיו ב-prefix.',
+              viz: _cyclicShiftSvg({ arr: [6,5,4,3,2,1], hlLo: 0, hlHi: 6, label: 'step 1 — reverse whole array' }),
+            },
+            {
+              code: 'step 2: reverse(0, t-1) → reverse(0, 1)',
+              explain: 'הופכים את \\\`t\\\` האיברים הראשונים: \\\`[6,5,...]\\\` → \\\`[5,6,...]\\\`. עכשיו הם בסדר הנכון.',
+              viz: _cyclicShiftSvg({ arr: [5,6,4,3,2,1], hlLo: 0, hlHi: 2, label: 'step 2 — reverse first t=2 elements' }),
+            },
+            {
+              code: 'step 3: reverse(t, n-1) → reverse(2, 5)',
+              explain: 'הופכים את \\\`N-t\\\` האיברים הנותרים: \\\`[...,4,3,2,1]\\\` → \\\`[...,1,2,3,4]\\\`. **תוצאה: \\\`[5,6,1,2,3,4]\\\`** ✓',
+              viz: _cyclicShiftSvg({ arr: [5,6,1,2,3,4], hlLo: 2, hlHi: 6, label: 'step 3 — reverse remaining N-t = 4', done: true }),
+            },
+          ],
+        },
+        starterCode:
+`def shift_right(arr, t):
+    """Cyclic right-shift by t positions. In-place, O(N) time, O(1) space.
+    Use the reverse-three-times trick."""
+    # TODO
+    pass
+
+
+# arr = [1, 2, 3, 4, 5, 6]
+# shift_right(arr, 2)
+# print(arr)   # [5, 6, 1, 2, 3, 4]
+`,
+        question:
+`ממשו את \`shift_right(arr, t)\` בשלוש דרכים מסיבוכיות עולה: O(N·t), O(N) זמן+מקום, ו-O(N) זמן + O(1) מקום (reverse trick).`,
+        hints: [
+          'איך 3 פעולות שכל אחת היא O(N) יכולות להחליף את מה שנראה כמו "הזזה ארוכה" של t איברים?',
+          'הפיכת כל המערך מעבירה את \\\`t\\\` האחרונים לראש (אבל בסדר הפוך). מי "מסדר" אותם בחזרה?',
+          'reverse(הכל) → reverse(prefix של t) → reverse(suffix של n-t). היפוך כפול = זהות, אבל בקטעים שונים.',
+        ],
+        answer:
+`**Reverse-three-times trick.** O(N) זמן ו-O(1) מקום.
+
+**למה זה עובד?**
+
+נסמן את המערך כ-\`A B\` כש-\`A\` הוא \`n-t\` האיברים הראשונים ו-\`B\` הם \`t\` האחרונים. רוצים לקבל \`B A\`.
+
+\`\`\`
+[A | B]                  ← המקורי
+[B' | A']                ← אחרי reverse של כל המערך (B' = B הפוך, A' = A הפוך)
+[B | A']                 ← אחרי reverse של ה-t הראשונים (מבטל את ה-')
+[B | A]                  ← אחרי reverse של ה-n-t האחרונים  ✓
+\`\`\`
+
+**\`t %= n\`** קריטי בתחילה — אם \`t > n\` שיני-הזזה ממחזרות, ובכל מקרה \`t\` ו-\`t + n\` נותנים אותה תוצאה.
+
+---
+
+**שלבי החשיבה:**
+
+1. **3 היפוכים = הזזה ציקלית.** זה לא ברור מאליו — קופצים מ"חיבור" (shift) ל"כפל" (reverses).
+2. **\`t %= n\` בתחילה** — חשוב במיוחד אם \`t\` יכול להיות גדול מאוד. \`t = N + 5\` שווה ל-\`t = 5\`.
+3. **שלוש פעולות O(N) → סיבוכיות \`O(3N) = O(N)\`** — אסור לחשוב "3 פעולות = 3× איטי", כי הקבועים נבלעים ב-Big-O.`,
+        interviewerMindset:
+`שאלת מערכים קלאסית. המראיין רוצה לראות:
+
+1. **שאתה לא תקוע על הגישה הנאיבית.** מועמד שכותב לולאה כפולה (\`O(N·t)\`) ולא מציע שיפור — איבד נקודות.
+2. **שאתה יודע את ה-reverse-trick.** זו טכניקה שלימדה אותה Programming Pearls. אם לא מכיר — המראיין רומז: "מה אם נעשה reverses?".
+3. **שאתה דואג ל-\`t %= n\`.** מקרי קצה: \`t = 0\` (no-op), \`t = n\` (זהות), \`t > n\` (modular).
+
+**שאלת המשך:** "מה אם \`t < 0\` (הזזה שמאלית)?" → תשובה: \`t = (t % n + n) % n\` — מנרמל גם שליליים. או: shift_left(arr, |t|) = shift_right(arr, n - |t|).`,
+        expectedAnswers: ['reverse', 'rev(', 'three', 'שלוש', 'O(1)', 't % n', 't %= n'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 16)',
+    tags: ['algorithms', 'array', 'in-place', 'reverse', 'cyclic-shift', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8017 — Check if uint64 is of form 0...01...1 (powers of 2 minus 1)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'check-low-ones-pattern',
+    difficulty: 'medium',
+    title: 'בדיקת תבנית "‎0...0 1...1‎" ב-64 ביט',
+    intro:
+`נדרש לבדוק האם ערך **64-bit unsigned** הוא בעל מבנה כזה: **כל ה-LSB דולקים**
+ברצף עד ביט מסויים, ולאחר מכן **רק אפסים**.
+
+\`\`\`
+Input:  '0...0 1010 1011 0111'   (LSBs לא רצופים)   →   False
+Input:  '0...0 0001 1111 1111'   (10 1-ים רצופים)   →   True
+Input:  '0' (= 0)                                    →   True (טריוויאלי)
+Input:  '0...0 1111 1111' (255)                     →   True
+\`\`\`
+
+**שאלת בונוס:** ההמלצה לפתרון בשורה אחת, **\`O(1)\`** זמן, ללא לולאות.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Naive — מעבר על הביטים',
+            time: 'O(bits) = O(64)', space: 'O(1)',
+            summary: 'סורקים מה-LSB: מצפים ל-1ים רצופים, ואז ל-0ים בלבד.',
+            code:
+`def is_low_ones_naive(v):
+    seen_zero = False
+    for i in range(64):
+        bit = (v >> i) & 1
+        if seen_zero and bit == 1:
+            return False           # 1 אחרי 0 → תבנית שבורה
+        if bit == 0:
+            seen_zero = True
+    return True`,
+          },
+          {
+            name: 'Bit-trick — שורה אחת',
+            time: 'O(1)', space: 'O(1)',
+            summary: '\\\`v & (v+1) == 0\\\`. הוספת 1 לתבנית \\\`...01..1\\\` "שופכת" carry שמאלה וכל ה-1ים מתאפסים; AND-מקודם מאמת.',
+            code:
+`def is_low_ones(v):
+    return (v & (v + 1)) == 0`,
+          },
+        ],
+        starterCode:
+`def is_low_ones(v):
+    """Returns True iff v (uint64) is of the form 0...0 1...1.
+    O(1) bitwise — no loops."""
+    # TODO: one-liner
+    pass
+
+
+# print(is_low_ones(0b111))           # True
+# print(is_low_ones(0b1010_1011_0111))  # False
+# print(is_low_ones(0))                # True
+`,
+        trace: {
+          title: 'Low-ones — bit-trick `v & (v+1) == 0`',
+          steps: [
+            {
+              code: 'v = 0b0000 0000 0000 0111 (= 7)   ← תבנית תקפה',
+              explain: 'דוגמה ראשונה: 3 LSB דולקים רצוף, אחרכך אפסים. v=7. נחשב \\\`v+1\\\` ואחר כך AND.',
+              viz: _lowOnesSvg({ v: 7, label: 'example 1: v = 7 (0b...0111)' }),
+            },
+            {
+              code: 'v + 1 = 0b0000 0000 0000 1000   (carry שטף את ה-1ים)',
+              explain: 'הוספת 1 → carry-propagation: כל ה-1ים הופכים ל-0, וביט חדש מעליהם נדלק.',
+              viz: _lowOnesSvg({ v: 7, label: 'v + 1 = 8 — carry flips low 1s to 0' }),
+            },
+            {
+              code: 'v & (v+1) = 0   →   True',
+              explain: 'אין שום ביט משותף בין \\\`v\\\` ל-\\\`v+1\\\` → AND = 0 → **תבנית תקפה** ✓',
+              viz: _lowOnesSvg({ v: 7, label: 'v & (v+1) = 0  →  is_low_ones(7) = True', valid: true }),
+            },
+            {
+              code: 'v = 0b0000 0000 1010 0111 (= 167)   ← תבנית שבורה',
+              explain: 'דוגמה דחויה: יש 1ים שאינם רצופים מה-LSB (\\\`...1010 0111\\\`).',
+              viz: _lowOnesSvg({ v: 167, label: 'example 2: v = 167 (0b...10100111)' }),
+            },
+            {
+              code: 'v + 1 = 0b0000 0000 1010 1000',
+              explain: 'ה-carry נעצר אחרי 3 הביטים הראשונים בלבד. ביטים גבוהים יותר לא משתנים.',
+              viz: _lowOnesSvg({ v: 167, label: 'v + 1 = 168 — carry stops short' }),
+            },
+            {
+              code: 'v & (v+1) = 0b...1010 0000 ≠ 0   →   False',
+              explain: 'יש ביטים גבוהים משותפים בין \\\`v\\\` ל-\\\`v+1\\\` → AND ≠ 0 → **תבנית שבורה** ✗',
+              viz: _lowOnesSvg({ v: 167, label: 'v & (v+1) ≠ 0  →  is_low_ones(167) = False', valid: false }),
+            },
+          ],
+        },
+        question:
+`ממשו את \`is_low_ones(v)\` בשורה אחת, \`O(1)\` זמן. למה ה-bit-trick \`v & (v+1) == 0\` עובד?`,
+        hints: [
+          'תחשבו על ייצוג בינארי של 7 = \\\`0...0111\\\`. מה קורה כשמוסיפים 1?',
+          'הוספת 1 לתבנית \\\`...01...1\\\` יוצרת carry שעובר על כל ה-1ים ומפעיל ביט חדש: \\\`...10...0\\\`. ה-AND של שני אלה הוא 0.',
+          'בתבנית שבורה (\\\`...10101\\\` למשל), הוספת 1 לא מאפסת את הביטים הגבוהים. \\\`AND ≠ 0\\\`.',
+        ],
+        answer:
+`**Bit-trick קלאסי.** דומה ל-\`n & (n-1) == 0\` לבדיקת חזקת 2 (שאלה #8011) — וריאציה הפוכה.
+
+**למה זה עובד?**
+
+עבור ערך \`v\` בתבנית \`0...0 1...1\` עם \`k\` 1ים רצופים (כלומר \`v = 2^k - 1\`):
+
+\`\`\`
+v     = 0...0 0111 1111   (8 בדוגמה למטה: k=7)
+v + 1 = 0...0 1000 0000    ← ה-carry שטף את כל ה-1ים והדליק ביט חדש
+v & (v+1) = 0...0 0000 0000   ← אין שום ביט משותף → 0 ✓
+\`\`\`
+
+**עבור תבנית שבורה** (\`0...0 1010 1011\` = 171):
+
+\`\`\`
+v     = 1010 1011
+v + 1 = 1010 1100   ← ה-carry נעצר אחרי 2 ביטים (כי יש 0 בדרך)
+v & (v+1) = 1010 1000   ← ביטים גבוהים שורדים → != 0 → False
+\`\`\`
+
+**מקרי קצה:**
+- \`v = 0\`: \`0 & 1 = 0\` → True. תבנית טריוויאלית (אפס 1ים).
+- \`v = 0xFFFFFFFFFFFFFFFF\` (כל 64 הביטים דלוקים): \`v+1 = 0\` ב-uint64 → \`v & 0 = 0\` → True. ✓
+
+---
+
+**שלבי החשיבה:**
+
+1. **תבנית "כל ה-LSB דלוקים" ⇔ \`v = 2^k − 1\`** — לאו דווקא חזקה של 2, אלא \`חזקה של 2 פחות 1\`.
+2. **\`n & (n+1) == 0\` הוא ההפך של \`n & (n-1) == 0\`** — שני המבחנים מבוססים על אותה אינטואיציה של carry-propagation.
+3. **שורה אחת + edge case של 0** — שני אלו דורשים מודעות מצד המועמד.`,
+        interviewerMindset:
+`וריאציה על שאלה #8011 (Power of 2). המראיין רוצה לראות שהמועמד **מבחין בין שני המבחנים** ולא מתבלבל:
+
+| מבחן | תבנית | אינטואיציה |
+|---|---|---|
+| \`n & (n-1) == 0\` | חזקה של 2 (ביט יחיד) | \`n-1\` מאפס את הביט הדלוק |
+| \`n & (n+1) == 0\` | חזקה של 2 פחות 1 (LSB-ones) | \`n+1\` נושף את כל ה-LSB-1ים ומדליק ביט חדש |
+
+מועמד שמערבב בין השניים — איבד נקודות. מועמד שאומר "אני זוכר את \`n & (n-1)\` אבל לא בטוח אם זה \`-1\` או \`+1\` כאן" → המראיין מעריך את ההכרה במגבלה ואז שואל "מה ההבדל?". מועמד שיודע — מקבל את הג'ובת.
+
+**שאלת המשך:** "ואיך לדעת *כמה* 1ים יש (popcount)?" → \`bin(v).count('1')\` ב-Python, או Brian Kernighan: \`c=0; while v: v &= v-1; c+=1\`.`,
+        expectedAnswers: ['v & (v+1)', 'v & (v + 1)', '2^k - 1', '2**k - 1', 'carry', 'LSB'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 17)',
+    tags: ['algorithms', 'bit-manipulation', 'one-liner', 'low-ones', 'carry-propagation', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8018 — Error-rate detector (10 errors / second)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'error-rate-monitor',
+    difficulty: 'medium',
+    title: 'גלאי תקלה — 10 שגיאות בשנייה',
+    intro:
+`נתון רכיב שמקבל שני זרמי-ביטים כל **1ms**: \`clk\` (שעון) ו-\`indicator\`
+(האם הייתה שגיאה הרגע — \`1\` = שגיאה, \`0\` = תקין). המערכת **נחשבת
+תקולה** ברגע שמתקבלות **10 שגיאות בשנייה**. עליכם לבנות לוגיקה שמזהה
+מצב תקלה ויוצאת מ-idle.
+
+\`\`\`
+clk         _|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_
+indicator    0   0   0   1   0   1   0   0   0   1   ...
+                          ↑       ↑               ↑
+\`\`\`
+
+איך תזהו ש**יותר מ-10 שגיאות הצטברו בחלון של 1 שנייה האחרונה**?`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1) per sample' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`from collections import deque
+
+
+class ErrorMonitor:
+    """1000 samples = 1 second window. Faulty when count > THRESHOLD."""
+    WINDOW = 1000      # ms
+    THRESHOLD = 10
+
+    def __init__(self):
+        self.history = deque()  # timestamps of recent error events
+        self.faulty = False
+
+    def tick(self, t_ms, indicator):
+        """Called every 1 ms with current time and indicator bit."""
+        # TODO: maintain sliding window, set self.faulty if > THRESHOLD
+        pass
+`,
+        trace: {
+          title: 'Error monitor — 1ms ticks, 1000ms window',
+          steps: [
+            {
+              code: 't = 0ms — מתחילים מעקב, אין שגיאות',
+              explain: 'ה-monitor מאזין לזרם 1ms-tick. בכל tick מקבל \\\`indicator\\\` (0/1) — אם 1 → מוסיף timestamp. סף: \\\`> 10\\\` שגיאות ב-1000ms → FAULTY.',
+              viz: _errorMonitorSvg({ nowMs: 0, errors: [] }),
+            },
+            {
+              code: 't = 50ms — שגיאה ראשונה',
+              explain: 'הביט indicator=1 הגיע. נדחף לסוף ה-deque. \\\`errors_in_window = 1\\\`.',
+              viz: _errorMonitorSvg({ nowMs: 50, errors: [50], justArrived: [50] }),
+            },
+            {
+              code: 't = 200ms — 3 שגיאות נוספות',
+              explain: 'שגיאות ב-\\\`t=120, 170, 200\\\`. כולן בתוך החלון (0..1000ms). \\\`count = 4\\\`.',
+              viz: _errorMonitorSvg({ nowMs: 200, errors: [50, 120, 170, 200], justArrived: [200] }),
+            },
+            {
+              code: 't = 600ms — 6 שגיאות נוספות, count = 10',
+              explain: 'שגיאות פרצו ב-\\\`t=270, 350, 400, 470, 530, 600\\\`. **\\\`count = 10\\\` — בגבול הסף בדיוק.** עוד אחת תפעיל את הדגל.',
+              viz: _errorMonitorSvg({ nowMs: 600, errors: [50, 120, 170, 200, 270, 350, 400, 470, 530, 600], justArrived: [600] }),
+            },
+            {
+              code: 't = 700ms — שגיאה 11   →   FAULTY!',
+              explain: '\\\`count = 11 > 10\\\` → המערכת נחשבת תקולה. הדגל \\\`faulty\\\` נדלק. הוא **דביק** — לא יוסר גם אם הקצב יפחת.',
+              viz: _errorMonitorSvg({
+                nowMs: 700,
+                errors: [50, 120, 170, 200, 270, 350, 400, 470, 530, 600, 700],
+                justArrived: [700],
+                bannerOverride: 'count > 10  →  FAULTY latched',
+              }),
+            },
+            {
+              code: 't = 1300ms — שגיאות ישנות נופלות',
+              explain: 'החלון \\\`(300, 1300]\\\`. שגיאות מ-\\\`t=50, 120, 170, 200, 270\\\` כבר ישנות מ-1000ms ונדחקו מה-deque. \\\`count = 6\\\` — מתחת לסף, אבל הדגל נשאר.',
+              viz: _errorMonitorSvg({
+                nowMs: 1300,
+                errors: [350, 400, 470, 530, 600, 700],
+                justDropped: [50, 120, 170, 200, 270],
+                faulty: true,
+              }),
+            },
+            {
+              code: 't = 1500ms — הקצב נרגע, אבל ה-flag נשאר',
+              explain: 'יותר drops. \\\`count\\\` ממשיך לרדת. **המערכת עדיין מסומנת תקולה** — אזעקה נשמרת עד אינטרוונציה ידנית. זו ההתנהגות הצפויה ב-fault detection אמיתי.',
+              viz: _errorMonitorSvg({
+                nowMs: 1500,
+                errors: [530, 600, 700],
+                justDropped: [350, 400, 470],
+                faulty: true,
+              }),
+            },
+          ],
+        },
+        trace: {
+          title: 'Error monitor — 1ms ticks עם חלון 1000ms',
+          steps: [
+            {
+              code: 't = 0 ms: ניטור החל, אין שגיאות',
+              explain: 'המערכת מתחילה. כל מ"ש tick: \\\`clk\\\` עולה, ה-\\\`indicator\\\` נדגם. \\\`history\\\` ריק.',
+              viz: _errorMonitorSvg({ nowMs: 0, errors: [], faulty: false, subtitle: 'monitor armed — no events yet' }),
+            },
+            {
+              code: 't = 80 ms: indicator=1 → שגיאה #1',
+              explain: 'הביט הראשון של שגיאה. נדחף ל-\\\`history\\\`. count=1/10.',
+              viz: _errorMonitorSvg({ nowMs: 80, errors: [80], justArrived: [80], faulty: false, subtitle: 'count 1/10' }),
+            },
+            {
+              code: 't = 200 ms: indicator=1 → שגיאה #4',
+              explain: 'הצטברו 4 שגיאות עד עכשיו (\\\`80, 140, 170, 200\\\`). עדיין בטוח מתחת לסף.',
+              viz: _errorMonitorSvg({ nowMs: 200, errors: [80, 140, 170, 200], justArrived: [200], faulty: false, subtitle: 'count 4/10' }),
+            },
+            {
+              code: 't = 400 ms: שגיאה #7',
+              explain: 'הקצב מואץ. 7 שגיאות בתוך 400 מ"ש.',
+              viz: _errorMonitorSvg({ nowMs: 400, errors: [80, 140, 170, 200, 280, 340, 400], justArrived: [400], faulty: false, subtitle: 'count 7/10' }),
+            },
+            {
+              code: 't = 600 ms: שגיאה #10 — על הסף',
+              explain: 'הגענו ל-10 שגיאות בחלון של 1000 מ"ש. **בגבול בדיוק.** עוד אחת ויפעל הדגל.',
+              viz: _errorMonitorSvg({ nowMs: 600, errors: [80, 140, 170, 200, 280, 340, 400, 450, 510, 600], justArrived: [600], faulty: false, subtitle: 'count 10/10 — at threshold' }),
+            },
+            {
+              code: 't = 720 ms: שגיאה #11 → FAULTY!',
+              explain: '\\\`count = 11 > 10\\\` → **הדגל נדלק**. הצבע מתחלף לזהוב, ה-FAULTY מהבהב. הדגל **דביק** — לא יוסר גם אם הקצב יירד.',
+              viz: _errorMonitorSvg({ nowMs: 720, errors: [80, 140, 170, 200, 280, 340, 400, 450, 510, 600, 720], justArrived: [720], faulty: true, subtitle: 'threshold breached — flag latched' }),
+            },
+            {
+              code: 't = 1100 ms: חלון זז — בקשה t=80 נופלת',
+              explain: 'הזמן התקדם. החלון הוא כעת \\\`(100, 1100]\\\`. ה-1 בזמן \\\`t=80\\\` כבר לא בתוכו → \\\`popleft\\\` ל-\\\`history[0]\\\`. count יורד ל-10. הדגל נשאר.',
+              viz: _errorMonitorSvg({ nowMs: 1100, errors: [140, 170, 200, 280, 340, 400, 450, 510, 600, 720], justDropped: [80], faulty: true, subtitle: 'popleft: 80ms expired' }),
+            },
+            {
+              code: 't = 1500 ms: עוד drops, count יורד אך הדגל יציב',
+              explain: 'החלון \\\`(500, 1500]\\\`: שגיאות \\\`140, 170, 200, 280, 340, 400, 450\\\` כבר ישנות מ-1000 מ"ש. נשארו רק \\\`510, 600, 720\\\` = 3 שגיאות. **הדגל נשאר דביק** — ההיסטוריה זוכרת.',
+              viz: _errorMonitorSvg({ nowMs: 1500, errors: [510, 600, 720], justDropped: [140, 170, 200, 280, 340, 400, 450], faulty: true, subtitle: 'count back to 3 — flag stays' }),
+            },
+          ],
+        },
+        question:
+`ממשו את \`ErrorMonitor.tick()\`. למה זה בעצם דומה ל-Rate Limiter (שאלה #8002)?`,
+        hints: [
+          'מי "האיש החשוד" כאן? איזה זרם מתחשב כ-IP?',
+          'באותה דקה (1000ms) — לעקוב אחרי הזמנים של כל ה-1-ים. כש-\\\`indicator=1\\\` → הוסף timestamp לתור.',
+          'בכל קריאה: סלק טיימסטמפים ישנים מ-1000ms, ואז הוסף את הנוכחי אם הוא שגיאה. \\\`len(deque) > 10\\\` → תקול.',
+        ],
+        answer:
+`**Sliding window — אותה תבנית כמו 8002.** עכשיו הזרם הוא ביט-בודד בכל \`1ms\` ולא בקשות מ-IPs שונים, אבל ה-pattern זהה.
+
+\`\`\`python
+from collections import deque
+
+
+class ErrorMonitor:
+    WINDOW = 1000      # ms
+    THRESHOLD = 10
+
+    def __init__(self):
+        self.history = deque()
+        self.faulty = False
+
+    def tick(self, t_ms, indicator):
+        # 1. נקה ישנים — כל timestamp שמחוץ לחלון
+        cutoff = t_ms - self.WINDOW
+        while self.history and self.history[0] < cutoff:
+            self.history.popleft()
+        # 2. רשום שגיאה אם הייתה
+        if indicator == 1:
+            self.history.append(t_ms)
+        # 3. עדכן דגל. sticky: ברגע שהיה תקול, נשאר תקול.
+        if len(self.history) > self.THRESHOLD:
+            self.faulty = True
+\`\`\`
+
+**שלוש פעולות, \`O(1)\` amortized:**
+
+1. **נקה הראש של ה-deque** — כל timestamp עוזב לכל היותר פעם אחת. במצטבר \`O(N)\` לכל ההיסטוריה, אז \`O(1)\` בממוצע לטיק.
+2. **רשום אם שגיאה** — אם \`indicator=1\`, מוסיף \`t_ms\` לסוף.
+3. **בדוק סף** — \`len > 10\` קובע \`faulty=True\`. דביק — לא מתאפס.
+
+**אופטימיזציה אם רוצים faulty לא-דביק:** במקום \`if > THRESHOLD: faulty=True\`, פשוט \`faulty = (len > THRESHOLD)\`. אז כשהשגיאות יוצאות מהחלון, הדגל יורד.
+
+---
+
+**שלבי החשיבה:**
+
+1. **זרם זמן רציף → sliding window.** התבנית הזו מופיעה בכל בעיה מסוג "X אירועים בפרק זמן" — IP rate limiting, fault detection, אנליטיקה.
+2. **\`deque\` ולא \`list\`.** \`popleft\` ב-\`O(1)\`. \`list.pop(0)\` הוא \`O(n)\`.
+3. **Sticky flag** — בדרך כלל מעדיפים sticky כדי לא להחמיץ אירועי תקלה זמניים. אם רוצים non-sticky — מסכימים על "מתאפס אוטומטית אחרי שהחלון מתפנה".`,
+        interviewerMindset:
+`וריאציה על rate limiter. מועמדים שעברו את 8002 צריכים לזהות מיד את התבנית. **הבדלים שכדאי להזכיר:**
+
+1. **קצב דגימה ידוע.** כאן יש \`tick\` כל \`1ms\` בדיוק. אז אפשר להחליף את ה-\`deque\` ב-**מערך מעגלי קבוע** של 1000 ביטים — ספירה ב-popcount. מאוד יעיל בחומרה.
+2. **באמת צריך timestamps?** אם \`tick\` קורה כל \`1ms\` מובטח — מספיק לזכור רק את **מספר השגיאות בחלון**, ומאיפה לחסוק את ה-1000ms הישנים. רעיון: counter + buffer מעגלי של 1000 ביטים.
+3. **דביק או לא?** השאלה לא אומרת. תבחר רציונל ותציין מפורש מה הבחירה והשפעתה.
+
+מועמד מצוין מזכיר את ה-**buffer מעגלי**: זיכרון קבוע של 1000 ביטים, indicator כתוב לפי \`t_ms % 1000\`, popcount של ה-buffer = ספירה. עדיף ב-hardware. גישה זו פותרת גם sticky/non-sticky בפשטות.`,
+        expectedAnswers: ['deque', 'sliding window', 'popleft', 'WINDOW = 1000', 'THRESHOLD = 10', 'cutoff'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 18)',
+    tags: ['algorithms', 'sliding-window', 'deque', 'fault-detection', 'streaming', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8019 — Implement "if" — flip two values without conditional
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'flip-without-if',
+    difficulty: 'easy',
+    title: '"if" מבלי if — החלפת 17 ⇄ 3',
+    intro:
+`כתבו פונקציה ב-Python שמקבלת \`17\` ומחזירה \`3\`, ולהפך —
+מקבלת \`3\` ומחזירה \`17\`. **ללא שימוש ב-\`if\`** ובלי \`?:\` (אם זמין).
+
+\`\`\`
+Input: 17    Output: 3
+Input: 3     Output: 17
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'חיבור-חיסור',
+            time: 'O(1)', space: 'O(1)',
+            summary: '\\\`17 + 3 = 20\\\`. אם \\\`x = 17\\\` ⇒ \\\`20 - 17 = 3\\\`. אם \\\`x = 3\\\` ⇒ \\\`20 - 3 = 17\\\`.',
+            code:
+`def flip_sub(x):
+    return 20 - x`,
+          },
+          {
+            name: 'XOR',
+            time: 'O(1)', space: 'O(1)',
+            summary: '\\\`a ⊕ b ⊕ a = b\\\` (כי \\\`a ⊕ a = 0\\\`). פעולה דו-כיוונית טבעית.',
+            code:
+`def flip_xor(x):
+    return 17 ^ 3 ^ x       # = 18 ^ x   (17 ^ 3 = 18)`,
+          },
+          {
+            name: 'גיאומטרי — היפוך סביב נקודת אמצע',
+            time: 'O(1)', space: 'O(1)',
+            summary: '\\\`midpoint = (17+3)/2 = 10\\\`. הריחוק של x מהאמצע — לכיוון השני: \\\`2 * 10 - x\\\`.',
+            code:
+`def flip_geom(x):
+    return 2 * 10 - x       # שווה ל-flip_sub, אבל הלוגיקה שונה`,
+          },
+        ],
+        starterCode:
+`def flip(x):
+    """If x == 17 return 3. If x == 3 return 17. No 'if' statement."""
+    # TODO
+    pass
+
+
+# print(flip(17))   # 3
+# print(flip(3))    # 17
+`,
+        trace: {
+          title: 'flip(x) — שני נתיבים: חיסור + XOR',
+          steps: [
+            {
+              code: 'x = 17  →  שני הנתיבים עובדים במקביל',
+              explain: 'הקלט נכנס משמאל. שני הנתיבים: \\\`20 - x\\\` (ירוק) ו-\\\`17 ^ 3 ^ x\\\` (סגול). שניהם צריכים להחזיר את אותה תוצאה — 3.',
+              viz: _flipSvg({ x: 17, sub: 3, xor: 3, done: true }),
+            },
+            {
+              code: 'x = 3  →  שני הנתיבים עובדים גם כאן',
+              explain: 'עכשיו הקלט הוא 3. \\\`20 - 3 = 17\\\`, \\\`17 ^ 3 ^ 3 = 17 ^ 0 = 17\\\`. שתי הגישות מחזירות 17 — סימטריה מושלמת.',
+              viz: _flipSvg({ x: 3, sub: 17, xor: 17, done: true }),
+            },
+            {
+              code: 'x = 5  ⚠️  ערך לא צפוי — XOR לא יודע להבחין',
+              explain: 'מקרה אזהרה: גרסת XOR תחזיר \\\`17 ^ 3 ^ 5 = 18 ^ 5 = 23\\\` — לא \\\`a\\\` ולא \\\`b\\\`. גרסת החיסור תחזיר \\\`20 - 5 = 15\\\`. **לא אחת מהן בודקת validity של הקלט** — תפקיד המתקשר.',
+              viz: _flipSvg({ x: 5, sub: 15, xor: 23 }),
+            },
+          ],
+        },
+        question:
+`ממשו את \`flip(x)\`. תנו **שתי גישות שונות**: אריתמטית ו-XOR. מה היתרון של כל אחת?`,
+        hints: [
+          'מה הסכום של 17 ו-3?',
+          'אם הסכום קבוע (20), אז ההפרש מ-20 *הוא* הזיווג. \\\`20 - x\\\`.',
+          'XOR יש לו תכונה: \\\`a ⊕ a = 0\\\`. אם תעשה \\\`17 ⊕ 3 ⊕ x\\\` — ה-x מבטל את עצמו עם הצד שלו ומשאיר את הצד השני.',
+        ],
+        answer:
+`**שתי גישות, סיבוכיות זהה. שפת ההסבר שונה.**
+
+\`\`\`python
+def flip_sub(x):  return 20 - x          # אריתמטי: a + b - x
+def flip_xor(x):  return 17 ^ 3 ^ x       # ביטוויז: a XOR b XOR x = 18 XOR x
+\`\`\`
+
+**למה XOR עובד?**
+
+| x ⊕ 17 ⊕ 3 | = | תוצאה |
+|---|---|---|
+| 17 ⊕ 17 ⊕ 3 | = | 0 ⊕ 3 = **3** ✓ |
+| 3 ⊕ 17 ⊕ 3 | = | 17 ⊕ 0 = **17** ✓ |
+
+(\`a ⊕ a = 0\`, ו-XOR קומוטטיבי וקבועי.)
+
+**למה החיסור עובד?** \`17 + 3 = 20\`. אם \`x\` הוא אחד מהם, \`20 - x\` הוא השני. זה פתרון "אריתמטי" שעובד רק כשיש בדיוק 2 ערכים, ויש קשר ידוע (סכום).
+
+**איזה מהשניים עדיף?**
+
+- **חיסור**: עובד בכל שפה עם מספרים, לא צריך לזכור XOR.
+- **XOR**: עובד גם על **strings/bytes/ערכים לא-מספריים**. עובד גם אם הערכים שליליים. כללי יותר. בחומרה — XOR הוא מחיר 1-gate.
+
+**הרחבה: זוג כללי \`(a, b)\` שאינו ידוע מראש?** הפונקציה צריכה לקבל את \`a, b\` כפרמטרים:
+
+\`\`\`python
+def flip(x, a, b):
+    return a ^ b ^ x
+\`\`\`
+
+**אם \`x\` לא שווה ל-\`a\` או \`b\`?** התשובה היא garbage — \`a ^ b ^ x\` שווה אבל לא לאף אחד מהם. גישת XOR לא יודעת לבדוק validity.
+
+---
+
+**שלבי החשיבה:**
+
+1. **"if" אינו הכרחי.** הרבה דברים שכותבים עם \`if\` הם בעצם פעולות אריתמטיות פשוטות.
+2. **XOR הוא אינוולוטיב** — \`f(f(x)) = x\`. שימוש קלאסי: encryption (one-time pad), swap בלי משתנה זמני.
+3. **גישה גיאומטרית** — נקודת אמצע + שיקוף. ראייה אחת של אותה משוואה. במתמטיקה: זה תרגום ל-axis-symmetric.`,
+        interviewerMindset:
+`שאלת חימום קלה — אבל מועמדים נופלים בה לפעמים. המראיין רוצה לראות:
+
+1. **שאתה לא תפוס בעולם של if/else** — חשיבה אלגברית פותחת פתרונות אלגנטיים.
+2. **שאתה מציע יותר מגישה אחת** — חיבור, XOR, אולי גם table-lookup (\`{17: 3, 3: 17}[x]\`). הראית רוחב.
+3. **שאתה מסביר מתי כל אחד עדיף.** XOR לערכים לא-מספריים. חיבור לקריאות.
+
+**שאלת המשך:** "ואם יש שלושה ערכים — \`a → b → c → a\`?" → \`(x + 1) % 3\` אם הם \`0,1,2\`. או lookup table. שורת קוד אחת.`,
+        expectedAnswers: ['20 - x', '17 + 3', '17 ^ 3 ^ x', '18 ^ x', 'XOR', 'אינוולוט'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 19)',
+    tags: ['algorithms', 'xor', 'arithmetic', 'bit-trick', 'no-if', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8020 — Best Time to Buy and Sell Stock (max profit)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'max-profit-stock',
+    difficulty: 'easy',
+    title: 'מסחר מניות — רווח מקסימלי בקנייה ומכירה אחת',
+    intro:
+`בהינתן רשימה של מחירי מניה ליום נתון, **המטרה היא להחזיר את הרווח
+המקסימלי** שניתן להפיק על ידי קניית המנייה במחיר נתון, ואז מכירה במחיר
+מאוחר יותר. אם לא ניתן להרוויח רווח — החזירו אפס.
+
+\`\`\`
+Input:  [7, 1, 2, 5, 3, 6, 4]      →   Output: 5     (קנייה ב-1, מכירה ב-6)
+Input:  [7, 6, 4, 3, 1]            →   Output: 0     (מחירים יורדים — אל תקנו)
+\`\`\`
+
+(LeetCode #121 — "Best Time to Buy and Sell Stock".)`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Brute force — O(n²)',
+            time: 'O(n²)', space: 'O(1)',
+            summary: 'בודק כל זוג \\\`(i, j)\\\` עם \\\`i < j\\\` ומחזיר את המקסימום של \\\`prices[j] - prices[i]\\\`.',
+            code:
+`def max_profit_brute(prices):
+    best = 0
+    for i in range(len(prices)):
+        for j in range(i + 1, len(prices)):
+            best = max(best, prices[j] - prices[i])
+    return best`,
+          },
+          {
+            name: 'Single-pass — O(n)',
+            time: 'O(n)', space: 'O(1)',
+            summary: '\\\`min_so_far\\\` נשמר בזמן הסריקה. בכל יום: \\\`profit = price - min_so_far\\\`, ועדכון של \\\`best\\\` ושל \\\`min_so_far\\\`.',
+            code:
+`def max_profit(prices):
+    if not prices:
+        return 0
+    min_so_far, best = prices[0], 0
+    for p in prices[1:]:
+        best = max(best, p - min_so_far)
+        min_so_far = min(min_so_far, p)
+    return best`,
+          },
+        ],
+        trace: {
+          title: 'Max profit — prices=[7, 1, 2, 5, 3, 6, 4]',
+          steps: [
+            {
+              code: 'init: min_so_far = 7, best = 0',
+              explain: 'מצב ראשוני: ה-min הוא היום הראשון, רווח אפשרי = 0.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 0, minSoFar: 7, minIdx: 0, best: 0 }),
+            },
+            {
+              code: 'day 1: p=1 < min → min=1.   profit-if-sell=0 (לא ירוויח עכשיו)',
+              explain: '\\\`p=1\\\` קטן מ-\\\`min_so_far\\\` → עדכון מינימום. אפשרות "למכור היום" תיתן \\\`1-1=0\\\` — לא משפר את \\\`best\\\`.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 1, minSoFar: 1, minIdx: 1, best: 0 }),
+            },
+            {
+              code: 'day 2: p=2.   profit-if-sell = 2-1 = 1   →   best=1',
+              explain: 'מכירה היום (אחרי קניה ב-day 1) → רווח \\\`1\\\`. עודכן \\\`best\\\`.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 2, minSoFar: 1, minIdx: 1, best: 1 }),
+            },
+            {
+              code: 'day 3: p=5.   profit = 5-1 = 4   →   best=4',
+              explain: 'הקפיצה הראשונה. הקנייה ב-day 1 ומכירה ב-day 3 = רווח 4.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 3, minSoFar: 1, minIdx: 1, best: 4 }),
+            },
+            {
+              code: 'day 4: p=3.   profit = 3-1 = 2   <   best   (skip)',
+              explain: '\\\`p=3\\\` — לא מינימום חדש, ולא שיפור ל-best.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 4, minSoFar: 1, minIdx: 1, best: 4 }),
+            },
+            {
+              code: 'day 5: p=6.   profit = 6-1 = 5   →   best=5',
+              explain: 'הקפיצה הגדולה ביותר. \\\`6-1=5\\\`. זה ה-best הסופי.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 5, minSoFar: 1, minIdx: 1, best: 5 }),
+            },
+            {
+              code: 'day 6: p=4.   profit = 4-1 = 3   <   best   (skip)',
+              explain: 'עליות קטנות יותר — לא שינוי.',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5 }),
+            },
+            {
+              code: 'done: best = 5  (buy@day 1, sell@day 5)',
+              explain: 'הסריקה הסתיימה. **רווח מקסימלי: $5** — קנייה ב-\\\`day 1\\\` (\\\`$1\\\`), מכירה ב-\\\`day 5\\\` (\\\`$6\\\`).',
+              viz: _maxProfitSvg({ prices: [7,1,2,5,3,6,4], day: 6, minSoFar: 1, minIdx: 1, best: 5, bestBuy: 1, bestSell: 5, done: true }),
+            },
+          ],
+        },
+        starterCode:
+`def max_profit(prices):
+    """One transaction (buy then sell). Return max profit.
+    O(n) time, O(1) space."""
+    # TODO
+    pass
+
+
+# print(max_profit([7, 1, 2, 5, 3, 6, 4]))    # 5
+# print(max_profit([7, 6, 4, 3, 1]))          # 0
+# print(max_profit([]))                       # 0
+`,
+        question:
+`ממשו את \`max_profit(prices)\` ב-\`O(n)\` זמן ו-\`O(1)\` מקום. למה לא צריך לחפש "האקסטרמום הימני"?`,
+        hints: [
+          'נסה לחשוב: עבור כל יום מכירה אפשרי, מה היום הקנייה הטוב ביותר?',
+          'התשובה: יום הקנייה הטוב ביותר עבור מכירה ביום \\\`j\\\` הוא היום עם המחיר הנמוך ביותר **לפניו**.',
+          'שמרו \\\`min_so_far\\\` תוך סריקה. בכל יום בודקים \\\`p - min_so_far\\\` ועדכון \\\`best\\\`. אז עדכון \\\`min_so_far\\\`. סדר חשוב!',
+        ],
+        answer:
+`**Single-pass scan.** \`O(n)\` זמן, \`O(1)\` מקום. ה-trick: בכל יום, אנחנו יודעים את ה-min שראינו עד עכשיו, אז אפשר לחשב מיד את הרווח הכי טוב שמכירה היום מאפשרת.
+
+**למה זה עובד?** הרווח \`prices[j] - prices[i]\` תלוי רק ב-\`i\` הנמוך ביותר עד \`j\`. אז במקום לחפש את ה-\`i\` הטוב ביותר אחרי \`j\` — שומרים אותו תוך כדי הסריקה.
+
+**מצב מקרה הקצה:**
+
+- \`prices = []\` → 0
+- \`prices = [5]\` → 0 (אין מכירה אפשרית — קונים ויום-בו-יום אסור)
+- \`prices = [7,6,4,3,1]\` (יורד תמיד) → 0 (לא קנייה)
+- \`prices = [1,2,3,4,5]\` (עולה תמיד) → 4 (קנייה ראשונה, מכירה אחרונה)
+
+**סדר עדכונים:** קריטי. **קודם** \`best\`, **אחר כך** \`min_so_far\`. אחרת אם המינימום החדש הוא היום עצמו, נקבל רווח \`0\` אפילו אם יש מכירה טובה יותר עם \`min\` קודם.
+
+---
+
+**שלבי החשיבה:**
+
+1. **בעיה מקבילה ל-"max - min"** — בלי האילוץ ש-min לפני max. אז קצת חכמה: שומרים \`min_so_far\` בזמן ש-\`prices[j]\` רץ.
+2. **\`max(best, p - min_so_far)\`** — כל יום הוא מכירה פוטנציאלית. הקנייה היא תמיד ה-\`min_so_far\`.
+3. **\`O(1)\` מקום** — לא צריך מערך נוסף, רק שני משתנים.`,
+        interviewerMindset:
+`LeetCode #121 — הקלאסיקה. המראיין רוצה לראות:
+
+1. **שאתה לא שולח ל-\`O(n²)\`** — מי שמתחיל ב-2 לולאות מקוננות מעיד על "אינטואיציה bruteforce-first" שלא תמיד מקבלים.
+2. **שאתה מבחין שזה לא max-min רגיל** — האילוץ "buy לפני sell" נוטה לבלבל, אבל עם המעקב אחרי \`min_so_far\` בזמן ריצה זה הופך לכמעט-טריוויאלי.
+3. **שאתה מטפל ב-edge cases** — מערך ריק, מערך באורך 1, מחירים יורדים תמיד.
+
+**שאלת המשך פופולרית (LeetCode #122):** "**מספר עסקאות לא מוגבל** — מה ההבדל?" → תשובה: סוכמים את כל ה-"עליות" בין יום ליום הבא (\`max(0, prices[i+1] - prices[i])\`). בסה"כ \`O(n)\` גם.
+
+**עוד המשך (LeetCode #123):** "**עד שתי עסקאות**" → DP עם 4 מצבים: held1, sold1, held2, sold2. רמה גבוהה יותר.`,
+        expectedAnswers: ['min_so_far', 'min so far', 'best', 'max profit', 'p - min', 'single pass'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 20)',
+    tags: ['algorithms', 'array', 'single-pass', 'max-profit', 'stock', 'leetcode-121', 'classic', 'python'],
   },
 ];
