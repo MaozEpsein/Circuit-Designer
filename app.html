@@ -577,6 +577,22 @@
     <span class="dft-reveal-icon">🔬</span> SHOW DFT LAYER
   </button>
 
+  <!-- LBIST fault-injection button (demo-specific, hidden unless the
+       active scene declares `_dft.faultInjectButton`). Toggles a stuck-at
+       fault on a chosen wire so the user can watch the BIST signature
+       diverge from goldenSig and the BIST_CTRL flip from PASS to FAIL. -->
+  <button id="btn-fault-inject" class="hidden" title="Inject a stuck-at-0 fault on CU's REG_WE output. With the fault active the MISR signature diverges from goldenSig, the logic-BIST controller lands on FAIL.">
+    <span class="fault-icon">🐞</span> INJECT FAULT
+  </button>
+
+  <!-- MBIST cell-fault injection button (demo-specific, hidden unless
+       the active scene declares `_dft.memFaultInjectButton`). Toggles a
+       stuck-at fault on a specific RAM cell so the MBIST March C− walk
+       hits FAIL at that address. -->
+  <button id="btn-mem-fault-inject" class="hidden" title="Corrupt a single RAM cell with a whole-word stuck-at-1 fault. With the fault active the MBIST March C− walk detects the mismatch and the controller lands on FAIL with failAddr pointing to the broken cell.">
+    <span class="mem-fault-icon">💥</span> CORRUPT CELL
+  </button>
+
   <!-- Context Menu -->
   <div id="context-menu" class="hidden">
     <div class="ctx-item" data-action="properties">Properties</div>

@@ -50,17 +50,17 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 40 | קוד | 23 | `code_s23_1.png` | algorithms | 8023 | done | Two stacks one array — share dynamically (+trace) |
 | 41 | קוד | 24 | `code_s24_1.png` | algorithms | 8024 | done | Add without operators — half-adder simulation |
 | 42 | קוד | 25 | `code_s25_1.png` | algorithms | 8025 | done | Matrix transpose in-place — `j > i` only (+trace) |
-| 43 | קוד | 26 | `code_s26_1.png` | algorithms | 8026 | pending | |
-| 44 | קוד | 27 | `code_s27_1.png` | algorithms | 8027 | pending | |
-| 45 | קוד | 28 | `code_s28_1.png` | algorithms | 8028 | pending | |
-| 46 | קוד | 29 | `code_s29_1.png` | algorithms | 8029 | pending | |
-| 47 | קוד | 30 | `code_s30_1.png` | algorithms | 8030 | pending | |
-| 48 | קוד | 31 | `code_s31_1.png` | algorithms | 8031 | pending | |
-| 49 | קוד | 32 | `code_s32_1.png` | algorithms | 8032 | pending | |
-| 50 | קוד | 33 | `code_s33_1.png` | algorithms | 8033 | pending | |
-| 51 | קוד | 34 | `code_s34_1.png` | algorithms | 8034 | pending | |
-| 52 | קוד | 35 | `code_s35_1.png` | algorithms | 8035 | pending | |
-| 53 | קוד | 36 | `code_s36_1.png` | algorithms | 8036 | pending | |
+| 43 | קוד | 26 | `code_s26_1.png` | algorithms | 8026 | done | Move zeros to end — two-pointer write/swap (+trace) |
+| 44 | קוד | 27 | `code_s27_1.png` | algorithms | 8027 | done | Print INT in binary — LSB extract + MSB scan (+trace) |
+| 45 | קוד | 28 | `code_s28_1.png` | algorithms | 8028 | done | Popcount byte + LUT — O(W) vs O(1) lookup tradeoff (+trace) |
+| 46 | קוד | 29 | `code_s29_1.png` | algorithms | 8029 | skip | Duplicate of 8011 (power-of-2 one-liner) |
+| 47 | קוד | 30 | `code_s30_1.png` | algorithms | 8030 | done | 3rd set bit position — naive scan + Kernighan speedup (+trace) |
+| 48 | קוד | 31 | `code_s31_1.png` | algorithms | 8031 | done | Swap without temp — XOR / arithmetic / tuple (+trace) |
+| 49 | קוד | 32 | `code_s32_1.png` | algorithms | 8032 | done | 1→0 boundary — binary search O(log n) (+trace) |
+| 50 | קוד | 33 | `code_s33_1.png` | algorithms | 8033 | done | Gates from arithmetic (`1-a`, `a*b`, `a+b-a*b`, `a+b-2*a*b`) + swap |
+| 51 | קוד | 34 | `code_s34_1.png` | algorithms | 8034 | done | Brian Kernighan popcount — O(popcount), not O(W) (+trace) |
+| 52 | קוד | 35 | `code_s35_1.png` | algorithms | 8035 | done | Find LSB — `n & -n` isolates lowest set bit (+trace) |
+| 53 | קוד | 36 | `code_s36_1.png` | algorithms | 8036 | done | Min without compare — arithmetic + sign-bit (+trace) |
 | 54 | קוד | 37 | `—` | algorithms | 8037 | pending | |
 | 55 | קוד | 38 | `—` | algorithms | 8038 | pending | |
 | 56 | מעגלים | 1 | `circuits_s01_1.png` | sequential | 2009 | done | Room men/women ratio monitor — one-hot 4-bit sensor, signed diff counter, 3-lamp decode |

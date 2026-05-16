@@ -1822,6 +1822,7 @@ endmodule
     ],
     source: 'IQ/PP — מצגת שאלות מעגלים, שקף 1 (מוניטור גלאי 4-ביט יחס גברים/נשים)',
     tags: ['counter', 'up-down', 'comparator', 'sub-circuit', 'sequential', 'verilog'],
+    circuitRevealsAnswer: true,
     circuit: () => build(() => {
       // The canvas mirrors the part-א architecture exactly:
       //   2 up/down counter blocks + 1 COMPARATOR + 3 lamps.
@@ -2172,6 +2173,7 @@ S2 →(0)→ S1 →(0)→ S2 →(0)→ S1 → … — תקוע באוסילצי�
     ],
     source: 'IQ/PP — מצגת שאלות מעגלים, שקף 2 (מתחלק ב-3 FSM)',
     tags: ['fsm', 'moore', 'divisibility', 'modulo', 'sequential', 'verilog'],
+    circuitRevealsAnswer: true,
     circuit: () => build(() => {
       // Direct gate-level realisation of the equations from part ב:
       //   D1 = ¬Q1·Q0·¬X  +  Q1·¬Q0·X

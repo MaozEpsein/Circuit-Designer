@@ -231,6 +231,78 @@ _btnDftReveal?.addEventListener('click', () => {
   _updateDftRevealButton();
 });
 
+// ── LBIST fault-injection button (demo-specific UX) ──────────
+// When the active scene declares `_dft.faultInjectButton = { wireId,
+// stuckAt }`, a floating red "🐞 INJECT FAULT" button appears.
+// Clicking it toggles `stuckAt` on the named wire — the engine reads
+// wire.stuckAt fresh each evaluate, so the next clock step picks up
+// the fault and the BIST signature diverges from goldenSig → FAIL.
+const _btnFaultInject = document.getElementById('btn-fault-inject');
+function _updateFaultInjectButton() {
+  if (!_btnFaultInject) return;
+  const meta = scene._dft && scene._dft.faultInjectButton;
+  if (!meta) { _btnFaultInject.classList.add('hidden'); return; }
+  const wire = scene.wires.find(w => w.id === meta.wireId);
+  const active = !!(wire && (wire.stuckAt === 0 || wire.stuckAt === 1));
+  _btnFaultInject.classList.remove('hidden');
+  _btnFaultInject.classList.toggle('active', active);
+  _btnFaultInject.innerHTML = active
+    ? `<span class="fault-icon">⚠️</span> FAULT ACTIVE`
+    : `<span class="fault-icon">🐞</span> INJECT FAULT`;
+}
+bus.on('scene:loaded',  _updateFaultInjectButton);
+bus.on('scene:cleared', _updateFaultInjectButton);
+_btnFaultInject?.addEventListener('click', () => {
+  const meta = scene._dft && scene._dft.faultInjectButton;
+  if (!meta) return;
+  const wire = scene.wires.find(w => w.id === meta.wireId);
+  if (!wire) return;
+  const isActive = (wire.stuckAt === 0 || wire.stuckAt === 1);
+  if (isActive) delete wire.stuckAt;
+  else          wire.stuckAt = (meta.stuckAt === 1) ? 1 : 0;
+  _updateFaultInjectButton();
+  bus.emit('node:props-changed');
+});
+
+// ── MBIST cell-fault injection button (demo-specific UX) ─────
+// Parallel to the LBIST button above, but toggles a cellFault on a
+// specific RAM cell so the MBIST March C− walk detects the mismatch
+// and the controller lands on FAIL with failAddr pointing to that cell.
+const _btnMemFaultInject = document.getElementById('btn-mem-fault-inject');
+function _updateMemFaultInjectButton() {
+  if (!_btnMemFaultInject) return;
+  const meta = scene._dft && scene._dft.memFaultInjectButton;
+  if (!meta) { _btnMemFaultInject.classList.add('hidden'); return; }
+  const node = scene.getNode(meta.nodeId);
+  const cf = node && node.cellFaults && node.cellFaults[meta.addr];
+  const active = !!(cf && (cf.stuckAt === 0 || cf.stuckAt === 1));
+  _btnMemFaultInject.classList.remove('hidden');
+  _btnMemFaultInject.classList.toggle('active', active);
+  _btnMemFaultInject.innerHTML = active
+    ? `<span class="mem-fault-icon">⚠️</span> CELL ${meta.addr} CORRUPTED`
+    : `<span class="mem-fault-icon">💥</span> CORRUPT CELL`;
+}
+bus.on('scene:loaded',  _updateMemFaultInjectButton);
+bus.on('scene:cleared', _updateMemFaultInjectButton);
+_btnMemFaultInject?.addEventListener('click', () => {
+  const meta = scene._dft && scene._dft.memFaultInjectButton;
+  if (!meta) return;
+  const node = scene.getNode(meta.nodeId);
+  if (!node) return;
+  if (!node.cellFaults) node.cellFaults = {};
+  const isActive = !!node.cellFaults[meta.addr];
+  if (isActive) {
+    delete node.cellFaults[meta.addr];
+  } else {
+    node.cellFaults[meta.addr] = {
+      stuckAt: (meta.stuckAt === 0) ? 0 : 1,
+      bit: (typeof meta.bit === 'number') ? meta.bit : null,
+    };
+  }
+  _updateMemFaultInjectButton();
+  bus.emit('node:props-changed');
+});
+
 // ── Context Menu ────────────────────────────────────────────
 const ctxMenu = document.getElementById('context-menu');
 let _ctxNodeId = null;
@@ -2299,6 +2371,13 @@ document.getElementById('btn-mem-close')?.addEventListener('click', _toggleMemIn
   const grip  = document.getElementById('mem-resize-grip');
   const panel = document.getElementById('mem-inspector');
   if (!grip || !panel) return;
+
+  // Clear any stale inline top/height/width from a previous session —
+  // they'd fight the CSS bottom:0 + height:75vh defaults and leave the
+  // panel floating above the viewport bottom on next load.
+  panel.style.top = '';
+  panel.style.height = '';
+  panel.style.width = '';
 
   // Tiered font-size: child elements use em units, so changing the panel's
   // base font-size scales the whole readout. Three breakpoints with

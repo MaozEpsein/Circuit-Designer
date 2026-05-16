@@ -232,6 +232,7 @@ slack שלילי לכל path בעייתי. הכלי מציע אוטומטית "w
     ],
     source: 'מאגר ראיונות — שאלה רב-סעיפית',
     tags: ['ff', 'timing', 'setup-hold', 'shift-register', 'metastability', 'cdc'],
+    circuitRevealsAnswer: true,
     circuit: () => build(() => {
       // input → DFF1 → DFF2 → DFF3 → out, all sharing the same clock.
       const inp  = h.input(140, 200, 'input');

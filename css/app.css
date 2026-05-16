@@ -610,11 +610,11 @@
   left: 0;
   bottom: 0;
   width: 340px;
-  height: 45vh;
+  height: 75vh;
   min-width: 220px;
   min-height: 150px;
   max-width: 95vw;
-  max-height: 95vh;
+  max-height: 100vh;
   background: #0a0e14;
   border: 1px solid #5a3d8a;
   border-left: none;
@@ -626,6 +626,11 @@
   flex-direction: column;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
+  /* border-box so JS resize (style.height) matches the rendered outer
+     height — without this, the 2px borders cause a 2px jump each drag
+     because getBoundingClientRect().height includes border but style.height
+     under content-box does not. */
+  box-sizing: border-box;
 }
 
 /* Minimal resize grip in the panel's top-right corner.
@@ -5242,4 +5247,109 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 @keyframes dftRevealPulse {
   0%, 100% { box-shadow: 0 0 0 1px #1a0a04, 0 4px 20px rgba(255, 184, 120, 0.25), 0 8px 40px rgba(0, 0, 0, 0.5); }
   50%      { box-shadow: 0 0 0 1px #1a0a04, 0 4px 28px rgba(255, 184, 120, 0.55), 0 8px 40px rgba(0, 0, 0, 0.5); }
+}
+
+/* ── LBIST fault-injection button (demo-specific) ───────────────
+   Sits just left of the DFT-reveal button. Red-themed; flips to a
+   pulsing yellow-on-red "FAULT ACTIVE" state when a fault is in
+   effect, so the user can clearly see whether the BIST is being
+   run clean or under stimulus. */
+#btn-fault-inject {
+  position: fixed;
+  bottom: 28px;
+  right: 312px;
+  z-index: 4000;
+  padding: 12px 22px;
+  font: 700 13px/1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 1.5px;
+  color: #ffb0b0;
+  background: linear-gradient(180deg, #3a1818 0%, #1f0a0a 100%);
+  border: 1px solid #5a2a2a;
+  border-radius: 24px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow:
+    0 0 0 1px #1a0404,
+    0 4px 20px rgba(255, 80, 80, 0.25),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 0.18s ease, color 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+#btn-fault-inject:hover {
+  transform: translateY(-2px);
+  color: #ffd0d0;
+  border-color: #8a3a3a;
+  box-shadow:
+    0 0 0 1px #1a0404,
+    0 6px 28px rgba(255, 80, 80, 0.4),
+    0 10px 50px rgba(0, 0, 0, 0.6);
+}
+#btn-fault-inject:active { transform: translateY(0); }
+#btn-fault-inject .fault-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 4px rgba(255, 120, 120, 0.6));
+}
+#btn-fault-inject.active {
+  color: #ffe080;
+  border-color: #aa4040;
+  background: linear-gradient(180deg, #6a1818 0%, #2a0808 100%);
+  animation: faultPulse 1.0s ease-in-out infinite;
+}
+#btn-fault-inject.active:hover { color: #ffffa0; }
+@keyframes faultPulse {
+  0%, 100% { box-shadow: 0 0 0 1px #1a0404, 0 4px 22px rgba(255, 80, 80, 0.5), 0 8px 40px rgba(0, 0, 0, 0.5); }
+  50%      { box-shadow: 0 0 0 1px #1a0404, 0 4px 36px rgba(255, 120, 80, 0.8), 0 8px 40px rgba(0, 0, 0, 0.5); }
+}
+
+/* ── MBIST cell-fault injection button (demo-specific) ──────────
+   Sits just left of the LBIST fault button. Purple-themed so the
+   three demo buttons read as a left-to-right narrative:
+   💥 CORRUPT CELL (memory)   🐞 INJECT FAULT (logic)   🔬 SHOW DFT LAYER. */
+#btn-mem-fault-inject {
+  position: fixed;
+  bottom: 28px;
+  right: 580px;
+  z-index: 4000;
+  padding: 12px 22px;
+  font: 700 13px/1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 1.5px;
+  color: #d8b0ff;
+  background: linear-gradient(180deg, #2a1838 0%, #14081e 100%);
+  border: 1px solid #4a2a6a;
+  border-radius: 24px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow:
+    0 0 0 1px #0a0414,
+    0 4px 20px rgba(180, 100, 255, 0.25),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 0.18s ease, color 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+#btn-mem-fault-inject:hover {
+  transform: translateY(-2px);
+  color: #f0d0ff;
+  border-color: #7a4aa0;
+  box-shadow:
+    0 0 0 1px #0a0414,
+    0 6px 28px rgba(180, 100, 255, 0.4),
+    0 10px 50px rgba(0, 0, 0, 0.6);
+}
+#btn-mem-fault-inject:active { transform: translateY(0); }
+#btn-mem-fault-inject .mem-fault-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 4px rgba(200, 120, 255, 0.6));
+}
+#btn-mem-fault-inject.active {
+  color: #ffd0ff;
+  border-color: #9a4aaa;
+  background: linear-gradient(180deg, #4a1858 0%, #200828 100%);
+  animation: memFaultPulse 1.0s ease-in-out infinite;
+}
+#btn-mem-fault-inject.active:hover { color: #ffe0ff; }
+@keyframes memFaultPulse {
+  0%, 100% { box-shadow: 0 0 0 1px #0a0414, 0 4px 22px rgba(180, 100, 255, 0.5), 0 8px 40px rgba(0, 0, 0, 0.5); }
+  50%      { box-shadow: 0 0 0 1px #0a0414, 0 4px 36px rgba(220, 120, 255, 0.8), 0 8px 40px rgba(0, 0, 0, 0.5); }
 }

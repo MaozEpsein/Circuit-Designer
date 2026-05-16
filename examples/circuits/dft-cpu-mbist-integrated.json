@@ -1,7 +1,9 @@
 {
   "_dft": {
     "revealButton": true,
-    "_doc": "Simple CPU + COMPLETE DFT stack: scan + MISR + logic-BIST + memory-BIST + ATPG LFSR — the crown-jewel interview showcase.\n\n  CORE (unchanged single-cycle CPU):\n    PC → ROM → IR → CU → ALU ↔ REG_FILE_DP (RF) ↔ RAM (via TEST_MODE collar).\n\n  PRE-LOADED REGISTERS: R0=0 R1=5 R2=1 R3=0 R4=7 R5=3 R6=99 R7=0.\n  PROGRAM (8 instructions): accumulates R3, stores to mem[3], loops on R1\n  with BNE (4× taken + 1× not-taken), loads back, never-taken BEQ, HALT.\n\n  DFT STACK (5 layers, all on one canvas):\n    1. SCAN CHAIN — 4 SCAN_FFs capture PC[3:0]; TE=1 shifts out on SCAN_OUT.\n    2. MISR + SIG  — 8-bit signature compactor on RF_A bus.\n    3. LOGIC BIST  — BIST_CTRL FSM watches MISR signature vs goldenSig.\n    4. LFSR_ATPG   — free-running pattern generator (period 255).\n    5. **MEMORY BIST (new)** — MBIST_CONTROLLER walks the RAM through\n        March C− via a 4-MUX TEST_MODE collar. Pre-injected fault on\n        cell 5 (whole-word stuck-at-1) so the demo runs to FAIL.\n\n  TEST_MODE MUX COLLAR (the realistic part):\n    The 4 MUXes between RF/CU and RAM swap drivers under MBIST.TEST_MODE:\n      • TEST_MODE = 0  → CPU drives ADDR/DATA/WE/RE (functional mode).\n      • TEST_MODE = 1  → MBIST drives them (memory self-test).\n    The CPU's STORE/LOAD path is unchanged when MBIST is idle; when\n    MBIST runs, the CPU is silently frozen out of the RAM. After MBIST\n    DONE/FAIL, TEST_MODE drops, and CPU access resumes — exactly the\n    silicon model.\n\n  HOW TO RUN (interview script):\n    a) Press RUN. Watch the CPU execute the program: open MEM to see\n       RF + RAM evolve; PIP ➜ BRANCH PREDICTOR for the BNE convergence.\n       Note: mem[3] gets written 5,4,3,2,1 by STORE. mem[5] (the faulty\n       cell) reads 0xFF whenever the CPU touches it.\n    b) Open the DFT panel (T) — note **two** controllers:\n       • BIST_CTRL — logic BIST watching the MISR signature.\n       • MBIST     — memory BIST with CELL FAULTS grid (orange cell\n         at addr=5 is the pre-injected fault).\n    c) RESET both controllers, then pulse MBIST_START (the MBIST one):\n       TEST_MODE goes high, CPU is frozen out, MBIST walks March C−.\n       Around tick ~36, MBIST hits FAIL with failAddr=5 — the panel\n       shows it, the FAIL lamp turns red. End of memory-BIST demo.\n    d) To see the CLEAN MBIST path: click the orange chip at addr=5\n       three times to remove the fault. RESET + MBIST_START.\n       MBIST now ends DONE/PASS after ~243 ticks.\n    e) For logic BIST: capture clean MISR signature into BIST.goldenSig,\n       RESET, pulse BIST_START — same FSM as the standalone demo.\n    f) For scan: TE=1, step the clock — PC[3:0] shifts out on SCAN_OUT."
+    "faultInjectButton":    { "wireId": "w_cu_rf_we", "stuckAt": 0, "label": "Inject CU REG_WE stuck-at-0" },
+    "memFaultInjectButton": { "nodeId": "ram", "addr": 5, "stuckAt": 1, "bit": null, "label": "Corrupt RAM cell 5 (whole-word stuck-at-1)" },
+    "_doc": "Simple CPU + COMPLETE DFT stack: scan + MISR + LBIST loop + memory-BIST — the crown-jewel interview showcase.\n\n  CORE (unchanged single-cycle CPU):\n    PC → ROM → IR → CU → ALU ↔ REG_FILE_DP (RF) ↔ RAM (via TEST_MODE collar).\n\n  PRE-LOADED REGISTERS: R0=0 R1=5 R2=1 R3=0 R4=7 R5=3 R6=99 R7=0.\n  PROGRAM (8 instructions): accumulates R3, stores to mem[3], loops on R1\n  with BNE (4× taken + 1× not-taken), loads back, never-taken BEQ, HALT.\n\n  DFT STACK (5 layers, all on one canvas):\n    1. SCAN CHAIN — 4 SCAN_FFs, TE forces shift mode. In LBIST mode the\n       chain's serial-in is sourced from the LFSR; in functional mode it\n       comes from the SCAN_IN pad. Selection via LBIST_MUX (sel=LBIST_MODE_EN).\n    2. MISR — 8-bit signature compactor. D[0] = SCAN_OUT (chain integrity\n       observation); D[1..7] = RF_A[1..7] (functional observation, so faults\n       in CU/ALU/RF propagate to the signature).\n    3. LOGIC BIST (LBIST) — BIST_CTRL FSM runs 24 cycles, then samples\n       MISR and compares to goldenSig=0x03. Match → DONE/PASS.\n    4. LFSR_ATPG — free-running 8-bit Fibonacci LFSR (taps 7,5,4,3,\n       period 255) feeding the scan chain in LBIST mode.\n    5. MEMORY BIST — MBIST_CONTROLLER walks the RAM through March C−\n       via a 4-MUX TEST_MODE collar. Pre-injected cell fault at addr=5\n       (whole-word stuck-at-1) so the demo runs to FAIL.\n\n  LBIST LOOP (the closed test path):\n    LFSR → LBIST_MUX → SCAN_IN → S0 → S1 → S2 → S3 → MISR.D0\n         (parallel: RF_A[1..7] → MISR.D[1..7])\n    With clean logic the 24-cycle MISR signature is 0x03; the BIST_CTRL\n    compares and lands on PASS. With a fault, the signature diverges and\n    the controller lands on FAIL.\n\n  THREE-BUTTON DEMO FLOW (the interview narrative):\n    🔬 SHOW DFT LAYER — reveal the entire test collar wrapped around the CPU.\n    🐞 INJECT FAULT   — stuck-at-0 on CU.REG_WE → LBIST signature diverges → FAIL.\n    💥 CORRUPT CELL   — RAM cell 5 stuck-at-1 → MBIST hits FAIL at failAddr=5.\n  Each fault is toggleable: click again to clear.\n\n  HOW TO RUN (interview script):\n    a) Press RUN. With everything clean: LBIST reaches DONE/PASS within\n       ~26 ticks (MISR signature = 0x03 matches goldenSig), MBIST walks\n       March C− and reaches DONE/PASS after ~243 ticks.\n    b) Open DFT panel (T) — note both controllers (BIST_CTRL + MBIST)\n       both showing green PASS pills.\n    c) **LBIST fault**: click red 🐞 INJECT FAULT — stuck-at-0 forced on\n       CU.REG_WE wire. Pulse BIST_RESET. Within 26 ticks: signature\n       becomes 0x99, BIST_CTRL → FAIL (red lamp). Click 🐞 again → clean.\n    d) **MBIST fault**: click purple 💥 CORRUPT CELL — installs a\n       whole-word stuck-at-1 fault on RAM cell 5 (visible as a red\n       chip in the CELL FAULTS grid). Pulse MBIST_RESET. Around tick\n       ~36 MBIST reaches FAIL with failAddr=5. Click 💥 again → clean.\n    e) Both at once: click both buttons → both controllers FAIL on the\n       same run, showing logic-BIST and memory-BIST are independent.\n    f) For scan-only: TE=1 + LBIST_MODE_EN=0, step the clock manually."
   },
   "nodes": [
     { "type": "CLOCK", "x": -780, "y": 380, "value": 1, "id": "clk" },
@@ -30,7 +32,7 @@
     { "type": "BUS_MUX", "inputCount": 2, "label": "MUX_RE",   "x": 480, "y": 340, "id": "mux_re" },
 
     { "type": "RAM", "addrBits": 4, "dataBits": 8, "memory": {},
-      "cellFaults": { "5": { "stuckAt": 1, "bit": null } },
+      "cellFaults": {},
       "label": "RAM", "x": 720, "y": 200, "id": "ram" },
     { "type": "BUS_MUX", "inputCount": 2, "label": "WB_MUX", "x": 900, "y": -40, "id": "wb_mux" },
 
@@ -40,8 +42,10 @@
     { "type": "OUTPUT", "label": "RF_A",   "sandbox": true, "x":  340, "y": -260, "id": "out_rfa" },
     { "type": "OUTPUT", "label": "RF_B",   "sandbox": true, "x":  340, "y": -200, "id": "out_rfb" },
 
-    { "type": "INPUT",   "fixedValue": 0, "label": "TE",      "x": -780, "y": 620, "id": "dft_te",  "_dftLayer": true },
-    { "type": "INPUT",   "fixedValue": 0, "label": "SCAN_IN", "x": -780, "y": 680, "id": "dft_si",  "_dftLayer": true },
+    { "type": "INPUT",   "fixedValue": 1, "label": "TE",            "x": -780, "y": 620, "id": "dft_te",         "_dftLayer": true },
+    { "type": "INPUT",   "fixedValue": 0, "label": "SCAN_IN",       "x": -780, "y": 680, "id": "dft_si",         "_dftLayer": true },
+    { "type": "INPUT",   "fixedValue": 1, "label": "LBIST_MODE_EN", "x": -780, "y": 740, "id": "lbist_mode_en",  "_dftLayer": true },
+    { "type": "BUS_MUX", "inputCount": 2, "label": "LBIST_MUX",     "x": -520, "y": 740, "id": "lbist_mux",      "_dftLayer": true },
     { "type": "SPLIT",   "inBits": 4, "slicesSpec": "0, 1, 2, 3", "label": "PC_split", "x": -520, "y": 650, "id": "dft_pc_split", "_dftLayer": true },
     { "type": "SCAN_FF", "initialQ": 0, "label": "S0", "x": -260, "y": 650, "id": "dft_s0", "_dftLayer": true },
     { "type": "SCAN_FF", "initialQ": 0, "label": "S1", "x":  -20, "y": 650, "id": "dft_s1", "_dftLayer": true },
@@ -53,9 +57,9 @@
     { "type": "MISR",  "bitWidth": 8, "taps": [7, 5, 3, 2], "seed": 0, "goldenSig": null, "label": "MISR", "x": 1320, "y": -100, "id": "dft_misr", "_dftLayer": true },
     { "type": "OUTPUT", "label": "SIG", "sandbox": true, "bitWidth": 8, "x": 1540, "y": -100, "id": "dft_sig_out", "_dftLayer": true },
 
-    { "type": "INPUT", "fixedValue": 0, "label": "BIST_START", "x": 1100, "y": 100, "id": "dft_start", "_dftLayer": true },
+    { "type": "INPUT", "fixedValue": 1, "label": "BIST_START", "x": 1100, "y": 100, "id": "dft_start", "_dftLayer": true },
     { "type": "INPUT", "fixedValue": 0, "label": "BIST_RESET", "x": 1100, "y": 180, "id": "dft_reset", "_dftLayer": true },
-    { "type": "BIST_CONTROLLER", "sigBits": 8, "runLength": 24, "goldenSig": 0, "label": "BIST_CTRL", "x": 1340, "y": 140, "id": "dft_bist", "_dftLayer": true },
+    { "type": "BIST_CONTROLLER", "sigBits": 8, "runLength": 24, "goldenSig": 3, "label": "BIST_CTRL", "x": 1340, "y": 140, "id": "dft_bist", "_dftLayer": true },
     { "type": "OUTPUT", "label": "DONE",       "sandbox": true, "x": 1580, "y":  60, "id": "dft_done_out", "_dftLayer": true },
     { "type": "OUTPUT", "label": "PASS",       "sandbox": true, "x": 1580, "y": 130, "id": "dft_pass_out", "_dftLayer": true },
     { "type": "OUTPUT", "label": "TEST_MODE",  "sandbox": true, "x": 1580, "y": 200, "id": "dft_tm_out", "_dftLayer": true },
@@ -64,7 +68,7 @@
     { "type": "LFSR",   "bitWidth": 8, "taps": [7, 5, 4, 3], "seed": 1, "label": "LFSR_ATPG", "x": 1100, "y": 400, "id": "dft_lfsr", "_dftLayer": true },
     { "type": "OUTPUT", "label": "LFSR_Q", "sandbox": true, "x": 1340, "y": 400, "id": "dft_lfsr_out", "_dftLayer": true },
 
-    { "type": "INPUT", "fixedValue": 0, "label": "MBIST_START", "x":  940, "y": 760, "id": "mbist_start", "_dftLayer": true },
+    { "type": "INPUT", "fixedValue": 1, "label": "MBIST_START", "x":  940, "y": 760, "id": "mbist_start", "_dftLayer": true },
     { "type": "INPUT", "fixedValue": 0, "label": "MBIST_RESET", "x":  940, "y": 840, "id": "mbist_reset", "_dftLayer": true },
     { "type": "MBIST_CONTROLLER", "addrBits": 4, "dataBits": 8, "algorithm": "MARCH_C_MINUS",
       "label": "MBIST", "x": 1200, "y": 800, "id": "mbist", "_dftLayer": true },
@@ -145,8 +149,12 @@
 
     { "id": "w_dft_pc_split",  "sourceId": "pc",            "targetId": "dft_pc_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "PC_BUS" },
 
+    { "id": "w_lbist_mux_si",   "sourceId": "dft_si",        "targetId": "lbist_mux", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "FUNC_SI" },
+    { "id": "w_lbist_mux_lfsr", "sourceId": "dft_lfsr",      "targetId": "lbist_mux", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "LFSR_PATTERN" },
+    { "id": "w_lbist_mux_sel",  "sourceId": "lbist_mode_en", "targetId": "lbist_mux", "targetInputIndex": 2, "sourceOutputIndex": 0, "netName": "LBIST_MODE_EN" },
+
     { "id": "w_dft_s0_d",   "sourceId": "dft_pc_split", "targetId": "dft_s0", "targetInputIndex": 0, "sourceOutputIndex": 0 },
-    { "id": "w_dft_s0_ti",  "sourceId": "dft_si",       "targetId": "dft_s0", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
+    { "id": "w_dft_s0_ti",  "sourceId": "lbist_mux",    "targetId": "dft_s0", "targetInputIndex": 1, "sourceOutputIndex": 0, "netName": "SCAN_CHAIN" },
     { "id": "w_dft_s0_te",  "sourceId": "dft_te",       "targetId": "dft_s0", "targetInputIndex": 2, "sourceOutputIndex": 0 },
     { "id": "w_dft_s0_clk", "sourceId": "clk",          "targetId": "dft_s0", "targetInputIndex": 3, "sourceOutputIndex": 0, "isClockWire": true },
 
@@ -169,7 +177,7 @@
 
     { "id": "w_dft_alu_split", "sourceId": "rf", "targetId": "dft_alu_split", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "RF_A_OBS" },
 
-    { "id": "w_dft_misr_0", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 0, "sourceOutputIndex": 0 },
+    { "id": "w_dft_misr_0", "sourceId": "dft_s3",         "targetId": "dft_misr", "targetInputIndex": 0, "sourceOutputIndex": 0, "netName": "SCAN_OUT_OBS" },
     { "id": "w_dft_misr_1", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 1, "sourceOutputIndex": 1 },
     { "id": "w_dft_misr_2", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 2, "sourceOutputIndex": 2 },
     { "id": "w_dft_misr_3", "sourceId": "dft_alu_split", "targetId": "dft_misr", "targetInputIndex": 3, "sourceOutputIndex": 3 },

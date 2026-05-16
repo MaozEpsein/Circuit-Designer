@@ -1,3 +1,5 @@
+import { build, h } from '../../js/interview/circuitHelpers.js';
+
 // ─── Shared design system for trace visualizations ───────────────────
 // Every algorithm trace uses these tokens + defs so the panel feels
 // like one coherent product instead of N disconnected mini-demos.
@@ -2742,6 +2744,213 @@ function _dutchFlagSvg({ arr, low, mid, high, swapped, done }) {
     ${pointers}
     ${balls}
     ${swap}
+  </svg>`;
+}
+
+// ─── Shared SVG renderer — generic horizontal array row ──────────
+// One row of N cells, with optional pointer arrows, highlight indices,
+// and a fixed banner. Used by 8026 (move-zeros), 8032 (1→0 boundary).
+function _arrayRowSvg({ arr, pointers = {}, highlights = [], label, done, subtitle }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const n = arr.length;
+  const CELL = n > 14 ? 46 : 64;
+  const CELL_H = CELL + 6;
+  const W = Math.max(720, n * CELL + 120);
+  const top = 130;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+  const hlSet = new Set(highlights);
+
+  const cells = arr.map((v, i) => {
+    const isHl = hlSet.has(i);
+    const isZero = v === 0;
+    const stroke = isHl ? (done ? '#ffd060' : '#39ff80') : (isZero ? '#5a3a3a' : '#3a5575');
+    const fill   = isHl ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = isHl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    const txt    = isHl ? (done ? '#ffd060' : '#80f0a0') : (isZero ? '#a06060' : '#c0d0e0');
+    return `
+      <g style="animation: ${D.animPop} 220ms ${i * 16}ms both;">
+        <text x="${left + i * CELL + CELL / 2}" y="${top - 10}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="11"
+              fill="#7090b0">[${i}]</text>
+        <rect x="${left + i * CELL + 2}" y="${top}" width="${CELL - 4}" height="${CELL_H}" rx="6"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isHl ? 2.4 : 1.2}" ${filter}/>
+        <text x="${left + i * CELL + CELL / 2}" y="${top + CELL_H * 0.66}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="22" font-weight="bold"
+              fill="${txt}">${v}</text>
+      </g>`;
+  }).join('');
+
+  const ptrs = Object.entries(pointers).map(([name, idx]) => {
+    if (idx == null || idx < 0 || idx >= n) return '';
+    const x = left + idx * CELL + CELL / 2;
+    return `
+      <g style="animation: ${D.animFade} 260ms both;">
+        <text x="${x}" y="${top + CELL_H + 28}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="14"
+              fill="#ffd060" font-weight="bold">▲</text>
+        <text x="${x}" y="${top + CELL_H + 46}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="12"
+              fill="#ffd060">${name}</text>
+      </g>`;
+  }).join('');
+
+  const banner = `
+    <g style="animation: ${D.animFade} 300ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + label : label}
+      </text>
+    </g>`;
+  const sub = subtitle ? `<text x="${W/2}" y="78" text-anchor="middle"
+        font-family="'JetBrains Mono', monospace" font-size="13"
+        fill="#80a0c0">${subtitle}</text>` : '';
+
+  const H = top + CELL_H + 80;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${sub}
+    ${cells}
+    ${ptrs}
+  </svg>`;
+}
+
+// ─── Bit-row SVG — N-bit register with optional position label ───
+// Used by 8027 (int→binary), 8030 (3rd set bit), 8034 (Kernighan),
+// 8035 (LSB).
+function _bitRowSvg({ bits, hlIdx = [], cleared = [], label, sub, done, showPos = true, accumStr }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const n = bits.length;
+  const CELL = n > 16 ? 30 : 44;
+  const CELL_H = CELL + 4;
+  const W = Math.max(720, n * CELL + 120);
+  const top = 120;
+  const totalW = n * CELL;
+  const left = (W - totalW) / 2;
+  const hlSet = new Set(hlIdx);
+  const clrSet = new Set(cleared);
+
+  const cells = bits.map((bit, i) => {
+    const pos = n - 1 - i;       // index 0 = MSB; pos = bit position from LSB
+    const isHl = hlSet.has(pos);
+    const isCleared = clrSet.has(pos);
+    const stroke = isHl ? (done ? '#ffd060' : '#39ff80') : (isCleared ? '#603020' : '#3a5575');
+    const fill   = isHl ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = isHl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    const txt    = isHl ? (done ? '#ffd060' : '#80f0a0') : (bit ? '#80f0a0' : '#5a7090');
+    return `
+      <g style="animation: ${D.animPop} 200ms ${i * 12}ms both;">
+        ${showPos ? `<text x="${left + i * CELL + CELL / 2}" y="${top - 8}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="${n > 16 ? 9 : 10}"
+              fill="#7090b0">${pos}</text>` : ''}
+        <rect x="${left + i * CELL + 2}" y="${top}" width="${CELL - 4}" height="${CELL_H}" rx="${n > 16 ? 4 : 6}"
+              fill="${fill}" stroke="${stroke}" stroke-width="${isHl ? 2.4 : 1.2}" ${filter}/>
+        <text x="${left + i * CELL + CELL / 2}" y="${top + CELL_H * 0.7}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="${n > 16 ? 18 : 24}" font-weight="bold"
+              fill="${txt}">${bit}</text>
+      </g>`;
+  }).join('');
+
+  const banner = `
+    <g style="animation: ${D.animFade} 280ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + label : label}
+      </text>
+    </g>`;
+  const subEl = sub ? `<text x="${W/2}" y="76" text-anchor="middle"
+        font-family="'JetBrains Mono', monospace" font-size="14"
+        fill="#80a0c0">${sub}</text>` : '';
+  const accum = accumStr ? `<g style="animation: ${D.animFade} 280ms both;">
+        <text x="${W/2}" y="${top + CELL_H + 40}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="20" font-weight="bold"
+              fill="${done ? '#ffd060' : '#80d4ff'}">${accumStr}</text>
+      </g>` : '';
+
+  const H = top + CELL_H + (accumStr ? 70 : 30);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${subEl}
+    ${cells}
+    ${accum}
+  </svg>`;
+}
+
+// ─── Two-box SVG — for swap (8031) / min (8036) / two-values ─────
+function _twoBoxSvg({ a, b, aName = 'a', bName = 'b', op, done, result, resultName }) {
+  const uid = _traceUid();
+  const D = _traceDefIds(uid);
+  const W = 720;
+  const boxW = 180, boxH = 110;
+  const top = 110;
+  const gap = 80;
+  const aX = W/2 - boxW - gap/2;
+  const bX = W/2 + gap/2;
+
+  const box = (x, name, val, hl) => {
+    const stroke = hl ? (done ? '#ffd060' : '#39ff80') : '#3a5575';
+    const fill   = hl ? (done ? D.matchGrad : D.curGrad) : D.idleGrad;
+    const filter = hl ? `filter="${done ? D.glowGold : D.glowCyan}"` : '';
+    const txt = hl ? (done ? '#ffd060' : '#80f0a0') : '#c0d0e0';
+    return `
+      <g style="animation: ${D.animPop} 260ms both;">
+        <text x="${x + boxW/2}" y="${top - 10}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="14"
+              fill="#80a0c0" font-weight="bold">${name}</text>
+        <rect x="${x}" y="${top}" width="${boxW}" height="${boxH}" rx="10"
+              fill="${fill}" stroke="${stroke}" stroke-width="${hl ? 2.6 : 1.4}" ${filter}/>
+        <text x="${x + boxW/2}" y="${top + boxH * 0.66}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="28" font-weight="bold"
+              fill="${txt}">${val}</text>
+      </g>`;
+  };
+
+  const banner = `
+    <g style="animation: ${D.animFade} 260ms both;">
+      <rect x="${W/2 - 280}" y="14" width="560" height="42" rx="21"
+            fill="${done ? D.bannerGold : D.bannerCyan}"
+            stroke="${done ? '#ffd060' : '#80d4ff'}" stroke-width="2"
+            filter="${done ? D.glowGold : D.glowCyan}"/>
+      <text x="${W/2}" y="42" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="17"
+            fill="${done ? '#ffd060' : '#80d4ff'}" font-weight="bold" letter-spacing="1">
+        ${done ? '✓ ' + op : op}
+      </text>
+    </g>`;
+
+  const resBox = result != null ? `
+      <g style="animation: ${D.animPop} 320ms 120ms both;">
+        <text x="${W/2}" y="${top + boxH + 50}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="13"
+              fill="#ffd060" font-weight="bold">${resultName || 'result'}</text>
+        <rect x="${W/2 - boxW/2}" y="${top + boxH + 60}" width="${boxW}" height="${boxH * 0.7}" rx="10"
+              fill="${D.matchGrad}" stroke="#ffd060" stroke-width="2.6" filter="${D.glowGold}"/>
+        <text x="${W/2}" y="${top + boxH + 60 + boxH * 0.5}" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace" font-size="26" font-weight="bold"
+              fill="#ffd060">${result}</text>
+      </g>` : '';
+
+  const H = top + boxH + (result != null ? boxH + 90 : 30);
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px">
+    ${_traceDefs(uid)}
+    ${banner}
+    ${box(aX, aName, a, true)}
+    ${box(bX, bName, b, true)}
+    ${resBox}
   </svg>`;
 }
 
@@ -7160,5 +7369,1710 @@ def transpose(M, n):
     ],
     source: 'PP - שאלות קוד (slide 25)',
     tags: ['algorithms', 'matrix', 'in-place', 'transpose', '2D-array', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8026 — Move zeros to end, preserve relative order, in-place
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'move-zeros-to-end',
+    difficulty: 'easy',
+    title: 'הזזת אפסים לקצה — שמירת סדר יחסי, במקום',
+    intro:
+`בהינתן מערך מספרים, העבירו את כל האפסים לקצה תוך **שמירה על הסדר היחסי**
+של האלמנטים שאינם אפס. **לא מותר ליצור עותק** של המערך (סיבוכיות מקום קבועה).
+
+\`\`\`
+Input:  [2, 0, 1, 3]      Output:  [2, 1, 3, 0]
+Input:  [0, 1, 0, 3, 12]  Output:  [1, 3, 12, 0, 0]
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def move_zeros(a):
+    """Move all zeros to the end. Preserve order of non-zeros. In-place."""
+    # TODO: two-pointer / write-index
+    pass
+
+
+# a = [2, 0, 1, 3]
+# move_zeros(a)
+# print(a)   # [2, 1, 3, 0]
+`,
+        question:
+`ממשו את \`move_zeros(a)\`. רמז: לחשוב על "write pointer" — אינדקס שאליו כותבים את הערך הבא שאינו אפס.`,
+        hints: [
+          'שתי מצביעים: \\\`w\\\` (write) מתחיל ב-0, ו-\\\`r\\\` (read) רץ על המערך. כל ערך \\\`!= 0\\\` נכתב ב-\\\`a[w]\\\` ו-\\\`w\\\` מתקדם.',
+          'אחרי הלולאה, \\\`w\\\` מצביע לאינדקס הראשון שצריך להיות 0. מה למלא משם עד הסוף?',
+          'הדרך הקלאסית של "swap": כשנפגשים בערך שאינו אפס, \\\`a[w], a[r] = a[r], a[w]\\\` ושני המצביעים מתקדמים. זה משאיר אפסים בקצה אוטומטית.',
+        ],
+        trace: {
+          title: 'Move zeros — שני מצביעים',
+          source:
+`def move_zeros(a):
+    w = 0
+    for r in range(len(a)):
+        if a[r] != 0:
+            a[w], a[r] = a[r], a[w]
+            w += 1`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: a = [2, 0, 1, 3], w = 0',
+              explain: 'מצביע "כתיבה" \\\`w=0\\\`. סורקים עם \\\`r\\\` מ-0 עד הסוף.',
+              executed: [1, 2], focusLine: 2,
+              viz: _arrayRowSvg({ arr: [2,0,1,3], pointers: { 'r,w': 0 }, label: 'init', subtitle: 'w=0, r=0' }) },
+            { code: 'r=0: a[0]=2 != 0  →  swap a[0]↔a[0], w++',
+              explain: 'הערך אינו 0. swap עם עצמו = no-op. \\\`w\\\` עולה ל-1.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _arrayRowSvg({ arr: [2,0,1,3], pointers: { r: 0, w: 1 }, highlights: [0], label: 'r=0, swap a[0]↔a[0]', subtitle: 'w → 1' }) },
+            { code: 'r=1: a[1]=0  →  skip',
+              explain: 'הערך הוא 0 — לא כותבים, רק \\\`r\\\` מתקדם.',
+              executed: [3], focusLine: 3,
+              viz: _arrayRowSvg({ arr: [2,0,1,3], pointers: { r: 1, w: 1 }, label: 'r=1, skip (zero)', subtitle: 'w stays 1' }) },
+            { code: 'r=2: a[2]=1 != 0  →  swap a[1]↔a[2], w++',
+              explain: 'הערך \\\`1\\\` עובר למקום \\\`w=1\\\`, האפס נדחק ל-\\\`r=2\\\`.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _arrayRowSvg({ arr: [2,1,0,3], pointers: { r: 2, w: 2 }, highlights: [1, 2], label: 'r=2, swap a[1]↔a[2]', subtitle: 'w → 2' }) },
+            { code: 'r=3: a[3]=3 != 0  →  swap a[2]↔a[3], w++',
+              explain: 'הערך \\\`3\\\` עובר למקום \\\`w=2\\\`, האפס נדחק לקצה.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _arrayRowSvg({ arr: [2,1,3,0], pointers: { r: 3, w: 3 }, highlights: [2, 3], label: 'r=3, swap a[2]↔a[3]', subtitle: 'w → 3' }) },
+            { code: 'done: a = [2, 1, 3, 0]',
+              explain: 'כל הערכים שאינם 0 נשמרו בסדרם המקורי, האפסים נדחקו לקצה. n פעולות swap לכל היותר. ✓',
+              executed: [], focusLine: 2,
+              viz: _arrayRowSvg({ arr: [2,1,3,0], pointers: { w: 3 }, highlights: [0, 1, 2, 3], label: 'done', subtitle: 'zeros at end', done: true }) },
+          ],
+        },
+        answer:
+`**שני מצביעים, swap מתמשך.** \`O(n)\` זמן, \`O(1)\` מקום.
+
+\`\`\`python
+def move_zeros(a):
+    w = 0
+    for r in range(len(a)):
+        if a[r] != 0:
+            a[w], a[r] = a[r], a[w]
+            w += 1
+\`\`\`
+
+**איך זה עובד:** \`w\` (write pointer) תמיד מצביע לאינדקס שאליו ייכתב הערך הבא שאינו אפס. \`r\` סורק את כל המערך. כשפוגשים ערך לא-אפס — מחליפים עם המקום של \`w\` (שמכיל אפס או את הערך עצמו), ו-\`w\` מתקדם.
+
+**אינוואריאנט:** בכל זמן, \`a[0..w-1]\` מכיל את הערכים שאינם אפס לפי הסדר המקורי. \`a[w..r-1]\` מכיל את האפסים שראינו.
+
+**גרסה אלטרנטיבית — שני מעברים:** ראשון כותב ערכים לא-אפס, שני ממלא אפסים בקצה:
+
+\`\`\`python
+def move_zeros_two_pass(a):
+    w = 0
+    for x in a:
+        if x != 0:
+            a[w] = x
+            w += 1
+    for i in range(w, len(a)):
+        a[i] = 0
+\`\`\`
+
+זהה בסיבוכיות (\`O(n)\` זמן, \`O(1)\` מקום) — אבל כותב יותר (n זריבות לעומת ≤n/2 סוואפים במקרה הגרוע).
+
+**מקרי קצה:**
+- מערך ריק → \`w=0\`, אין מה לעשות.
+- אין אפסים → \`w==r\` בכל מעבר, swap עם עצמו = no-op.
+- כולם אפסים → \`w==0\` כל הזמן, שום swap לא קורה.`,
+        interviewerMindset:
+`שאלת מערכים קלאסית — בודקת אם המועמד יודע "two-pointer" כתבנית.
+
+1. **לפסול עותק.** מועמד שמתחיל ב-\`b = [x for x in a if x != 0]; b += [0] * (len(a) - len(b))\` — עובד, אבל מאבד \`O(n)\` מקום ומפר את האילוץ.
+2. **למצוא את הסוואפ הנכון.** מועמד שעושה \`a.remove(0); a.append(0)\` בכל איטרציה → \`O(n²)\` כי remove הוא \`O(n)\`.
+3. **לראות שזה חלק ממשפחה.** סוואפ עם write pointer מופיע ב-Dutch flag, Partition של QuickSort, Remove Duplicates from Sorted Array — אותה תבנית.
+
+**שאלת המשך:** "ומה אם רוצים את האפסים **בהתחלה**?" → אותו רעיון, \`w\` מתחיל בסוף ו-\`r\` סורק מימין לשמאל. או — לעבור על המערך הפוך עם אותה לוגיקה.`,
+        expectedAnswers: ['two pointer', 'שני מצביעים', 'write', 'w = 0', 'a[w], a[r]', 'swap', '!= 0'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 26)',
+    tags: ['algorithms', 'array', 'two-pointer', 'in-place', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8027 — Print INT in binary
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'int-to-binary',
+    difficulty: 'easy',
+    title: 'הדפסת מספר שלם בייצוג בינארי',
+    intro:
+`כתבו תוכנית שמדפיסה מספר שלם **בייצוג בינארי**, בלי להשתמש ב-\`bin()\` או פורמט מובנה.
+
+\`\`\`
+Input: 13     Output: "1101"
+Input: 0      Output: "0"
+Input: 255    Output: "11111111"
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(log n)' },
+          { label: 'Space', value: 'O(log n)' },
+        ],
+        approaches: [
+          {
+            name: 'Mod-2 + division',
+            time: 'O(log n)', space: 'O(log n)',
+            summary: 'הוצאת ביט תחתון עם \`n % 2\`, חלוקה ב-2, בנייה הפוכה.',
+            code:
+`def to_binary(n):
+    if n == 0: return "0"
+    out = []
+    while n > 0:
+        out.append(str(n & 1))
+        n >>= 1
+    return "".join(reversed(out))`,
+          },
+          {
+            name: 'MSB scan',
+            time: 'O(log n)', space: 'O(log n)',
+            summary: 'סריקה מהביט הגבוה ביותר כלפי מטה — בנייה ישירה.',
+            code:
+`def to_binary_msb(n):
+    if n == 0: return "0"
+    bits = []
+    k = n.bit_length() - 1
+    while k >= 0:
+        bits.append("1" if (n >> k) & 1 else "0")
+        k -= 1
+    return "".join(bits)`,
+          },
+        ],
+        starterCode:
+`def to_binary(n):
+    """Return n as a binary string. No built-in bin()."""
+    if n == 0: return "0"
+    # TODO: extract bits one at a time
+    pass
+
+
+# print(to_binary(13))   # "1101"
+`,
+        question:
+`ממשו את \`to_binary(n)\` בלי \`bin()\` או f-string \`{n:b}\`. שני סגנונות אפשריים — מה היתרון של כל אחד?`,
+        hints: [
+          'הביט הנמוך ביותר של \\\`n\\\` הוא \\\`n & 1\\\` (או \\\`n % 2\\\`). הוצאת אותו, מחליקים ימינה \\\`n >>= 1\\\`, וחוזרים.',
+          'הסדר יוצא הפוך (LSB → MSB). פשוט להוסיף ל-list ולעשות \\\`reversed\\\` בסוף — או להכניס בראש (יקר).',
+          'דרך נוספת: סורקים את הביטים מ-\\\`n.bit_length() - 1\\\` כלפי מטה. זה נותן את התווים בסדר הנכון מההתחלה.',
+          'מקרה קצה: \\\`n == 0\\\` — הלולאה לא תרוץ כלל. החזירו \\\`"0"\\\` במפורש.',
+        ],
+        trace: {
+          title: 'to_binary(13) — חילוץ ביטים',
+          source:
+`def to_binary(n):
+    out = []
+    while n > 0:
+        out.append(str(n & 1))
+        n >>= 1
+    return "".join(reversed(out))`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: n=13 = 0b1101, out=[]',
+              explain: 'מתחילים מהמספר השלם. כל איטרציה תוציא את ה-LSB.',
+              executed: [1, 2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [1,1,0,1], label: 'n = 13', sub: 'binary: 1101', accumStr: 'out = []' }) },
+            { code: 'iter 1: n=13, n&1=1, append "1", n>>=1 → n=6',
+              explain: 'LSB = 1. מכניסים ל-out, ומחליקים ימינה.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,1,0,1], hlIdx: [0], label: 'extract LSB = 1', sub: 'n=13 → 6', accumStr: 'out = ["1"]' }) },
+            { code: 'iter 2: n=6, n&1=0, append "0", n>>=1 → n=3',
+              explain: 'LSB = 0.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,1,0], hlIdx: [0], label: 'extract LSB = 0', sub: 'n=6 → 3', accumStr: 'out = ["1", "0"]' }) },
+            { code: 'iter 3: n=3, n&1=1, append "1", n>>=1 → n=1',
+              explain: 'LSB = 1.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,1], hlIdx: [0], label: 'extract LSB = 1', sub: 'n=3 → 1', accumStr: 'out = ["1", "0", "1"]' }) },
+            { code: 'iter 4: n=1, n&1=1, append "1", n>>=1 → n=0',
+              explain: 'הלולאה תיגמר בפעם הבאה.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1], hlIdx: [0], label: 'extract LSB = 1', sub: 'n=1 → 0', accumStr: 'out = ["1", "0", "1", "1"]' }) },
+            { code: 'done: reverse → "1101"',
+              explain: 'הוצאנו את הביטים בסדר LSB→MSB. הפיכה נותנת את הייצוג הסטנדרטי. ✓',
+              executed: [6], focusLine: 6,
+              viz: _bitRowSvg({ bits: [1,1,0,1], hlIdx: [0,1,2,3], label: 'reverse → "1101"', sub: '13 = 8 + 4 + 1', accumStr: '"1101"', done: true }) },
+          ],
+        },
+        answer:
+`**שתי גישות שקולות:**
+
+\`\`\`python
+# גישה 1 — חילוץ LSB
+def to_binary(n):
+    if n == 0: return "0"
+    out = []
+    while n > 0:
+        out.append(str(n & 1))
+        n >>= 1
+    return "".join(reversed(out))
+
+# גישה 2 — סריקה מ-MSB
+def to_binary_msb(n):
+    if n == 0: return "0"
+    bits = []
+    for k in range(n.bit_length() - 1, -1, -1):
+        bits.append("1" if (n >> k) & 1 else "0")
+    return "".join(bits)
+\`\`\`
+
+**איך זה עובד (גישה 1):**
+\`n & 1\` מבודד את הביט הנמוך. אחרי הוצאתו, \`n >>= 1\` מעיף אותו החוצה — \`n\` קטן ב-factor 2 בכל איטרציה.
+
+**מספר איטרציות:** \`⌈log₂(n+1)⌉\` — כי כל איטרציה מחלקת את \`n\` בשתיים. עבור \`n = 2³²\` זה 32 צעדים.
+
+**מה לבחור?**
+- **גישה 1** טבעית יותר ("הוצאת המטבע התחתון"). דורשת רברס בסוף.
+- **גישה 2** בונה את התשובה בסדר הנכון מההתחלה (אין רברס), אבל דורשת לדעת מראש את \`bit_length\`.
+
+**מקרי קצה:**
+- \`n == 0\` → \`"0"\` (במפורש).
+- \`n < 0\` → לא הוגדר בשאלה. אם רוצים: לקבוע רוחב קבוע ולהשתמש ב-two's-complement: \`(n & ((1 << w) - 1))\` ואז להמיר.
+
+**שאלת המשך:** "אם \`n\` מספר 32-ביט וצריך תמיד 32 תווים?" → לולאה \`for k in range(31, -1, -1)\` (לא מסתיים מוקדם).`,
+        interviewerMindset:
+`שאלת חימום — בודקת היכרות עם פעולות ביט.
+
+1. **לפסול \`bin()\`.** אם המועמד עונה \`bin(n)[2:]\` — בקש לעשות "ידנית". המראיין רוצה לראות בקיאות בייצוג.
+2. **לראות את שני הסגנונות.** "אפשר גם מ-MSB?" — אם הוא רואה את שניהם, חזק. אם רק אחד — עדיין בסדר, אבל שאל למה.
+3. **לבדוק את אפס.** \`n == 0\` — לולאת \`while n > 0\` לא תרוץ אף פעם, וב-\`reversed([])\` נקבל מחרוזת ריקה. צריך case מיוחד.
+4. **שאלת ביט מעולה לבדיקה מוקדמת.** אחרי זה אפשר לדבר על popcount, MSB, LSB — סדרת שאלות שהמועמד יחווה כסדרה הגיונית.`,
+        expectedAnswers: ['n & 1', 'n % 2', 'n >> 1', 'n // 2', 'while', 'reversed', 'bit_length', 'lsb', 'msb'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 27)',
+    tags: ['algorithms', 'bit-manipulation', 'binary', 'classic', 'python'],
+    circuitRevealsAnswer: true,
+    // ── Hardware analog: 4-bit shift-right register preloaded with 13 ──
+    // The Python loop does `n & 1; n >>= 1` in software. The circuit
+    // does the same thing in hardware: 4 D-FFs holding 0b1101 (=13),
+    // chained so each clock shifts bits one position to the right.
+    // The OUT pad shows the serial LSB stream — exactly the bits the
+    // Python loop appends to its output list (LSB first, MSB last).
+    //
+    // Run with AUTO CLK to watch the bit stream evolve:
+    //   tick 0: OUT = 1   (bit 0 of 13)
+    //   tick 1: OUT = 0   (bit 1)
+    //   tick 2: OUT = 1   (bit 2)
+    //   tick 3: OUT = 1   (bit 3)
+    //   tick 4+: OUT = 0  (zero-pad)
+    circuit: () => build(() => {
+      const clk = h.clock(120, 360);
+      // Constant zero feeding the MSB shift-in (no new bits arriving).
+      const zero = h.input(120, 120, 'shift-in');
+      zero.fixedValue = 0;
+      // 4 D-FFs preloaded with bits of 13 = 0b1101:
+      //   FF0 = bit 0 (LSB) = 1
+      //   FF1 = bit 1       = 0
+      //   FF2 = bit 2       = 1
+      //   FF3 = bit 3 (MSB) = 1
+      const ff0 = h.ffD(360, 220, 'FF0 (bit 0)'); ff0.initialQ = 1;
+      const ff1 = h.ffD(560, 220, 'FF1 (bit 1)'); ff1.initialQ = 0;
+      const ff2 = h.ffD(760, 220, 'FF2 (bit 2)'); ff2.initialQ = 1;
+      const ff3 = h.ffD(960, 220, 'FF3 (bit 3)'); ff3.initialQ = 1;
+      // Visible outputs: serial bit stream + parallel register state.
+      const out  = h.output(360, 420, 'OUT (LSB stream)');
+      const o0   = h.output(360, 100, 'FF0.Q');
+      const o1   = h.output(560, 100, 'FF1.Q');
+      const o2   = h.output(760, 100, 'FF2.Q');
+      const o3   = h.output(960, 100, 'FF3.Q');
+      return {
+        nodes: [clk, zero, ff0, ff1, ff2, ff3, out, o0, o1, o2, o3],
+        wires: [
+          // Shift-right chain: FF[i+1].Q → FF[i].D
+          h.wire(ff1.id,  ff0.id, 0),  // FF1.Q → FF0.D
+          h.wire(ff2.id,  ff1.id, 0),  // FF2.Q → FF1.D
+          h.wire(ff3.id,  ff2.id, 0),  // FF3.Q → FF2.D
+          h.wire(zero.id, ff3.id, 0),  // shift-in = 0 → FF3.D (zero-pad on the left)
+          // Shared clock
+          h.wire(clk.id,  ff0.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id,  ff1.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id,  ff2.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id,  ff3.id, 1, 0, { isClockWire: true }),
+          // Observability outputs
+          h.wire(ff0.id, out.id, 0),
+          h.wire(ff0.id, o0.id,  0),
+          h.wire(ff1.id, o1.id,  0),
+          h.wire(ff2.id, o2.id,  0),
+          h.wire(ff3.id, o3.id,  0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8028 — Popcount byte + LUT tradeoff
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'popcount-byte-lut',
+    difficulty: 'medium',
+    title: 'ספירת ביטים דלוקים בבית — ואיך לעשות זאת בזמן קבוע',
+    intro:
+`כתבו תוכנית שבודקת **כמה ביטים דלוקים** יש בבית אחד (8 ביטים).
+אחר-כך — כתבו אותה כך שתתבצע **בזמן קבוע**. מה הטרייד-אוף?
+
+\`\`\`
+Input: 0b10110100   Output: 4
+Input: 0b00000000   Output: 0
+Input: 0b11111111   Output: 8
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(8) = O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def popcount_byte(b):
+    """Count the set bits in an 8-bit byte (0..255)."""
+    # TODO: shift + accumulate
+    pass
+
+
+# print(popcount_byte(0b10110100))   # 4
+`,
+        question:
+`גרסה ראשונה: בדיקה ביט אחר ביט. כמה איטרציות במקרה הגרוע?`,
+        hints: [
+          'לולאה של 8 איטרציות, בכל איטרציה \\\`count += b & 1\\\` ואחר-כך \\\`b >>= 1\\\`.',
+          'אפשר לעצור מוקדם אם \\\`b == 0\\\` — אבל זה לא מקצר את המקרה הגרוע (\\\`b == 0xFF\\\` עדיין 8 איטרציות).',
+          'גרסה תמציתית: \\\`sum(((b >> i) & 1) for i in range(8))\\\`.',
+        ],
+        trace: {
+          title: 'popcount(0b10110100)',
+          source:
+`def popcount_byte(b):
+    count = 0
+    for _ in range(8):
+        count += b & 1
+        b >>= 1
+    return count`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: b = 0b10110100 (= 180), count = 0',
+              explain: '8 ביטים. נסרוק את כולם מהתחתון לעליון.',
+              executed: [1, 2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], label: 'b = 0b10110100', sub: '8 ביטים, נסרוק מ-LSB', accumStr: 'count = 0' }) },
+            { code: 'i=0: b&1=0, count=0, b → 0b1011010',
+              explain: 'LSB הוא 0. count לא משתנה.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [0], label: 'bit 0 = 0', accumStr: 'count = 0' }) },
+            { code: 'i=1: b&1=0, count=0, b → 0b101101',
+              explain: 'גם הביט הבא 0.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [1], label: 'bit 1 = 0', accumStr: 'count = 0' }) },
+            { code: 'i=2: b&1=1, count=1, b → 0b10110',
+              explain: 'ביט דלוק ראשון. count עולה.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [2], label: 'bit 2 = 1', accumStr: 'count = 1' }) },
+            { code: '… i=3,4,5,7 דלוקים, i=6 כבוי',
+              explain: 'אחרי 8 איטרציות, count = 4.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [0,1,2,3,4,5,6,7], label: 'all 8 bits scanned', accumStr: 'count = 4' }) },
+            { code: 'done: count = 4',
+              explain: 'ארבעה ביטים דלוקים: ביט 2, 4, 5, 7. ✓',
+              executed: [6], focusLine: 6,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [2,4,5,7], label: 'popcount = 4', done: true }) },
+          ],
+        },
+        answer:
+`**גרסה איטרטיבית** — 8 איטרציות בדיוק:
+
+\`\`\`python
+def popcount_byte(b):
+    count = 0
+    for _ in range(8):
+        count += b & 1
+        b >>= 1
+    return count
+\`\`\`
+
+זמן: \`O(8) = O(1)\` (בית קבוע), מקום: \`O(1)\`.
+
+**גרסה Pythonic:** \`return bin(b).count("1")\` — \`O(8)\` אבל מסתירה את הלוגיקה. במראיין שמבקש "ידני" זה לרוב לא מתקבל.`,
+        expectedAnswers: ['b & 1', 'b >> 1', 'count += 1', 'shift', '8 איטרציות', 'O(1)'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1) lookup' },
+          { label: 'Space', value: 'O(256)' },
+        ],
+        starterCode:
+`# Build a 256-entry table once.
+_POP_LUT = [bin(i).count("1") for i in range(256)]
+
+def popcount_lut(b):
+    """Return the popcount of a byte in O(1) using a lookup table."""
+    # TODO: a single indexing operation
+    pass
+`,
+        question:
+`כעת — איך לבצע **בזמן קבוע אמיתי** (לא 8 איטרציות, ולא תלוי בערך)? מהו הטרייד-אוף?`,
+        hints: [
+          'יש 256 ערכים אפשריים לבית. נחשב מראש את popcount של **כל אחד** ונשמור בטבלה.',
+          'בזמן ריצה — אינדוקס יחיד: \\\`_POP_LUT[b]\\\`. אין לולאה, אין shifts.',
+          'הטרייד-אוף: \\\`O(256)\\\` בייטים זיכרון תמורת \\\`O(1)\\\` אמיתי בזמן (קריאת מטמון יחידה).',
+        ],
+        trace: {
+          title: 'LUT — Lookup Table',
+          source:
+`# Pre-computed once at startup.
+_POP_LUT = [bin(i).count("1") for i in range(256)]
+
+def popcount_lut(b):
+    return _POP_LUT[b]`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'build: _POP_LUT = [0, 1, 1, 2, 1, 2, 2, 3, ...]',
+              explain: 'בונים פעם אחת את כל 256 התשובות. זיכרון: 256 בייטים (או 256 ints ב-Python).',
+              executed: [1], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,0,0,0,0,0,0], label: 'LUT[0..255] pre-computed', sub: '256 entries, ~1KB' }) },
+            { code: 'call: popcount_lut(180)',
+              explain: 'בית 180 = 0b10110100. הטבלה נותנת תשובה ישירה.',
+              executed: [4, 5], focusLine: 5,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], label: 'b = 180', sub: 'LUT[180] = ?', accumStr: '_POP_LUT[180]' }) },
+            { code: 'return _POP_LUT[180] → 4',
+              explain: 'גישה ישירה. \\\`O(1)\\\` אמיתי — בלי לולאה, בלי shifts. רק קריאת מטמון אחת. ✓',
+              executed: [5], focusLine: 5,
+              viz: _bitRowSvg({ bits: [1,0,1,1,0,1,0,0], hlIdx: [2,4,5,7], label: '_POP_LUT[180] = 4', sub: 'O(1) lookup', done: true }) },
+          ],
+        },
+        answer:
+`**Lookup Table (LUT) — 256 ערכים מחושבים מראש.**
+
+\`\`\`python
+_POP_LUT = [bin(i).count("1") for i in range(256)]
+
+def popcount_lut(b):
+    return _POP_LUT[b]
+\`\`\`
+
+**הטרייד-אוף — מקום תמורת זמן:**
+
+| | Iterative | LUT |
+|---|-----------|-----|
+| זמן ריצה | 8 פעולות (\`O(1)\` תיאורטית) | 1 קריאת מטמון (\`O(1)\` ממש) |
+| זיכרון | \`O(1)\` | \`O(256)\` |
+| Cache | ניטרלי | תלוי ב-cache locality |
+
+**הסבר עומק:** LUT הוא **memoization** קלאסי — מחשב פעם אחת, משתמש הרבה. בלולאה צמודה (לדוגמה, ספירת ביטים על מיליון בייטים), LUT יכול להיות פי 8 מהיר.
+
+**הרחבה ל-32-ביט:** רוצים popcount של מספר 32-ביט? אפשר לחלק ל-4 בייטים ולסכם 4 lookups:
+
+\`\`\`python
+def popcount32(n):
+    return (_POP_LUT[ n         & 0xff]
+          + _POP_LUT[(n >>  8)  & 0xff]
+          + _POP_LUT[(n >> 16)  & 0xff]
+          + _POP_LUT[(n >> 24)  & 0xff])
+\`\`\`
+
+4 קריאות מטמון = עדיין \`O(1)\` אמיתי, גם ב-32-ביט.
+
+**אלטרנטיבות מעניינות:**
+- **\`n & (n-1)\`** trick (Brian Kernighan) — \`O(popcount(n))\` איטרציות, ללא טבלה. רואה את זה ב-#8034.
+- **HAKMEM-style SWAR** — חישוב מקבילי על כל הביטים בו-זמנית עם מסכות קסם. \`O(1)\` במספר קבוע של פעולות, ללא טבלה.`,
+        expectedAnswers: ['lookup table', 'LUT', 'טבלה', '_POP_LUT[b]', '256', 'memoization', 'pre-computed', 'cache'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 28)',
+    tags: ['algorithms', 'bit-manipulation', 'popcount', 'lookup-table', 'tradeoff', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8030 — Position of 3rd set bit in 32-bit register
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'third-set-bit-position',
+    difficulty: 'medium',
+    title: 'מיקום הביט השלישי שערכו 1 ברגיסטר 32-ביט',
+    intro:
+`יש לך רגיסטר של **32 ביטים**. כתבו פונקציה שמוצאת את **המיקום של הביט השלישי**
+שערכו 1 (סופרים מ-LSB, החל מ-0). איך תוכל לשפר את זמן הריצה?
+
+\`\`\`
+Input: 0b00010101  →  bit positions of '1's are 0, 2, 4
+                      The third '1' is at position 4.
+
+Input: 0b11110000  →  positions 4, 5, 6, 7
+                      The third '1' is at position 6.
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(W) — W=32' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def third_one(n):
+    """Position (from LSB, 0-indexed) of the 3rd set bit. -1 if there aren't 3."""
+    # TODO: scan bits one by one
+    pass
+
+
+# print(third_one(0b00010101))   # 4
+`,
+        question:
+`גרסה ראשונה: סריקה ביט-אחר-ביט.`,
+        hints: [
+          'לולאה על \\\`k = 0..31\\\`, אם \\\`(n >> k) & 1\\\` — סופרים. כשמגיעים ל-3 → מחזירים את \\\`k\\\`.',
+          'תמיד שמרו על \\\`-1\\\` כברירת מחדל — אם אין 3 ביטים דלוקים, צריך להחזיר משהו שמסמן "לא נמצא".',
+        ],
+        trace: {
+          title: 'third_one(0b00010101)',
+          source:
+`def third_one(n):
+    count = 0
+    for k in range(32):
+        if (n >> k) & 1:
+            count += 1
+            if count == 3:
+                return k
+    return -1`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: n = 0b00010101, count = 0',
+              explain: 'הביטים הדלוקים בעמדות 0, 2, 4. אנחנו מחפשים את השלישי.',
+              executed: [1, 2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], label: 'n = 0b00010101', sub: 'bit 0,2,4 דלוקים', accumStr: 'count = 0' }) },
+            { code: 'k=0: bit=1 → count=1',
+              explain: 'הביט הראשון שמצאנו.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], hlIdx: [0], label: 'k=0, found set bit', accumStr: 'count = 1' }) },
+            { code: 'k=1: bit=0 → skip',
+              explain: 'אין מה לעשות.',
+              executed: [3], focusLine: 3,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], hlIdx: [1], label: 'k=1, bit clear', accumStr: 'count = 1' }) },
+            { code: 'k=2: bit=1 → count=2',
+              explain: 'הביט השני.',
+              executed: [3, 4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], hlIdx: [2], label: 'k=2, found set bit', accumStr: 'count = 2' }) },
+            { code: 'k=4: bit=1 → count=3 → return 4',
+              explain: 'מצאנו את השלישי בעמדה 4. ✓',
+              executed: [3, 4, 5, 6, 7], focusLine: 7,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], hlIdx: [4], label: 'k=4, third set bit!', accumStr: 'return 4', done: true }) },
+          ],
+        },
+        answer:
+`\`\`\`python
+def third_one(n):
+    count = 0
+    for k in range(32):
+        if (n >> k) & 1:
+            count += 1
+            if count == 3:
+                return k
+    return -1
+\`\`\`
+
+זמן: \`O(W)\` = \`O(32)\` במקרה הגרוע. מקום: \`O(1)\`. במקרה הטוב (כשהביט השלישי נמוך) — נעצור מוקדם.`,
+        expectedAnswers: ['(n >> k) & 1', 'count', 'return k', 'for k in range', '-1'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(popcount) ≤ 3' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def third_one_fast(n):
+    """Find the 3rd set bit using Brian Kernighan's trick."""
+    # Hint: n & -n  isolates the lowest set bit.
+    #       n & (n - 1)  clears it.
+    # TODO: drop the lowest set bit twice; return the position of the next one.
+    pass
+`,
+        question:
+`איך לשפר? במקום לסרוק 32 ביטים, **לקפוץ ישר** לביט הדלוק הבא.`,
+        hints: [
+          '\\\`n & -n\\\` מבודד את הביט הדלוק התחתון ביותר (one-hot). \\\`(n & -n).bit_length() - 1\\\` נותן את העמדה שלו.',
+          '\\\`n & (n - 1)\\\` מנקה את הביט הדלוק התחתון. אחרי שתי פעולות, מקבלים את \\\`n\\\` עם שני הביטים התחתונים מנוקים.',
+          'הביט השלישי הוא הביט הנמוך ביותר אחרי שני "ניקויים". אז: \\\`n = n & (n-1); n = n & (n-1); ans = (n & -n).bit_length() - 1\\\`.',
+          'יתרון: רץ ב-\\\`O(popcount)\\\` — לכל היותר 3 פעולות, ללא תלות ב-\\\`W\\\`.',
+        ],
+        trace: {
+          title: 'Kernighan trick — drop lowest set bit',
+          source:
+`def third_one_fast(n):
+    if bin(n).count("1") < 3: return -1
+    n = n & (n - 1)              # drop 1st
+    n = n & (n - 1)              # drop 2nd
+    return (n & -n).bit_length() - 1`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: n = 0b00010101 = 21',
+              explain: 'נשתמש בטריק \\\`n & (n-1)\\\` שמנקה את הביט הדלוק התחתון.',
+              executed: [1], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], label: 'n = 0b00010101', sub: 'יש 3 ביטים דלוקים' }) },
+            { code: 'n = n & (n - 1) = 0b00010100',
+              explain: 'מחקנו את ביט 0. נשארו ביטים 2, 4.',
+              executed: [3], focusLine: 3,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,0], hlIdx: [], cleared: [0], label: 'drop 1st set bit', sub: 'n = 0b00010100' }) },
+            { code: 'n = n & (n - 1) = 0b00010000',
+              explain: 'מחקנו את ביט 2. נשאר רק ביט 4.',
+              executed: [4], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,0,0,0], hlIdx: [], cleared: [0, 2], label: 'drop 2nd set bit', sub: 'n = 0b00010000' }) },
+            { code: '(n & -n).bit_length() - 1 = 4',
+              explain: 'הביט הנמוך הנותר הוא הביט השלישי המקורי. עמדה 4. ✓',
+              executed: [5], focusLine: 5,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,0,0,0], hlIdx: [4], label: '3rd set bit at position 4', sub: 'O(popcount) operations', done: true }) },
+          ],
+        },
+        answer:
+`**Brian Kernighan's trick — \`n & (n-1)\` מוחק את הביט הדלוק התחתון.**
+
+\`\`\`python
+def third_one_fast(n):
+    if bin(n).count("1") < 3:
+        return -1
+    n = n & (n - 1)              # drop 1st set bit
+    n = n & (n - 1)              # drop 2nd set bit
+    return (n & -n).bit_length() - 1
+\`\`\`
+
+**למה זה עובד:**
+- \`n & (n-1)\` מאפס את הביט הדלוק הנמוך ביותר. למשל: \`0b1010 - 1 = 0b1001\`, ו-\`0b1010 & 0b1001 = 0b1000\`.
+- אחרי שני שימושים — שני הביטים התחתונים נמחקו.
+- \`n & -n\` מבודד עכשיו את הביט הדלוק התחתון — שזה הביט השלישי המקורי.
+- \`.bit_length() - 1\` ממיר one-hot mask לעמדה (\`0b100000.bit_length() == 6\`, \`- 1 = 5\`).
+
+**מספר פעולות:** קבוע (3 פעולות BITWISE) — לא תלוי ב-\`W\`. בגרסה הראשונה הסריקה היא \`O(W)\` במקרה הגרוע.
+
+**הכללה — הביט ה-k-י:** הפעילו \`n &= n - 1\` בדיוק \`k-1\` פעמים, ואז \`(n & -n).bit_length() - 1\`.
+
+**אלטרנטיבה — שימוש ישיר ב-\`bit_length\`:** \`(n & -n).bit_length() - 1\` נותן את הביט הדלוק הנמוך ביותר. אפשר לעשות לולאה של 3 קפיצות:
+
+\`\`\`python
+def third_one_loop(n):
+    for _ in range(2):
+        if n == 0: return -1
+        n &= n - 1
+    if n == 0: return -1
+    return (n & -n).bit_length() - 1
+\`\`\``,
+        interviewerMindset:
+`שאלת המשך לפופקאונט. המראיין מחפש:
+
+1. **לראות שהמועמד יודע את הטריק \`n & (n-1)\`** — בלעדיו, הפתרון יישאר ב-\`O(W)\`.
+2. **להבין \`n & -n\`** — בידוד הביט הדלוק התחתון. מי שיודע את שניהם — נראה כמי שעבד עם בייטים בעבר.
+3. **הכללה — "מה אם רוצים את הביט ה-K?"** — תשובה: לולאה של \`k-1\` פעמים. הראייה שהפתרון מתרחב טבעית מראה הבנת המבנה.`,
+        expectedAnswers: ['n & (n - 1)', 'n & -n', 'bit_length', 'kernighan', 'drop lowest', 'isolate'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 30)',
+    tags: ['algorithms', 'bit-manipulation', 'kernighan', 'classic', 'python'],
+    circuitRevealsAnswer: true,
+    // ── Hardware analog: shift-out + count + compare ──────────────
+    // The naive algorithm scans bit-by-bit and counts set bits. The
+    // circuit does the same: a 4-bit shift-right register preloaded
+    // with 0b1101 (=13), feeding its LSB into a counter that only
+    // increments when a 1 bit shifts out. A second counter tracks
+    // the clock-tick position. A COMPARATOR fires when the set-bit
+    // counter reaches 3 — the position counter at that moment is
+    // the answer.
+    //
+    // For n=13 (set bits at 0, 2, 3): the comparator goes high on
+    // tick 4 — when the 3rd set bit (at position 3) is shifted out.
+    circuit: () => build(() => {
+      const clk  = h.clock(120, 460);
+      const zero = h.input(120, 120, 'shift-in'); zero.fixedValue = 0;
+      // 4-bit shift register preloaded with 0b1101 = 13 (bits 0, 2, 3 set).
+      const ff0 = h.ffD(360, 220, 'FF0'); ff0.initialQ = 1;  // bit 0
+      const ff1 = h.ffD(540, 220, 'FF1'); ff1.initialQ = 0;  // bit 1
+      const ff2 = h.ffD(720, 220, 'FF2'); ff2.initialQ = 1;  // bit 2
+      const ff3 = h.ffD(900, 220, 'FF3'); ff3.initialQ = 1;  // bit 3
+      // Set-bit counter: EN = FF0.Q (LSB of shift reg). Increments only
+      // when a 1 is being shifted out.
+      const cntOnes = h.block('COUNTER', 360, 460, { bitWidth: 4, label: 'CNT ones' });
+      // Position counter: always EN=1 (counts every clock tick).
+      const one = h.input(120, 540, 'EN=1'); one.fixedValue = 1;
+      const cntPos  = h.block('COUNTER', 720, 540, { bitWidth: 4, label: 'CNT pos' });
+      // Compare CNT_ones to constant 3 → fires on the 3rd set bit.
+      const three = h.input(900, 460, 'target=3'); three.fixedValue = 3;
+      const cmp   = h.block('COMPARATOR', 1080, 460, { label: 'CMP (==3)' });
+      // Outputs to watch
+      const oLsb   = h.output(540, 360, 'LSB stream');
+      const oOnes  = h.output(540, 530, 'CNT ones');
+      const oPos   = h.output(900, 620, 'CNT pos');
+      const oFound = h.output(1280, 460, 'FOUND (==3)');
+      return {
+        nodes: [
+          clk, zero, ff0, ff1, ff2, ff3,
+          cntOnes, one, cntPos, three, cmp,
+          oLsb, oOnes, oPos, oFound,
+        ],
+        wires: [
+          // Shift-right chain
+          h.wire(ff1.id, ff0.id, 0),
+          h.wire(ff2.id, ff1.id, 0),
+          h.wire(ff3.id, ff2.id, 0),
+          h.wire(zero.id, ff3.id, 0),
+          // Clock to all FFs and counters
+          h.wire(clk.id, ff0.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff1.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff2.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff3.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, cntOnes.id, 4, 0, { isClockWire: true }),
+          h.wire(clk.id, cntPos.id,  4, 0, { isClockWire: true }),
+          // CNT_ones.EN = FF0.Q (the LSB being shifted out)
+          h.wire(ff0.id, cntOnes.id, 0),
+          // CNT_pos.EN = constant 1 (free running)
+          h.wire(one.id, cntPos.id, 0),
+          // Compare CNT_ones == 3
+          h.wire(cntOnes.id, cmp.id, 0),
+          h.wire(three.id,   cmp.id, 1),
+          // Observability
+          h.wire(ff0.id,     oLsb.id,   0),
+          h.wire(cntOnes.id, oOnes.id,  0),
+          h.wire(cntPos.id,  oPos.id,   0),
+          h.wire(cmp.id,     oFound.id, 0),  // EQ on out0
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8031 — Swap two values without a temporary variable
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'swap-without-temp',
+    difficulty: 'easy',
+    title: 'החלפת שני ערכים בלי משתנה עזר',
+    intro:
+`נתונים שני משתנים. **איך תחליף בין הערכים שלהם בלי להשתמש במשתנה נוסף?**
+כמה גישות, כל אחת עם מאפיין שונה.
+
+\`\`\`
+Before: a=5, b=7
+After:  a=7, b=5
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1) — no extra var' },
+        ],
+        approaches: [
+          {
+            name: 'XOR swap',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'שלוש פעולות XOR. עובד על שלמים. כשל מסוכן אם a ו-b הם **אותה כתובת זיכרון** — יוצא 0.',
+            code:
+`def swap_xor(a, b):
+    a ^= b   # a = a ⊕ b
+    b ^= a   # b = b ⊕ (a ⊕ b) = a
+    a ^= b   # a = (a ⊕ b) ⊕ a = b
+    return a, b`,
+          },
+          {
+            name: 'Arithmetic (+/-)',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'אלגנטי. נכשל ב-overflow בשפות עם רוחב קבוע. ב-Python בטוח (אינטגרים אינסופיים).',
+            code:
+`def swap_arith(a, b):
+    a = a + b
+    b = a - b   # b = (a+b) - b = a
+    a = a - b   # a = (a+b) - a = b
+    return a, b`,
+          },
+          {
+            name: 'Pythonic tuple',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'הסטנדרט. תחת המכסה — יוצר tuple זמני. במראיין שמבקש "בלי משתנה עזר" — שאל אם זה נחשב.',
+            code:
+`def swap_tuple(a, b):
+    a, b = b, a
+    return a, b`,
+          },
+        ],
+        starterCode:
+`def swap_xor(a, b):
+    """Swap a and b using only XOR. Three operations."""
+    # TODO
+    pass
+
+
+# print(swap_xor(5, 7))   # (7, 5)
+`,
+        question:
+`ממשו לפחות שתי גישות. מה היתרון של כל אחת?`,
+        hints: [
+          'XOR: שלוש פעולות. השתמשו בעובדה ש-\\\`a ⊕ a = 0\\\` ו-\\\`a ⊕ 0 = a\\\`.',
+          'אריתמטי: \\\`a = a + b\\\`, ואחר-כך \\\`b = a - b\\\` נותן את הערך הישן של \\\`a\\\`.',
+          'בשפות עם רוחב קבוע (C, Java) — \\\`a + b\\\` יכול לגרום ל-overflow. XOR לא סובל מזה.',
+          'בשפות שאינן Python, XOR גם בעייתי אם \\\`a\\\` ו-\\\`b\\\` מצביעים לאותה כתובת — \\\`a ^= a == 0\\\`. צריך \\\`if &a != &b\\\`.',
+        ],
+        trace: {
+          title: 'XOR swap (5 ⊕ 7)',
+          source:
+`def swap_xor(a, b):
+    a ^= b
+    b ^= a
+    a ^= b
+    return a, b`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: a=5 (0101), b=7 (0111)',
+              explain: 'נסתכל בנפרד על הביטים.',
+              executed: [1], focusLine: 2,
+              viz: _twoBoxSvg({ a: '5 (0101)', b: '7 (0111)', op: 'init: a=5, b=7' }) },
+            { code: 'a ^= b → a = 0101 ⊕ 0111 = 0010 (= 2)',
+              explain: '\\\`a\\\` עכשיו מחזיק את ה-XOR של שני הערכים המקוריים.',
+              executed: [2], focusLine: 2,
+              viz: _twoBoxSvg({ a: '2 (0010)', b: '7 (0111)', op: 'a ^= b' }) },
+            { code: 'b ^= a → b = 0111 ⊕ 0010 = 0101 (= 5)',
+              explain: '\\\`b\\\` עכשיו מחזיק את הערך המקורי של \\\`a\\\` (= b ⊕ (a⊕b) = a).',
+              executed: [3], focusLine: 3,
+              viz: _twoBoxSvg({ a: '2 (0010)', b: '5 (0101)', op: 'b ^= a' }) },
+            { code: 'a ^= b → a = 0010 ⊕ 0101 = 0111 (= 7)',
+              explain: '\\\`a\\\` עכשיו מחזיק את הערך המקורי של \\\`b\\\` (= (a⊕b) ⊕ a = b). הסוואפ הושלם. ✓',
+              executed: [4, 5], focusLine: 4,
+              viz: _twoBoxSvg({ a: '7 (0111)', b: '5 (0101)', op: 'a ^= b — swap complete', done: true }) },
+          ],
+        },
+        answer:
+`**שלוש גישות, אחד הסטנדרט הטכני:**
+
+\`\`\`python
+# גישה 1: XOR
+def swap_xor(a, b):
+    a ^= b
+    b ^= a    # b is now old a
+    a ^= b    # a is now old b
+    return a, b
+
+# גישה 2: אריתמטי
+def swap_arith(a, b):
+    a = a + b
+    b = a - b
+    a = a - b
+    return a, b
+
+# גישה 3: Pythonic (Python tuple unpacking)
+def swap_py(a, b):
+    a, b = b, a
+    return a, b
+\`\`\`
+
+**איך XOR עובד:**
+
+| שלב | \`a\` | \`b\` |
+|---|---|---|
+| init | \`A\` | \`B\` |
+| \`a ^= b\` | \`A ⊕ B\` | \`B\` |
+| \`b ^= a\` | \`A ⊕ B\` | \`B ⊕ (A ⊕ B) = A\` |
+| \`a ^= b\` | \`(A ⊕ B) ⊕ A = B\` | \`A\` |
+
+מבוסס על: \`x ⊕ x = 0\`, \`x ⊕ 0 = x\`, ו-XOR קומוטטיבי ואסוציאטיבי.
+
+**מתי כל אחד מתאים?**
+- **XOR** — בלי overflow, עובד על שלמים בלבד, מהיר במחשבים.
+- **אריתמטי** — אלגנטי, אבל בעייתי בשפות עם רוחב קבוע (overflow על \`int32\`).
+- **Tuple** — קוד Python אידיומטי. תחת המכסה: \`temp = (b, a); a, b = temp[0], temp[1]\`.
+
+**מלכודת חמורה (לא ב-Python):** ב-C עם **מצביעים**, \`xor_swap(p, p)\` (אותה כתובת) ייתן 0!
+
+\`\`\`c
+void xor_swap(int *a, int *b) {
+    if (a == b) return;          // ← הגנה הכרחית
+    *a ^= *b; *b ^= *a; *a ^= *b;
+}
+\`\`\``,
+        interviewerMindset:
+`שאלת חימום אהובה — סינון ראשוני. המראיין מחפש:
+
+1. **שתי גישות בלפחות.** מי שעונה רק "\`a, b = b, a\`" כשהשאלה היא "בלי משתנה עזר" — מקבל שאלת המשך: "תוכל גם בלי tuple?".
+2. **הבנת ה-XOR.** מי שזוכר את הטריק אבל לא מסביר למה — חשוד שלמד בעל-פה. בקש לפרוס שלב-שלב.
+3. **המלכודת של אותה כתובת (C).** מועמדים מנוסים יזכירו את זה בעצמם — סימן לעבודה עם פוינטרים.
+4. **Overflow.** "בשפה כמו Java, איזה מהפתרונות שלך מסוכן יותר?" — תשובה: האריתמטי (\`a+b\` יכול לגלוש).
+
+**שאלת המשך לסבב הבא:** "סוואפ של שני strings בלי tmp?" — XOR/אריתמטי לא עובדים. בלי מבני נתונים, אין דרך אלגנטית. (זה משחק כדי לראות אם הוא מבין שהטריקים תלויים בייצוג מספרי.)`,
+        expectedAnswers: ['a ^= b', 'b ^= a', 'a + b', 'a - b', 'a, b = b, a', 'xor', 'overflow'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 31)',
+    tags: ['algorithms', 'bit-manipulation', 'swap', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8032 — Find 1→0 transition position in sorted bit pattern
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'one-to-zero-boundary',
+    difficulty: 'medium',
+    title: 'מיקום המעבר 1→0 בתמונת זיכרון ממוינת',
+    intro:
+`תמונת הזיכרון, החל מכתובת מסוימת \`X\`, נראית כך:
+
+\`\`\`
+[1, 1, 1, 1, 1, 1, ..., 1, 1, 1, 0, 0, 0, ..., 0]
+                      ↑
+              גבול מעבר 1→0
+\`\`\`
+
+מצא את **הביט בו תמונת הזיכרון משתנה מאחת לאפס** בדרך היעילה ביותר.
+**פלט:** אינדקס הביט האחרון שהוא 1 (או -1 אם כולם 0).
+
+\`\`\`
+Input:  [1, 1, 1, 0, 0, 0, 0, 0]                      →  3
+Input:  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]  →  11
+Input:  [0, 0, 0, 0]                                  →  -1 (כולם אפסים)
+Input:  [1, 1, 1, 1]                                  →  3 (כולם אחדים)
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(log n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def find_boundary(a):
+    """Return index of last 1 in a sorted [1,1,...,1,0,0,...,0] array.
+    -1 if all zeros."""
+    # TODO: binary search
+    pass
+
+
+# print(find_boundary([1,1,1,0,0,0,0,0]))   # 3
+`,
+        question:
+`גישה ראיתית: סריקה לינארית \`O(n)\`. אבל המערך **ממוין** (אחדים ואז אפסים) — איך אפשר \`O(log n)\`?`,
+        hints: [
+          'חיפוש בינארי: \\\`lo=0, hi=n-1\\\`. בכל איטרציה בוחנים את האמצע \\\`mid\\\`.',
+          'אם \\\`a[mid] == 1\\\` — האחד האחרון לפחות בעמדה \\\`mid\\\`. נחפש ימינה: \\\`lo = mid + 1\\\`.',
+          'אם \\\`a[mid] == 0\\\` — האחד האחרון לפני \\\`mid\\\`. נחפש שמאלה: \\\`hi = mid - 1\\\`.',
+          'בסוף הלולאה (\\\`lo > hi\\\`), \\\`hi\\\` מצביע למקום של האחד האחרון. אם \\\`hi == -1\\\` (לא היה אחד) — מחזירים -1.',
+        ],
+        trace: {
+          title: 'Binary search — boundary',
+          source:
+`def find_boundary(a):
+    lo, hi = 0, len(a) - 1
+    ans = -1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if a[mid] == 1:
+            ans = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return ans`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: a = [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], lo=0, hi=15',
+              explain: '16 ביטים. נחפש בינארית את הגבול 1→0.',
+              executed: [1, 2], focusLine: 2,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { lo: 0, hi: 15 }, label: 'init: lo=0, hi=15' }) },
+            { code: 'mid = 7, a[7]=1 → ans=7, lo=8',
+              explain: 'אמצע: עמדה 7, ערך 1. הגבול מימינו. שומרים \\\`ans=7\\\` כמועמד.',
+              executed: [4, 5, 6, 7, 8], focusLine: 6,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { lo: 8, hi: 15, mid: 7 }, highlights: [7], label: 'mid=7, ones → ans=7', subtitle: 'lo → 8' }) },
+            { code: 'mid = 11, a[11]=1 → ans=11, lo=12',
+              explain: 'עוד מעמיקים ימינה. \\\`ans\\\` מתעדכן.',
+              executed: [4, 5, 6, 7, 8], focusLine: 6,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { lo: 12, hi: 15, mid: 11 }, highlights: [11], label: 'mid=11, ones → ans=11', subtitle: 'lo → 12' }) },
+            { code: 'mid = 13, a[13]=0 → hi=12',
+              explain: 'עכשיו הגיע ל-0. הגבול קודם.',
+              executed: [4, 5, 9, 10], focusLine: 10,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { lo: 12, hi: 12, mid: 13 }, highlights: [13], label: 'mid=13, zero → hi=12', subtitle: 'hi → 12' }) },
+            { code: 'mid = 12, a[12]=0 → hi=11',
+              explain: '\\\`lo > hi\\\` בפעם הבאה — הלולאה נגמרת.',
+              executed: [4, 5, 9, 10], focusLine: 10,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { lo: 12, hi: 11, mid: 12 }, highlights: [12], label: 'mid=12, zero → hi=11', subtitle: 'lo > hi, exit' }) },
+            { code: 'done: return ans = 11',
+              explain: 'מצאנו את הגבול בעמדה 11. \\\`log₂(16) = 4\\\` איטרציות. ✓',
+              executed: [11], focusLine: 11,
+              viz: _arrayRowSvg({ arr: [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], pointers: { ans: 11 }, highlights: [11], label: 'boundary at index 11', subtitle: 'log₂(16) = 4 iterations', done: true }) },
+          ],
+        },
+        answer:
+`**חיפוש בינארי על המערך הממוין.** \`O(log n)\` זמן, \`O(1)\` מקום.
+
+\`\`\`python
+def find_boundary(a):
+    lo, hi = 0, len(a) - 1
+    ans = -1                  # default: all zeros
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if a[mid] == 1:
+            ans = mid         # mid is a candidate, try right
+            lo = mid + 1
+        else:
+            hi = mid - 1      # mid is 0, look left
+    return ans
+\`\`\`
+
+**איך זה עובד:**
+המערך הוא אחדים ואז אפסים — מבנה ממוין מבחינה בוליאנית. החיפוש מצמצם את הטווח בחצי בכל איטרציה.
+
+**אינוואריאנט:** בכל איטרציה, האחד האחרון נמצא ב-\`[ans, hi]\` (אם \`ans != -1\`) או ב-\`[lo, hi]\` (אם עוד לא מצאנו אחד).
+
+**למה לא \`bisect.bisect_right(a, 0)\`?** ב-Python יש פונקציה מובנית — אבל זה משתמש בהשוואות \`<\`, וכאן יש לנו רק 0/1. לוגית זה אותו דבר; פדגוגית — עדיף לראות את החיפוש הבינארי במפורש.
+
+**הכללה — מערך ענק (זרם בייטים, לא array):** אם הזיכרון הוא 4GB, אי-אפשר לקרוא הכל ל-RAM. אבל אם יש לנו \`read(addr) → bit\` פונקציה, אפשר לחפש בינארית עם \`O(log n)\` קריאות. תיקיפ' classic interview pattern.
+
+**מקרי קצה:**
+- מערך ריק → \`hi=-1\`, הלולאה לא רצה, מחזירים -1.
+- כולם 0 → לעולם לא נכנס לענף "\`a[mid]==1\`", \`ans\` נשאר -1.
+- כולם 1 → לעולם לא נכנס לענף "\`a[mid]==0\`", \`ans\` מתעדכן עד \`len(a)-1\`.`,
+        interviewerMindset:
+`שאלה קלאסית. המראיין מחפש:
+
+1. **לראות שזה חיפוש בינארי.** מועמד שכותב \`for i, x in enumerate(a): if x == 0: return i-1\` — \`O(n)\`, לא מנצל את המבנה.
+2. **לדייק את ה-\`mid==1\` / \`mid==0\`.** טעות נפוצה: לעדכן את הגבולות הפוך → לולאה אינסופית או תוצאה שגויה.
+3. **לטפל באתחול -1.** מועמד שמחזיר \`hi\` ישירות — לא יטפל ב-"כולם אפסים".
+4. **שאלת המשך — קלה:** "ומה אם המעבר הוא 0→1 (לא 1→0)?" — אותה תבנית, רק להחליף את התנאי.
+5. **שאלת המשך — מתקדם:** "ומה אם המערך עצום, לא נכנס ל-RAM, אבל יש לנו פונקצית \`read_bit(i)\`?" — אותה לוגיקה. החיפוש הבינארי לא תלוי בייצוג.`,
+        expectedAnswers: ['binary search', 'חיפוש בינארי', 'lo, hi', 'mid', 'O(log n)', 'log', 'bisect'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 32)',
+    tags: ['algorithms', 'binary-search', 'array', 'sorted', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8033 — Logic gates from arithmetic + INT swap (2-part)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'gates-from-arithmetic',
+    difficulty: 'medium',
+    title: 'שערים לוגיים מאופרטורים אריתמטיים בלבד',
+    intro:
+`**א.** נתונים שני משתנים בוליאנים \`a, b\` (כלומר \`0\` או \`1\`). ממש את **השערים הלוגיים**
+\`xor, not, and, or\` באמצעות **רק** האופרטורים \`+, -, *\` וקבועים — **בלי** להשתמש ב-\`||\`, \`&&\`, \`^\`, \`!\`.
+
+**ב.** החלף בין שני ערכי \`INT\` בלי להשתמש במשתנה עזר.`,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`# Inputs are boolean (0 or 1). Allowed operators: + - * and integer constants.
+# Forbidden: || && ^ ! and any bitwise op.
+
+def NOT(a):  pass    # → 1 - a ?
+def AND(a, b): pass  # → a * b ?
+def OR(a, b):  pass  # → a + b - a*b ?
+def XOR(a, b): pass  # → a + b - 2*a*b ?
+`,
+        question:
+`ממשו את ארבעת השערים. רמז: השתמשו בעובדה ש-\`a, b ∈ {0, 1}\`.`,
+        hints: [
+          '\\\`NOT(a) = 1 - a\\\`. כשמתחילים מ-0 או 1 בלבד, החיסור מ-1 הוא היפוך.',
+          '\\\`AND(a, b) = a * b\\\`. מכפלה היא 1 רק אם שני המוכפלים 1.',
+          '\\\`OR(a, b) = a + b - a*b\\\`. סכום עוקב 0/1/2; חסרים את "החפיפה" של AND.',
+          '\\\`XOR(a, b) = a + b - 2*a*b\\\`. סכום ל-0/1/2, חסרים פעמיים את החפיפה.',
+        ],
+        answer:
+`**ארבעת השערים:**
+
+\`\`\`python
+def NOT(a):     return 1 - a
+def AND(a, b):  return a * b
+def OR(a, b):   return a + b - a * b
+def XOR(a, b):  return a + b - 2 * a * b
+\`\`\`
+
+**הוכחה דרך טבלת אמת:**
+
+| a | b | \`a+b\` | \`a*b\` | OR = a+b-a*b | XOR = a+b-2a*b |
+|---|---|------|-------|--------------|----------------|
+| 0 | 0 | 0    | 0     | 0            | 0              |
+| 0 | 1 | 1    | 0     | 1            | 1              |
+| 1 | 0 | 1    | 0     | 1            | 1              |
+| 1 | 1 | 2    | 1     | 1            | 0              |
+
+✓ תואם את שערי הבוליאן הסטנדרטיים.
+
+**הסבר אינטואיטיבי:**
+- **OR** = "לפחות אחד" = סכום, פחות "חפיפה" שלא רוצים לספור פעמיים.
+- **XOR** = "בדיוק אחד" = סכום, פחות **שתי** חפיפות (כדי שכש-\`a=b=1\`, \`1+1-2=0\`).
+
+**הכללה — שערי NAND, NOR, XNOR:**
+\`\`\`python
+def NAND(a, b):  return 1 - a * b
+def NOR(a, b):   return 1 - (a + b - a * b)
+def XNOR(a, b):  return 1 - (a + b - 2 * a * b)
+\`\`\`
+
+**אזהרה — קלטים לא בוליאניים:** הנוסחאות מתבססות על \`a, b ∈ {0, 1}\`. אם \`a=2\`, \`AND(a, b) = 2*b\` — לא בוליאני. בדרך כלל יש להניח/לאכוף.
+
+**ולמה זה מעניין?** המראיין בודק:
+- האם המועמד יודע שלוגיקה בוליאנית **שקולה** לאריתמטיקה ב-\`GF(2)\` (שדה גלואה).
+- האם הוא יודע שהמכפלה ב-Σ\`a·b\` היא טריק טיפוסי לחישוב "ועד".`,
+        expectedAnswers: ['1 - a', 'a * b', 'a + b - a*b', 'a + b - 2*a*b', '1-a', 'a*b', 'truth table', 'טבלת אמת'],
+      },
+      {
+        label: 'ב',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def swap_int(a, b):
+    """Swap two ints without using a helper variable."""
+    # TODO
+    pass
+
+
+# print(swap_int(5, 7))   # (7, 5)
+`,
+        question:
+`(אותו תבנית כמו #8031, אבל קצר.) השתמשו ב-XOR או באריתמטיקה.`,
+        hints: [
+          'אריתמטי: \\\`a = a + b\\\`, ואז שאר הסדרה.',
+          'XOR: \\\`a ^= b; b ^= a; a ^= b\\\`. ב-Python — בטוח. בשפות אחרות זהירות מ-aliasing.',
+        ],
+        answer:
+`\`\`\`python
+def swap_int(a, b):
+    a = a + b
+    b = a - b   # = a (original)
+    a = a - b   # = b (original)
+    return a, b
+\`\`\`
+
+ראו #8031 לעומק מלא — כולל מלכודות overflow ו-aliasing.`,
+        expectedAnswers: ['a + b', 'a - b', 'a ^ b', 'a, b = b, a', 'xor'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 33)',
+    tags: ['algorithms', 'logic', 'gates', 'boolean', 'arithmetic', 'swap', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8034 — Brian Kernighan popcount (N iterations for N ones)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'popcount-kernighan',
+    difficulty: 'medium',
+    title: 'ספירת אחדות ב-N איטרציות (לא בגודל המספר)',
+    intro:
+`בהינתן מספר שיש בו \`N\` ביטים שערכם 1 — מצאו את \`N\` תוך שימוש ב-\`N\` איטרציות **לכל היותר**.
+ההבדל מ-#8028: שם הסיבוכיות תלויה ברוחב המספר (\`O(W)\`). כאן — תלויה רק במספר האחדים.
+
+\`\`\`
+Input: 0b00001000   →  1  (1 iteration)
+Input: 0b00010101   →  3  (3 iterations)
+Input: 0b11111111   →  8  (8 iterations)
+Input: 0b00000000   →  0  (0 iterations!)
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(popcount(n))' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def popcount(n):
+    """Return the number of set bits. Iterates at most popcount(n) times."""
+    # Hint: n & (n - 1)  clears the lowest set bit.
+    pass
+
+
+# print(popcount(0b11111111))   # 8
+`,
+        question:
+`גישה איטרטיבית "טריוויאלית" עוברת על כל \`W\` הביטים. הטריק כאן: לקפוץ ישר לביט הדלוק הבא.`,
+        hints: [
+          'הטריק של Brian Kernighan: \\\`n & (n - 1)\\\` **מנקה את הביט הדלוק הנמוך ביותר**. כל קריאה מעיפה ביט אחד.',
+          'לולאה: \\\`while n: n &= n - 1; count += 1\\\`. כשמגיעים ל-0 — כל הביטים נוקו.',
+          'מספר איטרציות = popcount(n) בדיוק. עבור \\\`n=0\\\` — 0 איטרציות.',
+        ],
+        trace: {
+          title: 'Brian Kernighan popcount',
+          source:
+`def popcount(n):
+    count = 0
+    while n:
+        n &= n - 1
+        count += 1
+    return count`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: n = 0b00010101 (= 21), count = 0',
+              explain: '3 ביטים דלוקים. נצפה ל-3 איטרציות בלבד.',
+              executed: [1, 2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,1], label: 'n = 0b00010101', sub: 'popcount = ?', accumStr: 'count = 0' }) },
+            { code: 'iter 1: n & (n-1) = 0b00010100, count=1',
+              explain: 'נקינו את ביט 0. נשארו 2 דלוקים.',
+              executed: [4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,1,0,0], cleared: [0], label: 'cleared bit 0', accumStr: 'count = 1' }) },
+            { code: 'iter 2: n & (n-1) = 0b00010000, count=2',
+              explain: 'נקינו את ביט 2. נשאר ביט אחד.',
+              executed: [4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,1,0,0,0,0], cleared: [0, 2], label: 'cleared bit 2', accumStr: 'count = 2' }) },
+            { code: 'iter 3: n & (n-1) = 0b00000000, count=3',
+              explain: 'נקינו את ביט 4. n הפך ל-0 — לולאה תיגמר.',
+              executed: [4, 5], focusLine: 4,
+              viz: _bitRowSvg({ bits: [0,0,0,0,0,0,0,0], cleared: [0, 2, 4], label: 'cleared bit 4', accumStr: 'count = 3' }) },
+            { code: 'done: count = 3',
+              explain: 'בדיוק 3 איטרציות — אחד לכל ביט דלוק. \\\`O(popcount(n))\\\`. ✓',
+              executed: [6], focusLine: 6,
+              viz: _bitRowSvg({ bits: [0,0,0,0,0,0,0,0], cleared: [0, 2, 4], label: 'popcount = 3', sub: 'O(3) iterations, not O(W)', done: true, accumStr: 'return 3' }) },
+          ],
+        },
+        answer:
+`**Brian Kernighan's algorithm** — \`O(popcount(n))\` במקום \`O(W)\`:
+
+\`\`\`python
+def popcount(n):
+    count = 0
+    while n:
+        n &= n - 1     # clear the lowest set bit
+        count += 1
+    return count
+\`\`\`
+
+**למה זה עובד:** ב-\`n - 1\`, **כל הביטים מתחת ל-LSB דולק** הופכים (כולל ה-LSB עצמו). למשל:
+\`\`\`
+n   = 0b10100
+n-1 = 0b10011
+n & (n-1) = 0b10000   ← הביט התחתון נמחק
+\`\`\`
+
+**מתי זה יותר מהיר?**
+- **מספר דליל (sparse)** — לדוגמה \`n = 0x80000000\` (ביט אחד דלוק ברוחב 32). הגישה הנאיבית עושה 32 איטרציות; Kernighan עושה 1.
+- **מספר צפוף (dense)** — לדוגמה \`0xFFFFFFFF\` (כל הביטים). שתי הגישות עושות 32 איטרציות. אין יתרון.
+
+**ניתוח אסימפטוטי:**
+
+| Algorithm | Time | Space |
+|---|---|---|
+| Naive shift | \`O(W)\` תמיד | \`O(1)\` |
+| Kernighan | \`O(popcount(n)) ≤ W\` | \`O(1)\` |
+| LUT (#8028) | \`O(1)\` אמיתי | \`O(256)\` |
+| SWAR / popcnt instruction | \`O(1)\` במכשיר | \`O(1)\` |
+
+**שאלת המשך:** "ומה אם רוצים את **העמדה** של הביט ה-K-י?" — אותה תבנית, פשוט קוראים \`(n & -n).bit_length() - 1\` לפני שמנקים. ראו #8030.`,
+        interviewerMindset:
+`שאלה אהובה לסבבי "trivia אלגוריתמיים." המראיין מחפש:
+
+1. **הכרת הטריק \`n & (n - 1)\`.** ידע ספציפי — אבל קלאסי. מועמד שלא מכיר ייתן את הפתרון \`O(W)\`.
+2. **הוכחת תקינות.** "תסביר למה זה מנקה ביט אחד בדיוק?" — בקיאות אמיתית מתחילה כשהוא מסביר את ה-borrowing של \`n - 1\`.
+3. **הבחנה מהגרסה הנאיבית.** "ומתי הגישה הזו טובה יותר?" — תשובה: מספרים דלילים.
+4. **שאלות המשך טבעיות:** popcount של מספר ב-64-ביט, מציאת ה-MSB, isolation של ה-LSB. הכל באותה משפחת בית-טריקים.`,
+        expectedAnswers: ['n & (n - 1)', 'n &= n - 1', 'kernighan', 'while n:', 'count += 1', 'O(popcount'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 34)',
+    tags: ['algorithms', 'bit-manipulation', 'popcount', 'kernighan', 'classic', 'python'],
+    circuitRevealsAnswer: true,
+    // ── Hardware analog: Kernighan's trick literally rendered ──────
+    // The Python loop does `n &= n - 1; count += 1` until `n == 0`.
+    // The circuit does the same thing with hardware:
+    //
+    //   ┌── 4-bit N register (4 D-FFs) ─┐
+    //   │       │                       │
+    //   │       MERGE (FF.Q × 4 → bus)  │
+    //   │       │                       │
+    //   │       ├─→ ALU op=SUB, B=1 ─→ N-1 (bus)
+    //   │       └─→ ALU op=AND, B=N-1 → N & (N-1) (bus)
+    //   │                               │
+    //   │       SPLIT (bus → 4 bits) ───┘
+    //   │       │
+    //   └───────┘  (feedback: each bit → its FF's D input)
+    //
+    // OR-tree on FF.Q ⇒ "N != 0" ⇒ EN of popcount COUNTER.
+    // When N reaches 0, EN goes low and the counter latches the answer.
+    //
+    // For N = 0b1101 (= 13, 3 set bits): counter reaches 3 in 3 clocks
+    // and stays there — exactly popcount(13).
+    circuit: () => build(() => {
+      const clk = h.clock(80, 580);
+      // Constants for ALU operands and opcodes (4-bit wide).
+      const one    = h.input(80, 200, 'B=1');       one.fixedValue    = 1;
+      const opSub  = h.input(80, 280, 'OP=SUB(1)'); opSub.fixedValue  = 1;
+      const opAnd  = h.input(80, 360, 'OP=AND(2)'); opAnd.fixedValue  = 2;
+      // 4 D-FFs holding the bits of N = 13 = 0b1101.
+      const ff0 = h.ffD(280, 460, 'FF0'); ff0.initialQ = 1;
+      const ff1 = h.ffD(280, 540, 'FF1'); ff1.initialQ = 0;
+      const ff2 = h.ffD(280, 620, 'FF2'); ff2.initialQ = 1;
+      const ff3 = h.ffD(280, 700, 'FF3'); ff3.initialQ = 1;
+      // MERGE: 4 single-bit FFs → 4-bit bus N.
+      const merge = h.block('MERGE', 480, 580, {
+        outBits: 4, slicesSpec: '0, 1, 2, 3', label: 'MERGE → N',
+      });
+      // ALUs (4-bit wide).
+      const aluSub = h.block('ALU', 680, 380, { bitWidth: 4, label: 'ALU N-1' });
+      const aluAnd = h.block('ALU', 680, 580, { bitWidth: 4, label: 'ALU N & (N-1)' });
+      // SPLIT: 4-bit bus result → 4 individual bits back to FFs.
+      const split = h.block('SPLIT', 880, 580, {
+        inBits: 4, slicesSpec: '0, 1, 2, 3', label: 'SPLIT result',
+      });
+      // OR-tree (3 gates) → "N != 0" signal.
+      const or01 = h.gate('OR', 480, 800);
+      const or23 = h.gate('OR', 480, 880);
+      const orAll = h.gate('OR', 660, 840);
+      // popcount counter: EN = (N != 0). 4-bit.
+      const popcnt = h.block('COUNTER', 880, 840, { bitWidth: 4, label: 'POPCOUNT' });
+      // Observability outputs.
+      const oN     = h.output(680,  280, 'N (bus)');
+      const oNm1   = h.output(880,  380, 'N-1');
+      const oAnd   = h.output(1080, 580, 'N&(N-1)');
+      const oCount = h.output(1080, 840, 'POPCOUNT');
+      const oDone  = h.output(880,  840 - 80 - 10, 'N!=0');
+      // Slight reposition for oDone to avoid overlap.
+      oDone.y = 760;  oDone.x = 1080;
+      return {
+        nodes: [
+          clk, one, opSub, opAnd,
+          ff0, ff1, ff2, ff3,
+          merge, aluSub, aluAnd, split,
+          or01, or23, orAll, popcnt,
+          oN, oNm1, oAnd, oCount, oDone,
+        ],
+        wires: [
+          // Clock to all stateful nodes.
+          h.wire(clk.id, ff0.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff1.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff2.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, ff3.id, 1, 0, { isClockWire: true }),
+          h.wire(clk.id, popcnt.id, 4, 0, { isClockWire: true }),
+          // MERGE: FF.Q × 4 → bus N
+          h.wire(ff0.id, merge.id, 0),
+          h.wire(ff1.id, merge.id, 1),
+          h.wire(ff2.id, merge.id, 2),
+          h.wire(ff3.id, merge.id, 3),
+          // ALU_sub: A=N, B=1, OP=SUB → N-1
+          h.wire(merge.id, aluSub.id, 0),
+          h.wire(one.id,   aluSub.id, 1),
+          h.wire(opSub.id, aluSub.id, 2),
+          // ALU_and: A=N, B=N-1, OP=AND → N & (N-1)
+          h.wire(merge.id, aluAnd.id, 0),
+          h.wire(aluSub.id, aluAnd.id, 1),
+          h.wire(opAnd.id,  aluAnd.id, 2),
+          // SPLIT: 4-bit result back to FF.D
+          h.wire(aluAnd.id, split.id, 0),
+          h.wire(split.id, ff0.id, 0, 0),  // SPLIT.__out0 = bit 0 → FF0.D
+          h.wire(split.id, ff1.id, 0, 1),  // SPLIT.__out1 = bit 1 → FF1.D
+          h.wire(split.id, ff2.id, 0, 2),  // SPLIT.__out2 = bit 2 → FF2.D
+          h.wire(split.id, ff3.id, 0, 3),  // SPLIT.__out3 = bit 3 → FF3.D
+          // OR-tree for "N != 0"
+          h.wire(ff0.id, or01.id, 0),
+          h.wire(ff1.id, or01.id, 1),
+          h.wire(ff2.id, or23.id, 0),
+          h.wire(ff3.id, or23.id, 1),
+          h.wire(or01.id, orAll.id, 0),
+          h.wire(or23.id, orAll.id, 1),
+          // POPCOUNT counter: EN = orAll (N != 0)
+          h.wire(orAll.id, popcnt.id, 0),
+          // Observability
+          h.wire(merge.id,  oN.id,     0),
+          h.wire(aluSub.id, oNm1.id,   0),
+          h.wire(aluAnd.id, oAnd.id,   0),
+          h.wire(popcnt.id, oCount.id, 0),
+          h.wire(orAll.id,  oDone.id,  0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8035 — Find LSB efficiently
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'find-lsb',
+    difficulty: 'easy',
+    title: 'מציאת ה-LSB (ביט דלוק תחתון) בצורה היעילה ביותר',
+    intro:
+`כתבו תוכנית שתאפס את ה-LSB (Least Significant Set Bit — הביט הדלוק הנמוך ביותר)
+בצורה היעילה ביותר.
+
+\`\`\`
+Input: 0b00101100  (44)   →  bit at position 2 isolated → 0b00000100 (4)
+Input: 0b10000000  (128)  →  position 7 → 0b10000000 (128)
+Input: 0b00000001  (1)    →  position 0 → 0b00000001 (1)
+Input: 0b00000000  (0)    →  no set bits → 0
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def isolate_lsb(n):
+    """Return a value with only the lowest set bit of n. 0 if n == 0."""
+    # TODO: one-liner
+    pass
+
+
+# print(bin(isolate_lsb(0b00101100)))   # 0b100
+`,
+        question:
+`איך לבודד את הביט הדלוק התחתון בפעולה **אחת**? איך למצוא את **העמדה**?`,
+        hints: [
+          'הקסם: \\\`n & -n\\\`. ב-two\'s-complement, \\\`-n = ~n + 1\\\`. הביט הדלוק התחתון "שורד" את ההיפוך וההוספה, וכל השאר מתאפס.',
+          'דוגמה: \\\`n = 0b1100\\\`, \\\`-n = 0b...10100\\\` (בייצוג שלם). \\\`n & -n = 0b0100\\\` — הביט הדלוק.',
+          'למציאת **העמדה**: \\\`(n & -n).bit_length() - 1\\\`. עבור \\\`0b100\\\` זה 3-1 = 2.',
+          'מקרה קצה: \\\`n == 0\\\` → \\\`n & -n == 0\\\`. ה-bit_length של 0 הוא 0, מה שייתן -1 לעמדה — לרוב מטפלים בזה בנפרד.',
+        ],
+        trace: {
+          title: 'n & -n — isolate LSB',
+          source:
+`def isolate_lsb(n):
+    return n & -n
+
+def lsb_position(n):
+    return (n & -n).bit_length() - 1 if n else -1`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: n = 0b00101100 (= 44)',
+              explain: 'הביט הדלוק התחתון בעמדה 2.',
+              executed: [1], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,1,0,1,1,0,0], label: 'n = 0b00101100', sub: '44 — LSB at position 2' }) },
+            { code: 'compute: -n (two\'s complement)',
+              explain: '\\\`-n = ~n + 1\\\`. הביטים שמתחת ל-LSB הם 0; הביט עצמו 1; הביטים מעל הופכים.',
+              executed: [2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [1,1,0,1,0,1,0,0], label: '-n in 8-bit two\'s complement', sub: '~n + 1 = 0b11010100' }) },
+            { code: 'n & -n = 0b00000100',
+              explain: 'ה-AND משאיר רק את הביט שהיה משותף — וזה בדיוק ה-LSB. ✓',
+              executed: [2], focusLine: 2,
+              viz: _bitRowSvg({ bits: [0,0,0,0,0,1,0,0], hlIdx: [2], label: 'isolated LSB', sub: 'value = 4, position = 2' }) },
+            { code: 'lsb_position(n) → 2',
+              explain: '\\\`bit_length(0b100) - 1 = 3 - 1 = 2\\\`. ✓',
+              executed: [5], focusLine: 5,
+              viz: _bitRowSvg({ bits: [0,0,0,0,0,1,0,0], hlIdx: [2], label: 'LSB position = 2', done: true }) },
+          ],
+        },
+        answer:
+`**\`n & -n\`** — מבודד את הביט הדלוק התחתון בפעולה אחת:
+
+\`\`\`python
+def isolate_lsb(n):
+    return n & -n              # 0 if n == 0
+
+def lsb_position(n):
+    if n == 0: return -1
+    return (n & -n).bit_length() - 1
+\`\`\`
+
+**למה זה עובד:** ב-two's-complement, \`-n\` נוצר ע"י \`~n + 1\`. ההפיכה הופכת **את כל** הביטים; ההוספה של 1 גוררת carry-propagation — שמתחיל מ-LSB ונעצרת מיד אחרי הביט הדלוק התחתון.
+
+**בלגן הביטים — שלב שלב על \`n = 0b1100\`:**
+\`\`\`
+n       = ...0000 1100
+~n      = ...1111 0011
+~n + 1  = ...1111 0100   (carry stops after bit 2)
+        = -n in two's complement
+
+n & -n  = ...0000 0100   ← ה-LSB מבודד
+\`\`\`
+
+**שימושים:**
+- **\`n & -n\` עצמו** = הביט הדלוק התחתון כ-one-hot mask.
+- **\`(n & -n).bit_length() - 1\`** = העמדה של ה-LSB.
+- **\`n & (n - 1)\`** = \`n\` בלי הביט הדלוק התחתון (Kernighan trick, ראו #8034).
+
+**הבדל מ-#8034:** שם, \`n & (n-1)\` *מוחק* את ה-LSB. כאן, \`n & -n\` *מבודד* אותו. שני טריקים משלימים — אחד מנקה, אחד שומר.
+
+**הכללה — \`Fenwick Tree (BIT)\`:** \`n & -n\` הוא הלב של עץ אינדקסים בינארי — מבנה נתונים שתומך ב-prefix-sums ב-\`O(log n)\` עם שורת קוד אחת לעדכון.`,
+        interviewerMindset:
+`שאלת ביט-טריקים אהובה. המראיין מחפש:
+
+1. **הכרת \`n & -n\`.** מועמדים מתחילים יסרקו ביט-ביט (\`while not (n & 1): n >>= 1\`); זה לא טעות, אבל \`O(W)\` ולא הטריק.
+2. **הסבר ה-two's-complement.** מי שזוכר את הביטוי "\`~n + 1\`" — סימן להבנת ייצוג חתום.
+3. **הקשר ל-Fenwick Tree.** מועמדים מנוסים יזכירו את זה — אינדיקטור לעומק.
+4. **שאלת המשך:** "ולמה זה לא עובד באותה צורה ב-Python על מספרים שליליים?" — תשובה: Python משתמש בייצוג של "אינסוף ביטי 1" משמאל; אבל \`n & -n\` עדיין עובד נכון בזכות שיטת ה-bit_length של Python.`,
+        expectedAnswers: ['n & -n', '-n', 'two\'s complement', 'bit_length', 'isolate', 'lsb', 'least significant'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 35)',
+    tags: ['algorithms', 'bit-manipulation', 'lsb', 'two-complement', 'classic', 'python'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8036 — Min of two numbers without comparison operators
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'min-without-compare',
+    difficulty: 'medium',
+    title: 'מינימום של שני מספרים בלי אופרטורי השוואה',
+    intro:
+`ממש פונקציה שמחזירה את המינימום בין שני מספרים, **מבלי להשתמש באופרטורי השוואה**
+(\`<\`, \`>\`, \`==\`, \`<=\`, \`>=\`, \`!=\`). גם לא \`min()\`, \`max()\`, או \`if\`/\`?:\`.
+
+\`\`\`
+Input: a=3, b=7    →  3
+Input: a=-5, b=2   →  -5
+Input: a=4, b=4    →  4
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(1)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        approaches: [
+          {
+            name: 'Arithmetic + abs()',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'נוסחה אריתמטית: \`min = (a + b - |a - b|) / 2\`. אינטואיטיבית אבל משתמשת ב-\`abs\`.',
+            code:
+`def min_arith(a, b):
+    return (a + b - abs(a - b)) // 2`,
+          },
+          {
+            name: 'Sign-bit trick (no abs)',
+            time: 'O(1)', space: 'O(1)',
+            summary: 'מנצל את ביט הסימן: אם \`a - b\` שלילי, מחזירים a, אחרת b. עובד על מספרים חתומים.',
+            code:
+`def min_signbit(a, b):
+    diff = a - b
+    # In Python, shifting a negative right gives -1, positive gives 0.
+    sign = (diff >> 63) & 1     # 1 if a < b, else 0 (for 64-bit ints)
+    return a * sign + b * (1 - sign)`,
+          },
+        ],
+        starterCode:
+`def my_min(a, b):
+    """Return min(a, b) without using comparison operators."""
+    # TODO
+    pass
+
+
+# print(my_min(3, 7))   # 3
+`,
+        question:
+`ממשו לפחות גישה אחת. מה היתרונות והחסרונות של כל אחת?`,
+        hints: [
+          'נוסחה: \\\`(a + b - |a - b|) / 2\\\`. הסכום פחות ההפרש המוחלט = פעמיים הקטן.',
+          'גישת ביט-סימן: \\\`a - b\\\` שלילי ⇔ \\\`a < b\\\`. אפשר לבדוק את ביט הסימן בלי \\\`<\\\`.',
+          'ב-Python, \\\`(diff >> 63) & 1\\\` מחזיר 1 אם הביט הגבוה דלוק (שלילי). 0 אחרת. עובד ל-int 64-ביט.',
+          'הגלולה: \\\`min = a * sign + b * (1 - sign)\\\`. אם \\\`sign=1\\\` (\\\`a<b\\\`), מחזירים \\\`a\\\`. אחרת \\\`b\\\`.',
+        ],
+        trace: {
+          title: 'min(3, 7) — arithmetic',
+          source:
+`def my_min(a, b):
+    return (a + b - abs(a - b)) // 2`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'a = 3, b = 7',
+              explain: 'נחשב את הנוסחה צעד-צעד.',
+              executed: [1], focusLine: 2,
+              viz: _twoBoxSvg({ a: 3, b: 7, op: 'init: min(a, b) without compare' }) },
+            { code: 'a + b = 10',
+              explain: 'סכום שני המספרים.',
+              executed: [2], focusLine: 2,
+              viz: _twoBoxSvg({ a: 3, b: 7, op: 'a + b = 10' }) },
+            { code: '|a - b| = |3 - 7| = 4',
+              explain: 'ההפרש המוחלט.',
+              executed: [2], focusLine: 2,
+              viz: _twoBoxSvg({ a: 3, b: 7, op: '|a - b| = 4' }) },
+            { code: '(10 - 4) // 2 = 3',
+              explain: 'הסכום פחות ההפרש המוחלט = פעמיים המינימום. חלוקה ב-2 = המינימום. ✓',
+              executed: [2], focusLine: 2,
+              viz: _twoBoxSvg({ a: 3, b: 7, op: 'min = (10 - 4) / 2', result: 3, resultName: 'min(a, b)', done: true }) },
+          ],
+        },
+        answer:
+`**שתי גישות, עם הסבר מדוע כל אחת עובדת.**
+
+\`\`\`python
+# גישה 1 — נוסחה אריתמטית
+def my_min(a, b):
+    return (a + b - abs(a - b)) // 2
+
+# גישה 2 — ביט-סימן (אין שימוש ב-abs)
+def my_min_sign(a, b):
+    diff = a - b
+    sign = (diff >> 63) & 1    # 1 if a < b, else 0 (assume 64-bit signed)
+    return a * sign + b * (1 - sign)
+\`\`\`
+
+**איך פועלת הנוסחה האריתמטית:**
+
+נניח \`a ≤ b\`:
+- \`a + b\` = \`a + b\`
+- \`|a - b|\` = \`b - a\`
+- \`(a + b) - (b - a)\` = \`2a\` → חלוקה ב-2 = \`a\` = min ✓
+
+נניח \`a > b\`:
+- \`(a + b) - (a - b)\` = \`2b\` → \`b\` = min ✓
+
+**איך פועלת גישת ביט-הסימן:**
+
+הביט הגבוה ביותר במספר חתום הוא ביט הסימן (1 = שלילי, 0 = אי-שלילי). אם \`a - b < 0\` ⇔ \`a < b\`, אז \`(diff >> 63) & 1 == 1\`, ואז:
+- \`a * 1 + b * 0 = a\` ✓
+
+**יתרונות וחסרונות:**
+
+| | Arithmetic | Sign-bit |
+|---|------------|----------|
+| משתמש ב-\`abs\`? | כן | לא |
+| Overflow? | אפשרי ב-\`a-b\` ברוחב קבוע | אפשרי ב-\`a-b\` |
+| מטפל ב-\`a == b\`? | כן (\`(2a - 0)/2 = a\`) | כן (\`sign=0\`, מחזיר \`b\` = \`a\`) |
+| Python-friendly? | מאוד | תלוי ברוחב מספר |
+
+**שאלת המשך — max:** הפוך:
+\`\`\`python
+def my_max(a, b):
+    return (a + b + abs(a - b)) // 2
+\`\`\`
+
+**מקרי קצה:**
+- \`a == b\` → תוצאה היא הערך עצמו (לא משנה איזה).
+- מספרים גדולים מאוד — \`a + b\` יכול לגרום ל-overflow בשפות עם רוחב קבוע. ב-Python אינטים אינסופיים אז בטוח.`,
+        interviewerMindset:
+`שאלת חידה. המראיין מחפש:
+
+1. **ראייה שזה לא תרגיל-ראש סתם.** הנוסחה \`(a+b ± |a-b|) / 2\` מופיעה גם ב-מנוסחת המינימום של גלילים (\`min(x, y) = (x+y - |x-y|)/2\`), בעיבוד אותות, ב-ML (smooth-min).
+2. **לדעת לפחות שתי גישות.** מי שמצליח רק נוסחה אחת — שאל "אם אסור \`abs\`?"; הוא יזיז את עצמו לכיוון ביט-סימן.
+3. **טיפול ב-overflow.** "ובשפה כמו C עם \`int32\`?" — נוסחת \`a+b\` בעייתית אם שני המספרים גדולים. אפשר לתקן: \`a - ((a - b) & sign)\`.
+4. **שאלת המשך אהובה:** "ומה אם רוצים מבלי \`abs()\` *ובלי* shifts (רק \`+, -, *\`)?" — תשובה: זה לא אפשרי בלי השוואה אם רוצים תמיכה אוניברסלית. ה-trick תלוי בידע על ייצוג ביטים.`,
+        expectedAnswers: ['(a + b - abs(a - b)) // 2', 'abs(a - b)', '>> 63', 'sign bit', 'ביט סימן', 'two\'s complement'],
+      },
+    ],
+    source: 'PP - שאלות קוד (slide 36)',
+    tags: ['algorithms', 'bit-manipulation', 'min', 'no-compare', 'classic', 'python'],
   },
 ];

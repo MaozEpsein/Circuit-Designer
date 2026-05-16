@@ -1103,6 +1103,7 @@ endmodule
     ],
     source: 'IQ/PP — מצגת שאלות מעגלים, שקף 3 (FA ממספר מינימלי של MUX 2:1)',
     tags: ['fa', 'full-adder', 'mux', '2:1-mux', 'minimum', 'combinational', 'logic', 'verilog'],
+    circuitRevealsAnswer: true,
     circuit: () => build(() => {
       // Realize the 3-MUX FA on the canvas. The schematic uses MUX (inputCount=2),
       // a single NOT gate to expose ¬b and ¬c (shared inverters).
