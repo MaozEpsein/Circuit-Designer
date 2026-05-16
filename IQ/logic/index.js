@@ -1150,4 +1150,2304 @@ endmodule
       };
     }),
   },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1006 — BlackBox (x, x+2) → x+1, no adders/subtractors (slide 7)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'blackbox-xp1-from-x-and-xp2',
+    difficulty: 'medium',
+    title: 'BlackBox: (x, x+2) → x+1 בלי מחברים ומחסרים',
+    intro:
+`נתונה מערכת עם שתי כניסות, \`X\` (4-bit) ו-\`X+2\` (4-bit). הפלט הוא \`X+1\` (4-bit).
+**צריך לממש את המערכת בלי להשתמש במחברים או מחסרים** — רק שערים לוגיים ו-MUXes.
+
+**רמז ראשון:** מאחר ש-\`(X+1) = (X + (X+2)) / 2\` (ממוצע), הפתרון הוא חישוב הממוצע בצורה ביטית — אבל **ללא חיבור**.`,
+    schematic: `
+<svg viewBox="0 0 420 200" xmlns="http://www.w3.org/2000/svg" direction="ltr" font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="BlackBox with X and X+2 inputs, X+1 output">
+  <!-- BlackBox body -->
+  <rect x="140" y="50" width="160" height="100" rx="6" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text x="220" y="106" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">BlackBox</text>
+
+  <!-- X input (top) -->
+  <text x="80" y="76" text-anchor="middle" fill="#f0d080" font-weight="bold">X</text>
+  <text x="80" y="92" text-anchor="middle" fill="#a09080" font-size="10">(4-bit)</text>
+  <line x1="100" y1="80" x2="140" y2="80" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="140,80 134,76 134,84" fill="#f0d080"/>
+
+  <!-- X+2 input (bottom) -->
+  <text x="80" y="124" text-anchor="middle" fill="#f0d080" font-weight="bold">X+2</text>
+  <text x="80" y="140" text-anchor="middle" fill="#a09080" font-size="10">(4-bit)</text>
+  <line x1="100" y1="128" x2="140" y2="128" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="140,128 134,124 134,132" fill="#f0d080"/>
+
+  <!-- X+1 output -->
+  <line x1="300" y1="100" x2="360" y2="100" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="360,100 354,96 354,104" fill="#80f0a0"/>
+  <text x="380" y="98" text-anchor="middle" fill="#80f0a0" font-weight="bold">X+1</text>
+  <text x="380" y="114" text-anchor="middle" fill="#80a080" font-size="10">(4-bit)</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנן את המעגל. כמה MUXים וכמה שערים?',
+        hints: [
+          'הסתכל על LSB: \\\`(X+1)[0] = ¬X[0]\\\` תמיד. למה? כי X ו-X+2 חולקים אותו LSB, ו-X+1 הוא בדיוק "ההפך" שלהם בביט הזה.',
+          'הסתכל על ביטים גבוהים. אם \\\`X\\\` הוא **זוגי** (X[0]=0) — אז \\\`X+1 = X\\\` עם LSB מתחלף, כל ביט גבוה נשאר כמו X.',
+          'אם \\\`X\\\` הוא **אי-זוגי** (X[0]=1) — אז \\\`X+1 = (X+2) - 1\\\` = (X+2) עם ה-LSB שלו מתאפס. כלומר ה-MSBs של X+1 שווים ל-MSBs של X+2 (וה-LSB של X+1 הוא 0).',
+          'הכלל: לכל ביט i ≥ 1, \\\`(X+1)[i] = MUX(sel=X[0], in0=X[i], in1=(X+2)[i])\\\`. LSB תמיד \\\`¬X[0]\\\`.',
+          'סה"כ: 1 NOT + 3 MUXים 2:1.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 800 640" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', 'Consolas', monospace" font-size="12"
+     role="img" aria-label="1 NOT + 3 MUX 2:1 implementing X+1 from X and X+2">
+  <defs>
+    <linearGradient id="bbMuxGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/>
+      <stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <linearGradient id="bbNotGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a2438"/>
+      <stop offset="1" stop-color="#0a1420"/>
+    </linearGradient>
+    <linearGradient id="bbTitleGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#142840"/>
+      <stop offset="1" stop-color="#0a1828"/>
+    </linearGradient>
+    <marker id="bbArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/>
+    </marker>
+    <marker id="bbArrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/>
+    </marker>
+    <marker id="bbArrO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff8060"/>
+    </marker>
+    <filter id="bbGlowO" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feFlood flood-color="#ff8060" flood-opacity="0.5"/>
+      <feComposite in2="SourceAlpha" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ─── Title banner ─── -->
+  <rect x="0" y="0" width="800" height="64" fill="url(#bbTitleGrad)"/>
+  <text direction="ltr" x="400" y="26" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    (X+1)[0] = ¬X[0]
+  </text>
+  <text direction="ltr" x="400" y="48" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    (X+1)[i] = MUX(sel = X[0], in0 = X[i], in1 = (X+2)[i])    for i = 1, 2, 3
+  </text>
+
+  <!-- ─── Subtle row backgrounds (alternating) ─── -->
+  <rect x="0" y="80"  width="800" height="120" fill="#0a1825" opacity="0.45"/>
+  <rect x="0" y="200" width="800" height="120" fill="#0a1420" opacity="0.55"/>
+  <rect x="0" y="320" width="800" height="120" fill="#0a1825" opacity="0.45"/>
+  <rect x="0" y="440" width="800" height="160" fill="#0a1420" opacity="0.55"/>
+
+  <!-- Row labels (LTR) -->
+  <text direction="ltr" x="40" y="146" text-anchor="middle" fill="#7090b0" font-size="11">bit 0</text>
+  <text direction="ltr" x="40" y="266" text-anchor="middle" fill="#7090b0" font-size="11">bit 1</text>
+  <text direction="ltr" x="40" y="386" text-anchor="middle" fill="#7090b0" font-size="11">bit 2</text>
+  <text direction="ltr" x="40" y="516" text-anchor="middle" fill="#7090b0" font-size="11">bit 3</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Bit 0 row:  X[0] enters from far left, branches at junction P0:
+         (a) RIGHT  →  NOT  →  (X+1)[0]
+         (b) DOWN   →  sel rail for bits 1, 2, 3
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- X[0] input label -->
+  <text direction="ltr" x="106" y="142" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">X[0]</text>
+  <!-- X[0] data wire from label to junction -->
+  <line x1="138" y1="146" x2="230" y2="146" stroke="#ff8060" stroke-width="1.8"/>
+  <!-- Junction P0 — the fan-out point (this is the KEY visual) -->
+  <circle cx="230" cy="146" r="6" fill="#ff8060" filter="url(#bbGlowO)"/>
+  <text direction="ltr" x="230" y="124" text-anchor="middle" fill="#ff8060" font-size="10" font-weight="bold">fan-out</text>
+  <!-- Branch (a): junction → NOT (right) -->
+  <line x1="230" y1="146" x2="380" y2="146" stroke="#ff8060" stroke-width="1.8"/>
+  <!-- NOT triangle + bubble -->
+  <polygon points="380,124 380,168 426,146" fill="url(#bbNotGrad)" stroke="#80d4ff" stroke-width="1.8"/>
+  <circle cx="434" cy="146" r="6" fill="#0a1420" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="400" y="151" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="12">NOT</text>
+  <!-- NOT output → (X+1)[0] -->
+  <line x1="440" y1="146" x2="650" y2="146" stroke="#80f0a0" stroke-width="2" marker-end="url(#bbArrG)"/>
+  <text direction="ltr" x="720" y="142" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">(X+1)[0]</text>
+
+  <!-- Branch (b): junction P0 → DOWN as the shared sel rail -->
+  <line x1="230" y1="146" x2="230" y2="572" stroke="#ff8060" stroke-width="2.4" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="246" y="182" fill="#ff8060" font-size="11" font-weight="bold">sel rail (X[0])</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Bit 1 row (y centre ≈ 260)
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <text direction="ltr" x="106" y="246" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">X[1]</text>
+  <line x1="138" y1="250" x2="378" y2="250" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="244" text-anchor="middle" fill="#a0c0e0" font-size="10">in0</text>
+
+  <text direction="ltr" x="106" y="294" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">(X+2)[1]</text>
+  <line x1="160" y1="298" x2="378" y2="298" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="292" text-anchor="middle" fill="#a0c0e0" font-size="10">in1</text>
+
+  <!-- MUX trapezoid for bit 1 -->
+  <polygon points="380,232 446,250 446,298 380,316" fill="url(#bbMuxGrad)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="413" y="278" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">MUX</text>
+
+  <!-- sel tap: from rail (x=230) to MUX bottom (x=413, y=316) → up to bottom edge -->
+  <line x1="230" y1="316" x2="413" y2="316" stroke="#ff8060" stroke-width="1.6"/>
+  <circle cx="230" cy="316" r="4" fill="#ff8060"/>
+  <line x1="413" y1="316" x2="413" y2="307" stroke="#ff8060" stroke-width="1.6" marker-end="url(#bbArrO)"/>
+  <text direction="ltr" x="430" y="322" fill="#ff8060" font-size="10">sel</text>
+
+  <!-- output -->
+  <line x1="446" y1="274" x2="650" y2="274" stroke="#80f0a0" stroke-width="2" marker-end="url(#bbArrG)"/>
+  <text direction="ltr" x="720" y="270" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">(X+1)[1]</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Bit 2 row (y centre ≈ 380)
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <text direction="ltr" x="106" y="366" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">X[2]</text>
+  <line x1="138" y1="370" x2="378" y2="370" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="364" text-anchor="middle" fill="#a0c0e0" font-size="10">in0</text>
+
+  <text direction="ltr" x="106" y="414" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">(X+2)[2]</text>
+  <line x1="160" y1="418" x2="378" y2="418" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="412" text-anchor="middle" fill="#a0c0e0" font-size="10">in1</text>
+
+  <polygon points="380,352 446,370 446,418 380,436" fill="url(#bbMuxGrad)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="413" y="398" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">MUX</text>
+
+  <line x1="230" y1="436" x2="413" y2="436" stroke="#ff8060" stroke-width="1.6"/>
+  <circle cx="230" cy="436" r="4" fill="#ff8060"/>
+  <line x1="413" y1="436" x2="413" y2="427" stroke="#ff8060" stroke-width="1.6" marker-end="url(#bbArrO)"/>
+  <text direction="ltr" x="430" y="442" fill="#ff8060" font-size="10">sel</text>
+
+  <line x1="446" y1="394" x2="650" y2="394" stroke="#80f0a0" stroke-width="2" marker-end="url(#bbArrG)"/>
+  <text direction="ltr" x="720" y="390" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">(X+1)[2]</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Bit 3 row (y centre ≈ 510; extra spacing so sel doesn't overlap (X+2)[3])
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <text direction="ltr" x="106" y="486" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">X[3]</text>
+  <line x1="138" y1="490" x2="378" y2="490" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="484" text-anchor="middle" fill="#a0c0e0" font-size="10">in0</text>
+
+  <text direction="ltr" x="106" y="538" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="13">(X+2)[3]</text>
+  <line x1="160" y1="542" x2="378" y2="542" stroke="#80d4ff" stroke-width="1.6" marker-end="url(#bbArrB)"/>
+  <text direction="ltr" x="326" y="536" text-anchor="middle" fill="#a0c0e0" font-size="10">in1</text>
+
+  <polygon points="380,472 446,490 446,542 380,560" fill="url(#bbMuxGrad)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="413" y="520" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">MUX</text>
+
+  <!-- sel for bit 3: rail endpoint at (230, 572), curls right under the MUX -->
+  <line x1="230" y1="572" x2="413" y2="572" stroke="#ff8060" stroke-width="1.6"/>
+  <circle cx="230" cy="572" r="4" fill="#ff8060"/>
+  <line x1="413" y1="572" x2="413" y2="563" stroke="#ff8060" stroke-width="1.6" marker-end="url(#bbArrO)"/>
+  <text direction="ltr" x="430" y="578" fill="#ff8060" font-size="10">sel</text>
+
+  <line x1="446" y1="516" x2="650" y2="516" stroke="#80f0a0" stroke-width="2" marker-end="url(#bbArrG)"/>
+  <text direction="ltr" x="720" y="512" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">(X+1)[3]</text>
+
+  <!-- ─── Footer: total gate count ─── -->
+  <text direction="ltr" x="400" y="616" text-anchor="middle" fill="#a0a0c0" font-size="12" font-style="italic">
+    Total:  1 NOT  +  3 MUX 2:1   (sel shared across all 3 MUXes)
+  </text>
+</svg>`,
+        answer:
+`**ההבחנה המפתחית:** \`X+1\` הוא תמיד **המוצע** של \`X\` ו-\`X+2\`. הממוצע נבדק bit-by-bit לפי LSB של \`X\`:
+
+| תנאי | מה זה אומר על X+1 |
+|------|-------------------|
+| \`X[0] = 0\` (X זוגי) | \`X+1 = X | 1\` — ביט תחתון מתחלף, MSBs זהים ל-\`X\` |
+| \`X[0] = 1\` (X אי-זוגי) | \`X+1 = (X+2) & ~1\` — ביט תחתון מתאפס, MSBs זהים ל-\`X+2\` |
+
+**שני המקרים מאוחדים:**
+- LSB: \`(X+1)[0] = ¬X[0]\` (תמיד).
+- בית \`i ≥ 1\`: \`(X+1)[i] = X[0] ? (X+2)[i] : X[i]\` (MUX 2:1 עם \`sel = X[0]\`).
+
+**מימוש** (ראה הסכמה למעלה — 1 NOT + 3 MUX 2:1, sel משותף = X[0]).
+
+**ספירה:** 1 NOT + 3 MUXים. אם רוצים גם בלי MUX (רק שערים בסיסיים), אפשר לפתוח כל MUX ל-\`(in0 ∧ ¬sel) ∨ (in1 ∧ sel)\` = 2 AND + NOT + OR לכל MUX = 12 שערים נוספים. סה"כ 13 שערים בסיסיים.
+
+**הוכחה (לחיזוק):**
+- \`X = 0011 (=3)\`, \`X+2 = 0101 (=5)\`. \`X[0] = 1\` → MUXים בוחרים מ-(X+2). \`(X+1) = ¬1, 1, 0, 1 = wait...\`
+  - LSB: ¬1 = 0 ✓
+  - bit 1: sel=1, in1=(X+2)[1]=0. ✓
+  - bit 2: sel=1, in1=(X+2)[2]=1. ✓
+  - bit 3: sel=1, in1=(X+2)[3]=0. ✓
+  - תוצאה: 0100 = 4. ✓
+- \`X = 0010 (=2)\`, \`X+2 = 0100 (=4)\`. \`X[0] = 0\` → MUXים בוחרים מ-X.
+  - LSB: ¬0 = 1 ✓
+  - bit 1: sel=0, in0=X[1]=1. ✓
+  - bit 2: sel=0, in0=X[2]=0. ✓
+  - bit 3: sel=0, in0=X[3]=0. ✓
+  - תוצאה: 0011 = 3. ✓`,
+        interviewerMindset:
+`חידה אהובה. השלב הראשון של המראיין: לראות אם המועמד מזהה את ההבחנה "X+1 הוא הממוצע".
+
+**סיגנל חזק:**
+- "X+1 = ((X) + (X+2)) / 2 = avg".
+- "אבל אם אסור חיבור, איך מחשבים ממוצע ביטית?"
+- "תלוי בקריות של X" → פיתוח שתי המקרים.
+
+**טעויות נפוצות:**
+- ניסיון לבנות half-adder עם carries וקריאה לזה "לא חיבור" — לא יעבוד; המראיין יזהה.
+- ניסיון \`X | (X+2)\` או \`X & (X+2)\` — לא מספיק.
+
+**שאלת המשך:** "ולמערך 8-bit?" — אותו רעיון, פשוט 7 MUXים במקום 3.
+
+**שאלת המשך גמורה:** "ומה אם נתון \`X\` ו-\`X+3\` ורוצים \`X+1\`?" — קשה יותר. כעת ההפרש 3 → המסלול שונה. \`X+1 = X + 1\`, \`X+3 = X + 3\`. הממוצע של X ו-(X+3) הוא X+1.5 → לא מתאים. הטריק לא מתבטל היטב.`,
+        expectedAnswers: [
+          'mux', 'multiplexer',
+          'X[0]', 'x[0]', 'lsb',
+          'not', '¬',
+          'average', 'ממוצע',
+          '3 mux', 'three mux',
+          'sel', 'selector',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 7 (BlackBox x,x+2 → x+1)',
+    tags: ['mux', '2:1-mux', 'combinational', 'puzzle', 'logic', 'arithmetic-trick'],
+    circuit: () => build(() => {
+      // Inputs: x[3..0] and (x+2)[3..0] — 8 separate 1-bit INPUT pads
+      // (so the user can flip individual bits and watch the result).
+      // Default: x = 5 (0101), x+2 = 7 (0111), expected x+1 = 6 (0110).
+      const x0 = h.input(140, 120, 'x[0]');   x0.fixedValue = 1;
+      const x1 = h.input(140, 200, 'x[1]');   x1.fixedValue = 0;
+      const x2 = h.input(140, 280, 'x[2]');   x2.fixedValue = 1;
+      const x3 = h.input(140, 360, 'x[3]');   x3.fixedValue = 0;
+      const p0 = h.input(140, 480, '(x+2)[0]'); p0.fixedValue = 1;  // == x[0]
+      const p1 = h.input(140, 560, '(x+2)[1]'); p1.fixedValue = 1;
+      const p2 = h.input(140, 640, '(x+2)[2]'); p2.fixedValue = 1;
+      const p3 = h.input(140, 720, '(x+2)[3]'); p3.fixedValue = 0;
+      // Bit 0 of result = NOT x[0]
+      const notX0 = h.gate('NOT', 380, 120);
+      // Bits 1..3 = MUX(sel=x[0], in0=x[i], in1=(x+2)[i])
+      const mux1 = h.mux(540, 240, 'MUX bit1');
+      const mux2 = h.mux(540, 360, 'MUX bit2');
+      const mux3 = h.mux(540, 480, 'MUX bit3');
+      // Outputs
+      const r0 = h.output(780, 120, '(x+1)[0]');
+      const r1 = h.output(780, 240, '(x+1)[1]');
+      const r2 = h.output(780, 360, '(x+1)[2]');
+      const r3 = h.output(780, 480, '(x+1)[3]');
+      return {
+        nodes: [x0, x1, x2, x3, p0, p1, p2, p3, notX0, mux1, mux2, mux3, r0, r1, r2, r3],
+        wires: [
+          // bit 0
+          h.wire(x0.id, notX0.id, 0),
+          h.wire(notX0.id, r0.id, 0),
+          // bit 1: MUX(sel=x[0], in0=x[1], in1=(x+2)[1])
+          h.wire(x1.id, mux1.id, 0),
+          h.wire(p1.id, mux1.id, 1),
+          h.wire(x0.id, mux1.id, 2),
+          h.wire(mux1.id, r1.id, 0),
+          // bit 2
+          h.wire(x2.id, mux2.id, 0),
+          h.wire(p2.id, mux2.id, 1),
+          h.wire(x0.id, mux2.id, 2),
+          h.wire(mux2.id, r2.id, 0),
+          // bit 3
+          h.wire(x3.id, mux3.id, 0),
+          h.wire(p3.id, mux3.id, 1),
+          h.wire(x0.id, mux3.id, 2),
+          h.wire(mux3.id, r3.id, 0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1007 — XOR from NAND gates only (slide 8)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'xor-from-nand-only',
+    difficulty: 'easy',
+    title: 'XOR משערי NAND בלבד',
+    intro:
+`ממש שער \`XOR\` באמצעות שערי \`NAND\` בלבד. כמה NANDs מינימליים נדרשים?
+
+מאחר ש-\`NAND\` הוא **functionally complete** (אפשר לבנות כל פונקציה לוגית ממנו בלבד), הטריק כאן הוא להגיע למינימום.`,
+    schematic: `
+<svg viewBox="0 0 360 180" xmlns="http://www.w3.org/2000/svg" direction="ltr" font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="XOR gate with A, B inputs and Y output">
+  <!-- A input -->
+  <text x="40" y="64" text-anchor="middle" fill="#f0d080" font-weight="bold">A</text>
+  <line x1="60" y1="60" x2="130" y2="60" stroke="#f0d080" stroke-width="1.6"/>
+  <!-- B input -->
+  <text x="40" y="126" text-anchor="middle" fill="#f0d080" font-weight="bold">B</text>
+  <line x1="60" y1="120" x2="130" y2="120" stroke="#f0d080" stroke-width="1.6"/>
+  <!-- XOR shape: D-shape body with extra curved input bar in front -->
+  <path d="M 120 40 Q 145 90 120 140" stroke="#80d4ff" stroke-width="1.6" fill="none"/>
+  <path d="M 130 40 Q 175 60 220 90 Q 175 120 130 140 Q 155 90 130 40 Z" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
+  <text x="166" y="96" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">⊕</text>
+  <!-- Y output -->
+  <line x1="220" y1="90" x2="290" y2="90" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="290,90 284,86 284,94" fill="#80f0a0"/>
+  <text x="320" y="94" text-anchor="middle" fill="#80f0a0" font-weight="bold">Y = A ⊕ B</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'כמה שערי NAND? ציירו את המבנה.',
+        hints: [
+          'נסחו את \\\`XOR\\\` כפונקציית NAND-only. רמז: התחילו ב-\\\`A·B\\\` ההפוך = NAND(A,B).',
+          'הגדירו עזר: \\\`N₁ = A NAND B = ¬(A∧B)\\\`. בעזרתו אפשר לבטא \\\`¬A + B\\\` ו-\\\`A + ¬B\\\`.',
+          '\\\`N₂ = NAND(A, N₁) = ¬(A ∧ ¬(A·B)) = ¬A + (A·B) = ¬A + B\\\` (לאחר פישוט).',
+          '\\\`N₃ = NAND(B, N₁) = A + ¬B\\\`.',
+          '\\\`N₄ = NAND(N₂, N₃) = ¬((¬A + B) · (A + ¬B)) = ¬(¬A·A + ¬A·¬B + B·A + B·¬B) = ¬(¬A·¬B + A·B) = ¬XNOR = XOR\\\`. ✓',
+          'סה"כ: **4 שערי NAND**.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" direction="ltr" font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="XOR built from 4 NAND gates">
+  <!-- helper: NAND symbol = AND-shape body + bubble at output -->
+  <!-- N1: NAND(A, B) — center-left -->
+  <g>
+    <path d="M 160 130 L 200 130 Q 240 130 240 160 Q 240 190 200 190 L 160 190 Z" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <circle cx="250" cy="160" r="5" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <text x="195" y="164" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="12">N1</text>
+    <text x="195" y="180" text-anchor="middle" fill="#a0c0e0" font-size="9">NAND</text>
+  </g>
+
+  <!-- N2: NAND(A, N1) — top-right -->
+  <g>
+    <path d="M 380 50 L 420 50 Q 460 50 460 80 Q 460 110 420 110 L 380 110 Z" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <circle cx="470" cy="80" r="5" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <text x="415" y="84" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="12">N2</text>
+    <text x="415" y="100" text-anchor="middle" fill="#a0c0e0" font-size="9">NAND</text>
+  </g>
+
+  <!-- N3: NAND(B, N1) — bottom-right -->
+  <g>
+    <path d="M 380 210 L 420 210 Q 460 210 460 240 Q 460 270 420 270 L 380 270 Z" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <circle cx="470" cy="240" r="5" fill="#0a1825" stroke="#80d4ff" stroke-width="1.4"/>
+    <text x="415" y="244" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="12">N3</text>
+    <text x="415" y="260" text-anchor="middle" fill="#a0c0e0" font-size="9">NAND</text>
+  </g>
+
+  <!-- N4: NAND(N2, N3) — far-right (final) -->
+  <g>
+    <path d="M 510 130 L 550 130 Q 575 130 575 160 Q 575 190 550 190 L 510 190 Z" fill="#0a1825" stroke="#ffd060" stroke-width="1.8"/>
+    <circle cx="585" cy="160" r="5" fill="#0a1825" stroke="#ffd060" stroke-width="1.8"/>
+    <text x="545" y="164" text-anchor="middle" fill="#ffd060" font-weight="bold" font-size="12">N4</text>
+    <text x="545" y="180" text-anchor="middle" fill="#e0c060" font-size="9">NAND</text>
+  </g>
+
+  <!-- inputs A and B -->
+  <text x="40" y="64" fill="#f0d080" font-weight="bold">A</text>
+  <text x="40" y="304" fill="#f0d080" font-weight="bold">B</text>
+
+  <!-- A → N1 (in0) -->
+  <line x1="60" y1="60" x2="120" y2="60" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="120" y1="60" x2="120" y2="142" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="120" y1="142" x2="160" y2="142" stroke="#f0d080" stroke-width="1.4"/>
+  <circle cx="120" cy="60" r="3" fill="#f0d080"/>
+  <!-- A → N2 (in0) -->
+  <line x1="120" y1="60" x2="350" y2="60" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="350" y1="60" x2="350" y2="62" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="350" y1="62" x2="380" y2="62" stroke="#f0d080" stroke-width="1.4"/>
+
+  <!-- B → N1 (in1) -->
+  <line x1="60" y1="300" x2="140" y2="300" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="140" y1="300" x2="140" y2="178" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="140" y1="178" x2="160" y2="178" stroke="#f0d080" stroke-width="1.4"/>
+  <circle cx="140" cy="300" r="3" fill="#f0d080"/>
+  <!-- B → N3 (in0) -->
+  <line x1="140" y1="300" x2="340" y2="300" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="340" y1="300" x2="340" y2="222" stroke="#f0d080" stroke-width="1.4"/>
+  <line x1="340" y1="222" x2="380" y2="222" stroke="#f0d080" stroke-width="1.4"/>
+
+  <!-- N1 output → N2 (in1) and N3 (in1) -->
+  <line x1="255" y1="160" x2="290" y2="160" stroke="#80d4ff" stroke-width="1.4"/>
+  <text x="270" y="154" fill="#80d4ff" font-size="10">N1</text>
+  <line x1="290" y1="160" x2="290" y2="98" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="290" y1="98" x2="380" y2="98" stroke="#80d4ff" stroke-width="1.4"/>
+  <circle cx="290" cy="160" r="3" fill="#80d4ff"/>
+  <line x1="290" y1="160" x2="290" y2="258" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="290" y1="258" x2="380" y2="258" stroke="#80d4ff" stroke-width="1.4"/>
+
+  <!-- N2 output → N4 (in0) -->
+  <line x1="475" y1="80" x2="498" y2="80" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="498" y1="80" x2="498" y2="142" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="498" y1="142" x2="510" y2="142" stroke="#80d4ff" stroke-width="1.4"/>
+  <text x="495" y="74" fill="#80d4ff" font-size="10">N2</text>
+
+  <!-- N3 output → N4 (in1) -->
+  <line x1="475" y1="240" x2="498" y2="240" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="498" y1="240" x2="498" y2="178" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="498" y1="178" x2="510" y2="178" stroke="#80d4ff" stroke-width="1.4"/>
+  <text x="495" y="254" fill="#80d4ff" font-size="10">N3</text>
+
+  <!-- N4 output → Y -->
+  <line x1="590" y1="160" x2="600" y2="160" stroke="#ffd060" stroke-width="1.6"/>
+  <polygon points="600,160 594,156 594,164" fill="#ffd060"/>
+
+  <!-- Output label below -->
+  <text x="585" y="200" text-anchor="middle" fill="#ffd060" font-weight="bold" font-size="13">Y = A ⊕ B</text>
+</svg>`,
+        answer:
+`**4 שערי NAND** (ראה הסכמה למעלה).
+
+**שלבים:**
+
+| שער | חישוב | פישוט |
+|-----|-------|--------|
+| \`N₁\` | \`NAND(A, B)\` | \`¬(A·B)\` |
+| \`N₂\` | \`NAND(A, N₁)\` | \`¬A + B\` |
+| \`N₃\` | \`NAND(B, N₁)\` | \`A + ¬B\` |
+| \`N₄\` | \`NAND(N₂, N₃)\` | \`(¬A·¬B) + (A·B)\` הוא XNOR; ה-NAND הופך אותו ל-XOR ✓ |
+
+**הוכחה לפי טבלת אמת:**
+
+| A | B | N₁ | N₂ | N₃ | N₄ = A⊕B |
+|---|---|----|----|----|----------|
+| 0 | 0 | 1  | 1  | 1  | **0** |
+| 0 | 1 | 1  | 1  | 0  | **1** |
+| 1 | 0 | 1  | 0  | 1  | **1** |
+| 1 | 1 | 0  | 1  | 1  | **0** |
+
+✓ זהה ל-XOR.
+
+**למה NAND מינימלי?**
+- NAND הוא **universal** (functionally complete) — אפשר לבנות כל פונקציה בוליאנית.
+- מינימום מוכח ל-XOR מ-NANDs: **4** (לא ניתן ב-3).
+
+**הכללה:** \`NOR\` גם universal. אפשר לבנות XOR גם מ-4 NORs בצורה מקבילה. תרגיל לבית.
+
+**שאלת המשך (אם נשאלת):** "כמה לעשות AND? OR? NOT?"
+- NOT: 1 NAND (חבר את שתי הכניסות יחד: \`¬A = NAND(A,A)\`).
+- AND: 2 NANDs (\`A·B = NAND(NAND(A,B), NAND(A,B)) = ¬(¬(A·B)) = A·B\`).
+- OR: 3 NANDs (קודם \`¬A, ¬B\` בעזרת 2 NANDs כל אחד, ואז NAND ביניהם — \`A + B = ¬(¬A · ¬B) = NAND(¬A, ¬B)\`).
+- XOR: 4 NANDs (הפתרון לעיל).`,
+        interviewerMindset:
+`קלאסיקה. סינון מהיר ל-Junior/Mid.
+
+**אם המועמד עונה 4** — ביציאה הוא מסביר את המבנה.
+**אם המועמד מתעקש 5+** — הוא לא ראה את הטריק של reuse של \`N₁\`. שאלת המשך: "אפשר לחסוך אחד?"
+**אם המועמד עונה "אי-אפשר"** — חמור. NAND universal.
+
+**שאלת המשך אהובה:** "ובלי NAND, רק NOR?" — אותו רעיון בסימטריה: 4 NORs. הפיכת רכיב 0 ל-1.
+
+**שאלת המשך-נסתרת:** "ולמה NAND/NOR universal אבל לא AND/OR לבד?" — תשובה: AND/OR לא יכולים לייצר NOT (אין דרך להחזיר 0 כשהקלט 1 וההפך). NAND/NOR בנויים על "השלילה המובנית" שמאפשרת לבטא NOT עם קלט יחיד.`,
+        expectedAnswers: [
+          '4', 'four', 'ארבע',
+          'nand', 'NAND',
+          'universal', 'functionally complete',
+          'a nand b', 'NAND(a,b)',
+          'n1', 'n2', 'n3', 'n4',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 8 (XOR משערי NAND)',
+    tags: ['xor', 'nand', 'universal-gates', 'functional-completeness', 'combinational', 'logic'],
+    circuit: () => build(() => {
+      // 4 NAND gates: N1 = NAND(A,B), N2 = NAND(A,N1), N3 = NAND(B,N1),
+      // Y = N4 = NAND(N2,N3).
+      const a  = h.input(140, 200, 'A'); a.fixedValue = 1;
+      const b  = h.input(140, 360, 'B'); b.fixedValue = 0;
+      const n1 = h.gate('NAND', 380, 280);
+      const n2 = h.gate('NAND', 580, 200);
+      const n3 = h.gate('NAND', 580, 360);
+      const n4 = h.gate('NAND', 800, 280);
+      const y  = h.output(1020, 280, 'Y = A ⊕ B');
+      return {
+        nodes: [a, b, n1, n2, n3, n4, y],
+        wires: [
+          // N1 = NAND(A, B)
+          h.wire(a.id, n1.id, 0),
+          h.wire(b.id, n1.id, 1),
+          // N2 = NAND(A, N1)
+          h.wire(a.id,  n2.id, 0),
+          h.wire(n1.id, n2.id, 1),
+          // N3 = NAND(B, N1)
+          h.wire(b.id,  n3.id, 0),
+          h.wire(n1.id, n3.id, 1),
+          // Y = NAND(N2, N3)
+          h.wire(n2.id, n4.id, 0),
+          h.wire(n3.id, n4.id, 1),
+          h.wire(n4.id, y.id,  0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1008 — Barrel shifter from 2:1 MUX (slide 9)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'barrel-shifter-from-mux',
+    difficulty: 'medium',
+    title: 'Barrel shifter — מ-MUX 2:1 בלבד',
+    intro:
+`**א.** מה ההבדל בין \`regular shifter\` (Shift Register קלאסי) לבין \`barrel shifter\`?
+
+**ב.** ממש \`barrel shifter\` של 4-bit (shift-right לוגי, 0..3 מקומות) באמצעות **MUXים 2:1 בלבד**.`,
+    schematic: `
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12"
+     role="img" aria-label="Barrel shifter: 4-bit X input + 2-bit S amount → 4-bit Y output">
+  <!-- Body -->
+  <rect x="220" y="50" width="280" height="120" rx="10" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="360" y="92" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">Barrel Shifter</text>
+  <text direction="ltr" x="360" y="116" text-anchor="middle" fill="#80a0c0" font-size="11">(combinational, 1 cycle)</text>
+  <text direction="ltr" x="360" y="138" text-anchor="middle" fill="#a0c0e0" font-size="11">Y = X &gt;&gt; S</text>
+
+  <!-- X input (top-left) -->
+  <text direction="ltr" x="120" y="98" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="14">X</text>
+  <text direction="ltr" x="120" y="114" text-anchor="middle" fill="#a09080" font-size="10">(4-bit)</text>
+  <line x1="150" y1="100" x2="220" y2="100" stroke="#f0d080" stroke-width="1.8"/>
+  <polygon points="220,100 214,96 214,104" fill="#f0d080"/>
+
+  <!-- S input (bottom-left) — shift amount -->
+  <text direction="ltr" x="120" y="148" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">S</text>
+  <text direction="ltr" x="120" y="164" text-anchor="middle" fill="#806040" font-size="10">(2-bit amount)</text>
+  <line x1="150" y1="150" x2="220" y2="150" stroke="#ff8060" stroke-width="1.8"/>
+  <polygon points="220,150 214,146 214,154" fill="#ff8060"/>
+
+  <!-- Y output -->
+  <line x1="500" y1="110" x2="580" y2="110" stroke="#80f0a0" stroke-width="1.8"/>
+  <polygon points="580,110 574,106 574,114" fill="#80f0a0"/>
+  <text direction="ltr" x="620" y="106" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">Y</text>
+  <text direction="ltr" x="620" y="122" text-anchor="middle" fill="#80a080" font-size="10">(4-bit)</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'מה ההבדל בין barrel shifter ל-regular shift register?',
+        hints: [
+          'Regular Shift Register מבוסס D-FFים — מסחנן ביט אחד **לכל קלוק**.',
+          'Barrel shifter הוא **קומבינטורי** — מבצע הזזה בכל גודל בקלוק יחיד.',
+          'Tradeoff: barrel דורש N·log₂(N) MUXים (אזור גדול), שיפט-רגיסטר דורש רק N FFים (אזור קטן אבל זמן N קלוקים).',
+        ],
+        answer:
+`| תכונה | Regular shifter (Shift-Reg) | Barrel shifter |
+|-------|------------------------------|-----------------|
+| **מבנה** | N D-FFים בשרשרת | רשת קומבינטורית של MUXים |
+| **זמן הזזה ב-k מקומות** | k קלוקים | קלוק יחיד (combinational) |
+| **שטח (Area)** | \`O(N)\` FFים | \`O(N · log N)\` MUXים |
+| **שימוש** | סדרתי, אטי, חסכוני | מהיר, ל-ALU/shift instructions |
+
+**העיקרון של barrel:** במקום להזיז ביט-ביט, מבצעים **log₂(N)** הזזות בחזקות של 2 שונות, כל אחת מבוקרת ע"י ביט אחר של ה-shift-amount. שילוב הביטים בוחר את ההזזה הכוללת:
+- ביט 0 של S → הזזה ב-1 (אופציונלית)
+- ביט 1 של S → הזזה ב-2 (אופציונלית)
+- ביט 2 של S → הזזה ב-4 (אופציונלית) — לרוחב 8-bit ומעלה
+- ...
+- ביט i של S → הזזה ב-\`2^i\`
+
+מכפלת **כל** ההסתעפויות נותנת \`S = sum(2^i · S[i]) = 0..N-1\` — כל הזזה אפשרית.
+
+**דוגמה ל-4-bit:** \`log₂(4) = 2\` שכבות. שכבה 0 מזיזה ב-0 או 1. שכבה 1 מזיזה ב-0 או 2. שתי השכבות יחד נותנות כל הזזה ב-{0,1,2,3}.`,
+        expectedAnswers: [
+          'combinational', 'קומבינטורי', 'sequential', 'סדרתי',
+          'log', 'log2', 'log n',
+          'mux', 'multiplexer',
+          'one cycle', 'קלוק יחיד', 'instant',
+          'shift register', 'shift-reg',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'ממש barrel shift-right של 4-bit עם MUX 2:1 בלבד. כמה MUXים?',
+        hints: [
+          'שכבה 0 (S[0]): MUX לכל ביט — \\\`out[i] = S[0] ? X[i+1] : X[i]\\\`. בקצה: \\\`out[3] = S[0] ? 0 : X[3]\\\` (zero-fill).',
+          'שכבה 1 (S[1]): MUX לכל ביט — \\\`Y[i] = S[1] ? out[i+2] : out[i]\\\`. בקצה: \\\`Y[2] = Y[3] = 0\\\` אם S[1]=1.',
+          'סה"כ 8 MUXים: 4 לכל שכבה × 2 שכבות.',
+          'הכללה: לרוחב N (חזקה של 2), \\\`N · log₂(N)\\\` MUXים.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 920 520" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', 'Consolas', monospace" font-size="11"
+     role="img" aria-label="4-bit barrel shifter: 2 layers of 4 MUXes each">
+  <defs>
+    <linearGradient id="bsMux" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="bsArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+    <marker id="bsArrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/></marker>
+    <marker id="bsArrO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff8060"/></marker>
+    <marker id="bsArrY" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f0d080"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="920" height="44" fill="#0c1a28"/>
+  <text direction="ltr" x="460" y="28" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    4-bit Barrel Shift-Right:  2 layers × 4 MUX 2:1 = 8 MUXes total
+  </text>
+
+  <!-- Column headers -->
+  <text direction="ltr" x="80"  y="78" text-anchor="middle" fill="#f0d080" font-weight="bold">X (input)</text>
+  <text direction="ltr" x="340" y="78" text-anchor="middle" fill="#a0c0e0" font-weight="bold">Layer 0 — shift by S[0]</text>
+  <text direction="ltr" x="600" y="78" text-anchor="middle" fill="#a0c0e0" font-weight="bold">Layer 1 — shift by 2·S[1]</text>
+  <text direction="ltr" x="850" y="78" text-anchor="middle" fill="#80f0a0" font-weight="bold">Y (output)</text>
+
+  <!-- ─── 4 X-inputs (column) ─── -->
+  ${[
+    { i: 0, y: 130 }, { i: 1, y: 220 }, { i: 2, y: 310 }, { i: 3, y: 400 },
+  ].map(({ i, y }) => `
+    <text direction="ltr" x="80" y="${y - 14}" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="14">X[${i}]</text>
+    <circle cx="80" cy="${y}" r="3.5" fill="#f0d080"/>
+    <line x1="80" y1="${y}" x2="${i === 3 ? 230 : 260}" y2="${y}" stroke="#f0d080" stroke-width="1.4"/>
+  `).join('')}
+
+  <!-- Layer 0: 4 MUXes (M00 .. M03) — each picks between X[i] and X[i+1] (or 0 for the top) -->
+  ${[
+    { i: 0, y: 130, in1FromY: 220, in1Lbl: 'X[1]' },
+    { i: 1, y: 220, in1FromY: 310, in1Lbl: 'X[2]' },
+    { i: 2, y: 310, in1FromY: 400, in1Lbl: 'X[3]' },
+    { i: 3, y: 400, in1FromY: null, in1Lbl: '0'    },
+  ].map(({ i, y, in1FromY, in1Lbl }) => {
+    const muxTop = y - 22, muxBot = y + 38;
+    return `
+      <polygon points="260,${muxTop} 310,${y - 10} 310,${y + 26} 260,${muxBot}"
+               fill="url(#bsMux)" stroke="#80d4ff" stroke-width="1.4"/>
+      <text direction="ltr" x="285" y="${y + 12}" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="11">M0${i}</text>
+      <text direction="ltr" x="270" y="${y - 1}" fill="#a0c0e0" font-size="8">in0</text>
+      <text direction="ltr" x="270" y="${y + 22}" fill="#a0c0e0" font-size="8">in1</text>
+      <!-- in1 input: either from X[i+1] (one row below) or '0' literal -->
+      ${in1FromY != null
+        ? `<line x1="${i === 3 ? 230 : 260}" y1="${y}" x2="${i === 3 ? 230 : 260}" y2="${y}" stroke="#f0d080"/>
+           <line x1="240" y1="${in1FromY}" x2="240" y2="${y + 16}" stroke="#f0d080" stroke-width="1.4"/>
+           <line x1="240" y1="${y + 16}" x2="260" y2="${y + 16}" stroke="#f0d080" stroke-width="1.4" marker-end="url(#bsArrY)"/>`
+        : `<text direction="ltr" x="240" y="${y + 19}" text-anchor="middle" fill="#806040" font-size="11" font-weight="bold">0</text>
+           <line x1="248" y1="${y + 16}" x2="260" y2="${y + 16}" stroke="#806040" stroke-width="1.2" marker-end="url(#bsArrY)"/>`
+      }
+      <!-- in0 arrow from X[i] direct -->
+      <line x1="240" y1="${y}" x2="260" y2="${y}" stroke="#f0d080" stroke-width="1.4" marker-end="url(#bsArrY)"/>
+      <!-- Layer 0 output to Layer 1 area -->
+      <line x1="310" y1="${y + 8}" x2="500" y2="${y + 8}" stroke="#80d4ff" stroke-width="1.4"/>
+      <circle cx="${(i === 0 || i === 1) ? 500 : 500}" cy="${y + 8}" r="3" fill="#80d4ff"/>
+    `;
+  }).join('')}
+
+  <!-- S[0] sel rail running across all 4 Layer-0 MUXes -->
+  <text direction="ltr" x="285" y="478" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">S[0]</text>
+  <line x1="285" y1="160" x2="285" y2="462" stroke="#ff8060" stroke-width="2" stroke-dasharray="4 2"/>
+  ${[130, 220, 310, 400].map(y => `
+    <line x1="285" y1="${y + 38}" x2="285" y2="${y + 28}" stroke="#ff8060" stroke-width="1.4" marker-end="url(#bsArrO)"/>
+    <circle cx="285" cy="${y + 38}" r="3" fill="#ff8060"/>
+  `).join('')}
+
+  <!-- Layer 1: 4 MUXes — pick between layer0_out[i] and layer0_out[i+2] (or 0 for top two) -->
+  ${[
+    { i: 0, y: 130, in1FromY: 310 },  // bit 0 picks from layer0 out[0] or out[2]
+    { i: 1, y: 220, in1FromY: 400 },  // bit 1 picks from layer0 out[1] or out[3]
+    { i: 2, y: 310, in1FromY: null }, // bit 2 picks from layer0 out[2] or 0
+    { i: 3, y: 400, in1FromY: null }, // bit 3 picks from layer0 out[3] or 0
+  ].map(({ i, y, in1FromY }) => `
+    <polygon points="520,${y - 22} 570,${y - 10} 570,${y + 26} 520,${y + 38}"
+             fill="url(#bsMux)" stroke="#80d4ff" stroke-width="1.4"/>
+    <text direction="ltr" x="545" y="${y + 12}" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="11">M1${i}</text>
+    <text direction="ltr" x="530" y="${y - 1}" fill="#a0c0e0" font-size="8">in0</text>
+    <text direction="ltr" x="530" y="${y + 22}" fill="#a0c0e0" font-size="8">in1</text>
+    <line x1="500" y1="${y + 8}" x2="520" y2="${y}" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#bsArrB)"/>
+    ${in1FromY != null
+      ? `<line x1="500" y1="${in1FromY + 8}" x2="500" y2="${y + 16}" stroke="#80d4ff" stroke-width="1.4"/>
+         <line x1="500" y1="${y + 16}" x2="520" y2="${y + 16}" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#bsArrB)"/>`
+      : `<text direction="ltr" x="500" y="${y + 19}" text-anchor="middle" fill="#806040" font-size="11" font-weight="bold">0</text>
+         <line x1="508" y1="${y + 16}" x2="520" y2="${y + 16}" stroke="#806040" stroke-width="1.2" marker-end="url(#bsArrB)"/>`
+    }
+    <!-- Layer 1 output → Y[i] -->
+    <line x1="570" y1="${y + 8}" x2="800" y2="${y + 8}" stroke="#80f0a0" stroke-width="1.8" marker-end="url(#bsArrG)"/>
+    <text direction="ltr" x="850" y="${y + 12}" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">Y[${i}]</text>
+  `).join('')}
+
+  <!-- S[1] sel rail across all 4 Layer-1 MUXes -->
+  <text direction="ltr" x="545" y="478" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">S[1]</text>
+  <line x1="545" y1="160" x2="545" y2="462" stroke="#ff8060" stroke-width="2" stroke-dasharray="4 2"/>
+  ${[130, 220, 310, 400].map(y => `
+    <line x1="545" y1="${y + 38}" x2="545" y2="${y + 28}" stroke="#ff8060" stroke-width="1.4" marker-end="url(#bsArrO)"/>
+    <circle cx="545" cy="${y + 38}" r="3" fill="#ff8060"/>
+  `).join('')}
+
+  <!-- Footer -->
+  <text direction="ltr" x="460" y="504" text-anchor="middle" fill="#a0a0c0" font-size="12" font-style="italic">
+    Total: 8 MUX 2:1   (4-bit input × log₂4 layers).  S = (S[1] S[0]) selects shift amount 0..3.
+  </text>
+</svg>`,
+        answer:
+`**8 MUXים, 2 שכבות, log₂(4)=2 רמות בחירה.**
+
+\`\`\`
+שכבה 0 (S[0] = ביט נמוך):
+  out0_0 = MUX(S[0], X[0], X[1])     # אם S[0]=1 → התקדמות ב-1
+  out0_1 = MUX(S[0], X[1], X[2])
+  out0_2 = MUX(S[0], X[2], X[3])
+  out0_3 = MUX(S[0], X[3], 0)        # zero-fill
+
+שכבה 1 (S[1] = ביט גבוה):
+  Y[0] = MUX(S[1], out0_0, out0_2)   # אם S[1]=1 → התקדמות ב-2
+  Y[1] = MUX(S[1], out0_1, out0_3)
+  Y[2] = MUX(S[1], out0_2, 0)
+  Y[3] = MUX(S[1], out0_3, 0)
+\`\`\`
+
+**ספירה:** 4 MUXים × 2 שכבות = **8 MUXים**.
+
+**הכללה ל-N-bit (N חזקה של 2):** \`N · log₂(N)\` MUXים. ל-32-bit: \`32 · 5 = 160 MUXים\`.
+
+**אימות:** עבור \`X = 1100 (= 12)\`, \`S = 11 (= 3)\`:
+- Layer 0 (S[0]=1, shift-right by 1): out = \`0110\`
+- Layer 1 (S[1]=1, shift-right by 2): Y = \`0001\` ✓ (\`12 >> 3 = 1\`)
+
+**הרחבה לבחירת shift-left/right:** אפשר להוסיף XOR לפי כיוון בקלט המודר.
+
+**הרחבה ל-arithmetic shift:** במקום zero-fill, להזין את ביט הסימן (\`X[N-1]\`) במקום \`0\`.
+
+**עומק לוגי:** רק \`log₂(N)\` רמות MUX בין הקלט לפלט → תדר עבודה גבוה (פחות gate delays מאשר shift-register איטרטיבי).`,
+        interviewerMindset:
+`שאלה אהובה לראיוני junior/mid. המראיין מחפש:
+
+1. **לראות שאתה מבחין בין סדרתי לקומבינטורי.** מועמד שמשתמש ב-D-FFים — לא הבין את השאלה.
+2. **לראות log₂(N) במפורש.** "אם אני אומר 8-bit, כמה שכבות?" → "3, כי log₂(8) = 3". זו "הקצרה" של ה-trick.
+3. **לטפל בקצה הביטים** (אילו ביטים מתמלאים באפסים בכל שכבה). מועמד שלא מתייחס ל-zero-fill — חסר במפרט.
+
+**שאלת המשך נפוצה:** "ולמה לא להזיז את כל ה-3 ביטים בבת אחת (3 שכבות 0/1, 0/2, 0/4)?" — אפשרי תיאורטית אבל **בזבזני**: 3 שכבות במקום log₂(N). הברל היעיל מקודד את ה-shift בייצוג בינארי.
+
+**שאלת המשך מתקדמת:** "ומה לרוחב שאינו חזקה של 2?" — מעגלים את N כלפי מעלה ומתעלמים מביטי-עיגול בקצה. שטח מבוזבז קצת אבל המבנה זהה.`,
+        expectedAnswers: [
+          '8', 'eight', 'שמונה',
+          'mux', '2:1',
+          'log', 'log2', 'log n',
+          '2 layers', 'שתי שכבות', 'two layers',
+          's[0]', 's[1]', 'shift amount',
+          'zero-fill', 'zero fill',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 9 (Barrel shifter)',
+    tags: ['barrel-shifter', 'mux', 'combinational', 'shift', 'log-depth', 'logic'],
+    circuit: () => build(() => {
+      // 4-bit barrel shift-right with 2 layers of 2:1 MUX (8 MUXes total).
+      // Inputs: X[0..3] (data), S[0..1] (amount), ZERO (constant 0).
+      // Outputs: Y[0..3].
+      //
+      // Default vector: X = 0b1100 (=12), S = 11 (=3) → expected Y = 0001 (=1).
+      const zero = h.input(80, 720, '0');  zero.fixedValue = 0;
+      const s0   = h.input(80, 580, 'S[0]'); s0.fixedValue = 1;
+      const s1   = h.input(80, 660, 'S[1]'); s1.fixedValue = 1;
+      const x0   = h.input(80, 120, 'X[0]'); x0.fixedValue = 0;  // LSB of 1100 → bit 0 = 0
+      const x1   = h.input(80, 240, 'X[1]'); x1.fixedValue = 0;
+      const x2   = h.input(80, 360, 'X[2]'); x2.fixedValue = 1;
+      const x3   = h.input(80, 480, 'X[3]'); x3.fixedValue = 1;
+      // Layer 0 MUXes
+      const m00 = h.mux(320, 120, 'M00');
+      const m01 = h.mux(320, 240, 'M01');
+      const m02 = h.mux(320, 360, 'M02');
+      const m03 = h.mux(320, 480, 'M03');
+      // Layer 1 MUXes
+      const m10 = h.mux(560, 120, 'M10');
+      const m11 = h.mux(560, 240, 'M11');
+      const m12 = h.mux(560, 360, 'M12');
+      const m13 = h.mux(560, 480, 'M13');
+      // Outputs
+      const y0 = h.output(820, 120, 'Y[0]');
+      const y1 = h.output(820, 240, 'Y[1]');
+      const y2 = h.output(820, 360, 'Y[2]');
+      const y3 = h.output(820, 480, 'Y[3]');
+      return {
+        nodes: [zero, s0, s1, x0, x1, x2, x3,
+                m00, m01, m02, m03, m10, m11, m12, m13,
+                y0, y1, y2, y3],
+        wires: [
+          // ── Layer 0 ── MUX 2:1 pins: in0(0), in1(1), sel(2)
+          // M00: in0=X[0], in1=X[1], sel=S[0]
+          h.wire(x0.id, m00.id, 0), h.wire(x1.id, m00.id, 1), h.wire(s0.id, m00.id, 2),
+          // M01: in0=X[1], in1=X[2], sel=S[0]
+          h.wire(x1.id, m01.id, 0), h.wire(x2.id, m01.id, 1), h.wire(s0.id, m01.id, 2),
+          // M02: in0=X[2], in1=X[3], sel=S[0]
+          h.wire(x2.id, m02.id, 0), h.wire(x3.id, m02.id, 1), h.wire(s0.id, m02.id, 2),
+          // M03: in0=X[3], in1=0 (zero-fill), sel=S[0]
+          h.wire(x3.id, m03.id, 0), h.wire(zero.id, m03.id, 1), h.wire(s0.id, m03.id, 2),
+
+          // ── Layer 1 ── shift by 0 or 2
+          // M10: in0=out0, in1=out2, sel=S[1] → Y[0]
+          h.wire(m00.id, m10.id, 0), h.wire(m02.id, m10.id, 1), h.wire(s1.id, m10.id, 2),
+          // M11: in0=out1, in1=out3, sel=S[1] → Y[1]
+          h.wire(m01.id, m11.id, 0), h.wire(m03.id, m11.id, 1), h.wire(s1.id, m11.id, 2),
+          // M12: in0=out2, in1=0, sel=S[1] → Y[2]
+          h.wire(m02.id, m12.id, 0), h.wire(zero.id, m12.id, 1), h.wire(s1.id, m12.id, 2),
+          // M13: in0=out3, in1=0, sel=S[1] → Y[3]
+          h.wire(m03.id, m13.id, 0), h.wire(zero.id, m13.id, 1), h.wire(s1.id, m13.id, 2),
+
+          // ── Outputs ──
+          h.wire(m10.id, y0.id, 0),
+          h.wire(m11.id, y1.id, 0),
+          h.wire(m12.id, y2.id, 0),
+          h.wire(m13.id, y3.id, 0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1009 — Swap 5 ↔ 7 in 3-bit (slide 13)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'swap-5-and-7-3bit',
+    difficulty: 'easy',
+    title: 'החלפת 5 ↔ 7 ב-3 ביטים — שערים בלבד',
+    intro:
+`באמצעות שערים לוגיים בלבד, ממש רכיב שמקבל 3 סיביות ומוציא את המספר שהתקבל,
+**למעט** \`5\` שיהפוך ל-\`7\`, ו-\`7\` שיהפוך ל-\`5\`. כל שאר הערכים (0,1,2,3,4,6) עוברים בלי שינוי.
+
+\`\`\`
+  binary    in   →   out
+  000       0    →   0
+  001       1    →   1
+  010       2    →   2
+  011       3    →   3
+  100       4    →   4
+  101       5    →   7     ← swap
+  110       6    →   6
+  111       7    →   5     ← swap
+\`\`\``,
+    schematic: `
+<svg viewBox="0 0 460 200" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="3-bit black box: 5↔7 swap, others identity">
+  <rect x="160" y="50" width="160" height="100" rx="8" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="240" y="86" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="15">Swap 5↔7</text>
+  <text direction="ltr" x="240" y="110" text-anchor="middle" fill="#a0c0e0" font-size="11">others unchanged</text>
+
+  <text direction="ltr" x="80" y="84" text-anchor="middle" fill="#f0d080" font-weight="bold">in (3 bits)</text>
+  <line x1="120" y1="80" x2="160" y2="80" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="160,80 154,76 154,84" fill="#f0d080"/>
+
+  <line x1="320" y1="120" x2="380" y2="120" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="380,120 374,116 374,124" fill="#80f0a0"/>
+  <text direction="ltr" x="420" y="124" text-anchor="middle" fill="#80f0a0" font-weight="bold">out (3 bits)</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנן את המעגל. כמה שערים?',
+        hints: [
+          'הסתכל בטבלה — איזה ביט משתנה ב-5↔7? B2 ו-B0 זהים בשני המקרים; רק \\\`B1\\\` משתנה.',
+          'מתי להפוך את B1? כש-B2=1 וגם B0=1 (= הערך 5 או 7).',
+          'הנוסחה: \\\`B1_out = B1 ⊕ (B2 ∧ B0)\\\`. ביטים אחרים: \\\`B0_out = B0\\\`, \\\`B2_out = B2\\\`.',
+          'סה"כ: **1 AND + 1 XOR**. שני שערים בלבד.',
+        ],
+        answer:
+`**1 AND + 1 XOR. שני שערים בלבד.**
+
+\`\`\`
+B0_out = B0                          (pass-through)
+B2_out = B2                          (pass-through)
+B1_out = B1 ⊕ (B2 ∧ B0)             ← הפיכה בתנאי
+\`\`\`
+
+**הסבר:** הערכים 5 ו-7 חולקים את אותם B0=1, B2=1. ההבדל ביניהם הוא ה-B1:
+- 5 = \`101\` (B2=1, B1=**0**, B0=1)
+- 7 = \`111\` (B2=1, B1=**1**, B0=1)
+
+אז כדי להחליף ביניהם, יש להפוך את B1 **בדיוק** כש-B2=1 וגם B0=1 (תנאי שמתקיים רק עבור 5 ו-7).
+
+**הביטוי הבוליאני \`B1 ⊕ (B2·B0)\`** עושה בדיוק את זה:
+- אם \`B2·B0 = 0\` (כל המקרים פרט ל-5 ו-7) → \`B1 ⊕ 0 = B1\` (ללא שינוי).
+- אם \`B2·B0 = 1\` (רק 5 ו-7) → \`B1 ⊕ 1 = ¬B1\` (הופך את הביט).
+
+**ספירה:** 1 AND (\`B2·B0\`) + 1 XOR (\`B1 ⊕ ...\`). חסכוני מאוד.
+
+**שאלת המשך:** "ומה אם רוצים להחליף 5 ↔ 3?" — 5 = 101, 3 = 011. הם נבדלים ב-B2 וב-B1. צריך לוגיקה יותר מסובכת — לא טריוויאלי.`,
+        interviewerMindset:
+`שאלה אהובה ב-junior. בודקת **מציאת התבנית** מתוך טבלת אמת.
+
+**סיגנל חזק:** מועמד שמסתכל בטבלה ושואל "אילו ביטים שונים בין 5 ל-7?" — מציאת תבנית במקום כתיבת K-map מלא.
+
+**סיגנל חלש:** מועמד שכותב מפת קרנו ל-3 משתנים ופותר אותה בקושי. עובד אבל לא יעיל לבעיה כל-כך מוגדרת.
+
+**שאלת המשך:** "ולמה לא רק \`B1 ⊕ (B2·B0)\` בלי לתחזק את B0 ו-B2?" — כי הם פלטים שצריך! לא רק B1 מהפלט.`,
+        expectedAnswers: [
+          'b1 xor', 'b1 ⊕', 'xor',
+          'b2 and b0', 'b2·b0', 'b2 ∧ b0',
+          '1 and', '2 gates', 'שני שערים',
+          '5', '7', 'swap',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 13 (Swap 5↔7)',
+    tags: ['combinational', 'xor', 'truth-table', 'pattern', 'logic'],
+    circuit: () => build(() => {
+      // 3 single-bit inputs B0, B1, B2 + 1 AND + 1 XOR + 3 outputs.
+      // Default: input = 5 (B2=1, B1=0, B0=1) → output should be 7 (B2=1, B1=1, B0=1).
+      const b0 = h.input(120, 200, 'B0'); b0.fixedValue = 1;
+      const b1 = h.input(120, 320, 'B1'); b1.fixedValue = 0;
+      const b2 = h.input(120, 440, 'B2'); b2.fixedValue = 1;
+      const and = h.gate('AND', 380, 320);          // B2 ∧ B0
+      const xor = h.gate('XOR', 620, 320);          // B1 ⊕ (B2·B0)
+      const out0 = h.output(880, 200, 'out[0] = B0');
+      const out1 = h.output(880, 320, 'out[1]');
+      const out2 = h.output(880, 440, 'out[2] = B2');
+      return {
+        nodes: [b0, b1, b2, and, xor, out0, out1, out2],
+        wires: [
+          // AND(B2, B0)
+          h.wire(b2.id, and.id, 0),
+          h.wire(b0.id, and.id, 1),
+          // XOR(B1, AND_out)
+          h.wire(b1.id,  xor.id, 0),
+          h.wire(and.id, xor.id, 1),
+          // outputs (B0 and B2 pass-through, B1_out from XOR)
+          h.wire(b0.id,  out0.id, 0),
+          h.wire(xor.id, out1.id, 0),
+          h.wire(b2.id,  out2.id, 0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1010 — Cascaded comparator (slide 14)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'cascaded-comparator',
+    difficulty: 'medium',
+    title: 'משווה דו-ספרתי משערים + שרשור',
+    intro:
+`**א.** באמצעות שערים לוגיים בסיסיים, ממש רכיב **A** — משווה 2-ביט.
+הרכיב מקבל \`X\` ו-\`Y\` (2 ביט כל אחד), ופלט בן 3 ביטים: \`X>Y\`, \`X==Y\`, \`X<Y\`.
+
+**ב.** באמצעות הרכיב **A**, ממש רכיב **B** — משווה 2-ספרתי, כאשר כל ספרה היא 2 ביט.
+הרכיב מקבל \`X\` ו-\`Y\` (4 ביט כל אחד = שתי ספרות בנות 2 ביט), ופלט בן 3 ביטים.`,
+    schematic: `
+<svg viewBox="0 0 500 220" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Component A: 2-bit comparator with three outputs GT, EQ, LT">
+  <rect x="170" y="50" width="160" height="100" rx="8" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="250" y="92" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="18">A</text>
+  <text direction="ltr" x="250" y="114" text-anchor="middle" fill="#a0c0e0" font-size="11">2-bit comparator</text>
+
+  <text direction="ltr" x="100" y="80" text-anchor="middle" fill="#f0d080" font-weight="bold">X (2-bit)</text>
+  <line x1="140" y1="76" x2="170" y2="76" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,76 164,72 164,80" fill="#f0d080"/>
+
+  <text direction="ltr" x="100" y="128" text-anchor="middle" fill="#f0d080" font-weight="bold">Y (2-bit)</text>
+  <line x1="140" y1="124" x2="170" y2="124" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,124 164,120 164,128" fill="#f0d080"/>
+
+  <line x1="330" y1="70" x2="380" y2="70" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="380,70 374,66 374,74" fill="#80f0a0"/>
+  <text direction="ltr" x="420" y="74" text-anchor="middle" fill="#80f0a0" font-weight="bold">X &gt; Y</text>
+
+  <line x1="330" y1="100" x2="380" y2="100" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="380,100 374,96 374,104" fill="#80f0a0"/>
+  <text direction="ltr" x="420" y="104" text-anchor="middle" fill="#80f0a0" font-weight="bold">X == Y</text>
+
+  <line x1="330" y1="130" x2="380" y2="130" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="380,130 374,126 374,134" fill="#80f0a0"/>
+  <text direction="ltr" x="420" y="134" text-anchor="middle" fill="#80f0a0" font-weight="bold">X &lt; Y</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'בנה את **A** משערים בסיסיים. רמז: התחל מ-EQ.',
+        hints: [
+          'EQ הוא הקל ביותר: \\\`X==Y\\\` ⇔ כל ביט תואם ⇔ \\\`(X[1] XNOR Y[1]) ∧ (X[0] XNOR Y[0])\\\`. שני XNOR + 1 AND.',
+          'GT: \\\`X>Y\\\` קורה אם הביט הגבוה ב-X גבוה יותר, **או** הביטים הגבוהים שווים והנמוך ב-X גבוה יותר.',
+          '\\\`X>Y = (X[1] ∧ ¬Y[1]) ∨ ((X[1] XNOR Y[1]) ∧ X[0] ∧ ¬Y[0])\\\`',
+          'LT הוא ההופכי: \\\`X<Y = ¬(X>Y) ∧ ¬(X==Y)\\\`. אפשר גם להחיל את אותה נוסחה עם X ו-Y מוחלפים.',
+        ],
+        answer:
+`**ביטויים בוליאניים (3 פלטים, 2-ביט):**
+
+\`\`\`
+EQ = (X[1] XNOR Y[1]) ∧ (X[0] XNOR Y[0])
+
+GT = (X[1] ∧ ¬Y[1])                              ← הביט הגבוה של X גבוה
+   ∨ ((X[1] XNOR Y[1]) ∧ X[0] ∧ ¬Y[0])           ← אחרת: ביטים גבוהים שווים, X[0]>Y[0]
+
+LT = (¬X[1] ∧ Y[1])                              ← סימטרי ל-GT
+   ∨ ((X[1] XNOR Y[1]) ∧ ¬X[0] ∧ Y[0])
+\`\`\`
+
+**ספירת שערים (אופציה אופטימלית):**
+- \`x1_eq_y1 = X[1] XNOR Y[1]\` (1 XNOR)
+- \`x0_eq_y0 = X[0] XNOR Y[0]\` (1 XNOR)
+- \`EQ = x1_eq_y1 ∧ x0_eq_y0\` (1 AND)
+- \`GT = (X[1] ∧ ¬Y[1]) ∨ (x1_eq_y1 ∧ X[0] ∧ ¬Y[0])\` (2 AND + 1 NOT + 1 AND2 + 1 OR = 5 שערים)
+- \`LT = ...\` סימטרי (5 שערים, חלקם משותפים)
+
+**סה"כ:** ~8-10 שערים בסיסיים. אם משתפים XNORs בין הפלטים — יורד עוד.
+
+**אלטרנטיבה — שיטת חיסור:** ALU/Subtractor → אם \`X-Y\` שלילי = LT, אפס = EQ, חיובי = GT. אבל זה כבר ALU, לא שאלת comparator טהורה.`,
+        expectedAnswers: [
+          'xnor', 'eq', 'gt', 'lt',
+          'x[1]', 'x[0]', 'y[1]', 'y[0]',
+          'x > y', 'x == y', 'x < y',
+          '8 gates', '10 gates',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'בנה את **B** (משווה 2-ספרתי, 4 ביט) באמצעות מודולי **A** + שערים. כמה A?',
+        hints: [
+          'הסתכל על שתי ספרות בכל מספר: \\\`X = (X_hi, X_lo)\\\`, \\\`Y = (Y_hi, Y_lo)\\\` כאשר כל ספרה היא 2 ביט.',
+          '**אם** הספרות הגבוהות שונות — הן קובעות לבדן.',
+          '**אם** הספרות הגבוהות שוות — הספרות הנמוכות קובעות.',
+          'שני מודולי A: \\\`A_hi\\\` למשווה הגבוה, \\\`A_lo\\\` למשווה הנמוך.',
+          'נוסחאות סופיות: \\\`GT = A_hi.GT ∨ (A_hi.EQ ∧ A_lo.GT)\\\`, \\\`LT = A_hi.LT ∨ (A_hi.EQ ∧ A_lo.LT)\\\`, \\\`EQ = A_hi.EQ ∧ A_lo.EQ\\\`.',
+          'סה"כ: **2 × A + 2 AND + 2 OR + 1 AND = 7 שערים נוספים** ל-2 רכיבי A.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="Cascaded comparator B: 2 A modules + cascade logic for GT/EQ/LT">
+  <defs>
+    <linearGradient id="ccBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="ccArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+    <marker id="ccArrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="720" height="40" fill="#0c1a28"/>
+  <text direction="ltr" x="360" y="26" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Cascade:  high digits decide first; low digits break ties
+  </text>
+
+  <!-- A_hi module -->
+  <rect x="200" y="70" width="120" height="80" rx="6" fill="url(#ccBody)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="260" y="100" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="15">A_hi</text>
+  <text direction="ltr" x="260" y="120" text-anchor="middle" fill="#a0c0e0" font-size="10">compare hi digits</text>
+
+  <!-- A_lo module -->
+  <rect x="200" y="220" width="120" height="80" rx="6" fill="url(#ccBody)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="260" y="250" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="15">A_lo</text>
+  <text direction="ltr" x="260" y="270" text-anchor="middle" fill="#a0c0e0" font-size="10">compare lo digits</text>
+
+  <!-- Inputs -->
+  <text direction="ltr" x="80" y="94" fill="#f0d080" font-weight="bold">X_hi</text>
+  <line x1="130" y1="90" x2="200" y2="90" stroke="#f0d080" stroke-width="1.6" marker-end="url(#ccArrB)"/>
+  <text direction="ltr" x="80" y="134" fill="#f0d080" font-weight="bold">Y_hi</text>
+  <line x1="130" y1="130" x2="200" y2="130" stroke="#f0d080" stroke-width="1.6" marker-end="url(#ccArrB)"/>
+
+  <text direction="ltr" x="80" y="244" fill="#f0d080" font-weight="bold">X_lo</text>
+  <line x1="130" y1="240" x2="200" y2="240" stroke="#f0d080" stroke-width="1.6" marker-end="url(#ccArrB)"/>
+  <text direction="ltr" x="80" y="284" fill="#f0d080" font-weight="bold">Y_lo</text>
+  <line x1="130" y1="280" x2="200" y2="280" stroke="#f0d080" stroke-width="1.6" marker-end="url(#ccArrB)"/>
+
+  <!-- A_hi outputs labelled -->
+  <line x1="320" y1="85" x2="400" y2="85" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="78" text-anchor="middle" fill="#80d4ff" font-size="10">A_hi.GT</text>
+  <line x1="320" y1="110" x2="400" y2="110" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="104" text-anchor="middle" fill="#80d4ff" font-size="10">A_hi.EQ</text>
+  <line x1="320" y1="135" x2="400" y2="135" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="128" text-anchor="middle" fill="#80d4ff" font-size="10">A_hi.LT</text>
+
+  <!-- A_lo outputs labelled -->
+  <line x1="320" y1="235" x2="400" y2="235" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="228" text-anchor="middle" fill="#80d4ff" font-size="10">A_lo.GT</text>
+  <line x1="320" y1="260" x2="400" y2="260" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="254" text-anchor="middle" fill="#80d4ff" font-size="10">A_lo.EQ</text>
+  <line x1="320" y1="285" x2="400" y2="285" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="360" y="278" text-anchor="middle" fill="#80d4ff" font-size="10">A_lo.LT</text>
+
+  <!-- Cascade logic block -->
+  <rect x="420" y="80" width="180" height="220" rx="8" fill="#0a1420" stroke="#ff8060" stroke-width="1.6" stroke-dasharray="4 2"/>
+  <text direction="ltr" x="510" y="100" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">cascade logic</text>
+
+  <text direction="ltr" x="510" y="140" text-anchor="middle" fill="#c0c0e0" font-size="11">GT = A_hi.GT</text>
+  <text direction="ltr" x="510" y="156" text-anchor="middle" fill="#c0c0e0" font-size="11">∨ (A_hi.EQ · A_lo.GT)</text>
+
+  <text direction="ltr" x="510" y="190" text-anchor="middle" fill="#c0c0e0" font-size="11">EQ = A_hi.EQ · A_lo.EQ</text>
+
+  <text direction="ltr" x="510" y="234" text-anchor="middle" fill="#c0c0e0" font-size="11">LT = A_hi.LT</text>
+  <text direction="ltr" x="510" y="250" text-anchor="middle" fill="#c0c0e0" font-size="11">∨ (A_hi.EQ · A_lo.LT)</text>
+
+  <!-- Final outputs -->
+  <line x1="600" y1="140" x2="660" y2="140" stroke="#80f0a0" stroke-width="1.8" marker-end="url(#ccArrG)"/>
+  <text direction="ltr" x="690" y="144" text-anchor="middle" fill="#80f0a0" font-weight="bold">X &gt; Y</text>
+
+  <line x1="600" y1="190" x2="660" y2="190" stroke="#80f0a0" stroke-width="1.8" marker-end="url(#ccArrG)"/>
+  <text direction="ltr" x="690" y="194" text-anchor="middle" fill="#80f0a0" font-weight="bold">X == Y</text>
+
+  <line x1="600" y1="240" x2="660" y2="240" stroke="#80f0a0" stroke-width="1.8" marker-end="url(#ccArrG)"/>
+  <text direction="ltr" x="690" y="244" text-anchor="middle" fill="#80f0a0" font-weight="bold">X &lt; Y</text>
+
+  <text direction="ltr" x="360" y="340" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    2 × A modules  +  3 ANDs + 2 ORs  =  cascade for any width with N×A modules
+  </text>
+</svg>`,
+        answer:
+`**שני מודולי A + 5 שערים סה"כ** (לוגיקת cascade).
+
+**הרעיון:** כשמשווים מספרים דו-ספרתיים, **הספרה הגבוהה מכריעה** — אם היא שונה, אין צורך להסתכל בנמוכה. **רק כשהגבוהות שוות** — הספרה הנמוכה מכריעה.
+
+**הביטויים הסופיים:**
+
+\`\`\`
+EQ_total = A_hi.EQ ∧ A_lo.EQ           ← שניהם שווים
+GT_total = A_hi.GT ∨ (A_hi.EQ ∧ A_lo.GT)
+LT_total = A_hi.LT ∨ (A_hi.EQ ∧ A_lo.LT)
+\`\`\`
+
+**ספירה:**
+- 2 × A (במודל מ-א' = 2 × ~10 שערים = ~20 שערים פנימיים)
+- + 2 AND + 2 OR + 1 AND = 5 שערי cascade
+- סה"כ ~25 שערים בסיסיים, או 2 A's + 5 שערים אם מתייחסים ל-A כקופסה שחורה.
+
+**שאלת המשך — הרחבה ל-4 ספרות (16 ביט):** אותו רעיון ברקורסיה: 2 רכיבי B (כל אחד 2-ספרתי) + cascade זהה. או — שרשור ישיר של 4 A's עם cascade chain.
+
+**הכללה ל-N ספרות:** \`N\` רכיבי A + cascade logic של עומק \`O(log N)\` (priority chain). מבנה זהה לקודן Priority encoder.`,
+        interviewerMindset:
+`שאלת cascade קלאסית. המראיין מחפש:
+
+1. **שמצאת את עקרון ה-cascade**: "הגבוה תחילה". מועמד שמתחיל לבנות תאי AND ענקיים — מפספס.
+2. **שדאגת ל-EQ_total**: שניהם שווים. מועמד שמדלג על EQ — חסר.
+3. **שראית שזה משפחה רחבה יותר** — "ולמעשה אפשר להמשיך לכל רוחב". בונוס.
+
+**שאלה חשובה:** "ומה אם רק GT דרוש (לא EQ ו-LT)?" → אפשר לחסוך — צריך רק A.GT ו-A.EQ (לא A.LT). הופך את A לפשוט יותר. סיגנל ל-cost-aware design.`,
+        expectedAnswers: [
+          '2', 'two', 'שניים',
+          'a_hi', 'a_lo', 'high', 'low',
+          'cascade', 'שרשור',
+          'eq', 'gt', 'lt',
+          'or', 'and',
+          'a_hi.eq', 'a.eq',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 14 (משווה דו-ספרתי)',
+    tags: ['comparator', 'cascade', 'combinational', 'composition', 'logic'],
+    // Canvas demo: B-component with 2 COMPARATOR built-ins as the A modules.
+    // Default: X = (2, 3) = 11, Y = (2, 1) = 9 → expect GT=1.
+    circuit: () => build(() => {
+      const xHi = h.input(120, 120, 'X_hi'); xHi.fixedValue = 2;
+      const yHi = h.input(120, 200, 'Y_hi'); yHi.fixedValue = 2;
+      const xLo = h.input(120, 360, 'X_lo'); xLo.fixedValue = 3;
+      const yLo = h.input(120, 440, 'Y_lo'); yLo.fixedValue = 1;
+      const aHi = h.block('COMPARATOR', 320, 160, { label: 'A_hi' });
+      const aLo = h.block('COMPARATOR', 320, 400, { label: 'A_lo' });
+      // Cascade gates
+      const andGtTie = h.gate('AND', 560, 280);  // A_hi.EQ ∧ A_lo.GT
+      const orGt     = h.gate('OR',  720, 200);  // A_hi.GT ∨ (above)
+      const andLtTie = h.gate('AND', 560, 360);  // A_hi.EQ ∧ A_lo.LT
+      const orLt     = h.gate('OR',  720, 440);  // A_hi.LT ∨ (above)
+      const andEq    = h.gate('AND', 720, 320);  // A_hi.EQ ∧ A_lo.EQ
+      // Outputs
+      const oGt = h.output(900, 200, 'X > Y');
+      const oEq = h.output(900, 320, 'X == Y');
+      const oLt = h.output(900, 440, 'X < Y');
+      return {
+        nodes: [xHi, yHi, xLo, yLo, aHi, aLo,
+                andGtTie, orGt, andLtTie, orLt, andEq,
+                oGt, oEq, oLt],
+        wires: [
+          // A_hi inputs
+          h.wire(xHi.id, aHi.id, 0),
+          h.wire(yHi.id, aHi.id, 1),
+          // A_lo inputs
+          h.wire(xLo.id, aLo.id, 0),
+          h.wire(yLo.id, aLo.id, 1),
+          // GT cascade: A_hi.GT (out1) ∨ (A_hi.EQ (out0) ∧ A_lo.GT (out1))
+          h.wire(aHi.id, andGtTie.id, 0, 0),   // A_hi.__out0 = EQ
+          h.wire(aLo.id, andGtTie.id, 1, 1),   // A_lo.__out1 = GT
+          h.wire(aHi.id, orGt.id, 0, 1),       // A_hi.__out1 = GT
+          h.wire(andGtTie.id, orGt.id, 1),
+          h.wire(orGt.id, oGt.id, 0),
+          // EQ cascade: A_hi.EQ ∧ A_lo.EQ
+          h.wire(aHi.id, andEq.id, 0, 0),
+          h.wire(aLo.id, andEq.id, 1, 0),
+          h.wire(andEq.id, oEq.id, 0),
+          // LT cascade: A_hi.LT (out2) ∨ (A_hi.EQ ∧ A_lo.LT (out2))
+          h.wire(aHi.id, andLtTie.id, 0, 0),
+          h.wire(aLo.id, andLtTie.id, 1, 2),
+          h.wire(aHi.id, orLt.id, 0, 2),
+          h.wire(andLtTie.id, orLt.id, 1),
+          h.wire(orLt.id, oLt.id, 0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1011 — 2^n:1 MUX from decoder + basic gates (slide 16)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'mux-from-decoder',
+    difficulty: 'easy',
+    title: 'MUX 2ⁿ:1 מ-decoder ושערים בסיסיים',
+    intro:
+`בעזרת \`decoder\` ושערים לוגיים בסיסיים, ממש \`MUX 2ⁿ:1\`.
+
+ל-\`n = 2\` (MUX 4:1): יש 4 כניסות נתונים \`I₀..I₃\`, 2 קווי בחירה \`S₁ S₀\`, ופלט יחיד \`Y\`. הפלט שווה ל-\`I_k\` כאשר \`k\` הוא הערך הבינארי של \`(S₁ S₀)\`.`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנן את המעגל ל-MUX 4:1. כמה decoder, AND, OR?',
+        hints: [
+          'Decoder 2:4 ממיר את 2 קווי הבחירה ל-4 קווים one-hot (\\\`D₀..D₃\\\`): בדיוק אחד מהם דולק לפי \\\`k = (S₁ S₀)\\\`.',
+          'לכל קלט \\\`I_k\\\`, השתמש ב-AND עם \\\`D_k\\\` — מקבל את \\\`I_k\\\` אם נבחר, אחרת 0.',
+          'סוכמים את כל ה-AND עם OR-4 (או 3 OR-2 בעץ).',
+          'סה"כ: **1 decoder + 4 AND + 3 OR-2** (או 1 OR-4).',
+          'הכללה ל-2ⁿ:1: \\\`1 decoder n:2ⁿ + 2ⁿ AND + (2ⁿ-1) OR-2\\\`.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 840 460" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13"
+     role="img" aria-label="4:1 MUX from 2:4 decoder + 4 ANDs + 4-input OR">
+  <defs>
+    <linearGradient id="muxDecGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="muxArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+    <marker id="muxArrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/></marker>
+    <marker id="muxArrY" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f0d080"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="840" height="44" fill="#0c1a28"/>
+  <text direction="ltr" x="420" y="28" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Y = Σₖ (Dₖ · Iₖ)    ,   Dₖ = 1 ⇔ (S₁ S₀) == k
+  </text>
+
+  <!-- Decoder block -->
+  <rect x="140" y="100" width="140" height="280" rx="10" fill="url(#muxDecGrad)" stroke="#80d4ff" stroke-width="2"/>
+  <text direction="ltr" x="210" y="142" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">Decoder</text>
+  <text direction="ltr" x="210" y="166" text-anchor="middle" fill="#a0c0e0" font-size="12">2 : 4</text>
+
+  <!-- S1, S0 inputs -->
+  <text direction="ltr" x="60" y="214" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">S₁</text>
+  <line x1="84" y1="210" x2="140" y2="210" stroke="#ff8060" stroke-width="1.8" marker-end="url(#muxArrY)"/>
+  <text direction="ltr" x="60" y="270" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">S₀</text>
+  <line x1="84" y1="266" x2="140" y2="266" stroke="#ff8060" stroke-width="1.8" marker-end="url(#muxArrY)"/>
+
+  <!-- D3, D2, D1, D0 outputs (top to bottom) -->
+  <line x1="280" y1="130" x2="370" y2="130" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="324" y="124" text-anchor="middle" fill="#80d4ff" font-size="12" font-weight="bold">D₃</text>
+
+  <line x1="280" y1="210" x2="370" y2="210" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="324" y="204" text-anchor="middle" fill="#80d4ff" font-size="12" font-weight="bold">D₂</text>
+
+  <line x1="280" y1="290" x2="370" y2="290" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="324" y="284" text-anchor="middle" fill="#80d4ff" font-size="12" font-weight="bold">D₁</text>
+
+  <line x1="280" y1="370" x2="370" y2="370" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="324" y="364" text-anchor="middle" fill="#80d4ff" font-size="12" font-weight="bold">D₀</text>
+
+  <!-- AND gates (D-shape) -->
+  ${[
+    { y: 130, k: 3 },
+    { y: 210, k: 2 },
+    { y: 290, k: 1 },
+    { y: 370, k: 0 },
+  ].map(({ y, k }) => `
+    <path d="M 370 ${y - 16} L 400 ${y - 16} Q 422 ${y - 16} 422 ${y} Q 422 ${y + 16} 400 ${y + 16} L 370 ${y + 16} Z"
+          fill="${'url(#muxDecGrad)'}" stroke="#80d4ff" stroke-width="1.6"/>
+    <text direction="ltr" x="395" y="${y + 4}" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="11">AND</text>
+    <!-- I_k input arrow from below -->
+    <line x1="385" y1="${y + 36}" x2="385" y2="${y + 16}" stroke="#f0d080" stroke-width="1.4" marker-end="url(#muxArrY)"/>
+    <text direction="ltr" x="385" y="${y + 52}" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="12">I${'₀₁₂₃'[k]}</text>
+    <!-- Output to OR -->
+    <line x1="422" y1="${y}" x2="540" y2="${y}" stroke="#80d4ff" stroke-width="1.4"/>
+  `).join('')}
+
+  <!-- OR-4 gate (large D-shape) -->
+  <path d="M 540 110 Q 590 130 590 250 Q 590 370 540 390 Q 565 250 540 110 Z M 540 110 L 600 110 Q 660 200 660 250 Q 660 300 600 390 L 540 390 Q 565 250 540 110 Z"
+        fill="url(#muxDecGrad)" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="610" y="246" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="15">OR-4</text>
+  <text direction="ltr" x="610" y="266" text-anchor="middle" fill="#a0c0e0" font-size="10">(or tree of 3 OR-2)</text>
+
+  <!-- Final output -->
+  <line x1="660" y1="250" x2="760" y2="250" stroke="#80f0a0" stroke-width="2" marker-end="url(#muxArrG)"/>
+  <text direction="ltr" x="800" y="246" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="18">Y</text>
+
+  <!-- Legend at bottom -->
+  <text direction="ltr" x="420" y="432" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    1 decoder 2:4  +  4 AND-2  +  3 OR-2 (or 1 OR-4)   •   exactly one Dₖ = 1 selects I_k
+  </text>
+</svg>`,
+        answer:
+`**מימוש MUX 4:1 (n=2): decoder 2:4 + 4 AND + OR-4** (ראה הסכמה).
+
+**איך זה עובד:**
+- Decoder 2:4 הופך \`(S₁,S₀)\` ל-one-hot signal \`(D₀,D₁,D₂,D₃)\`: בדיוק אחד מהם 1.
+- כל AND מסך \`I_k\` עם \`D_k\` — אם הקלט נבחר → AND פלט = \`I_k\`; אחרת = 0.
+- ה-OR סוכם הכל. מכיוון שבדיוק AND אחד הוא non-zero, התוצאה היא \`I_k\`.
+
+**נוסחה כללית:**
+\`\`\`
+Y = Σₖ (Dₖ · Iₖ)    ,   Dₖ = 1 ⇔ (S₁S₀) = k
+\`\`\`
+
+**ספירת רכיבים:**
+- 1 decoder 2:4 (מוכל)
+- 4 AND-2 (אחד לכל input)
+- 3 OR-2 (עץ) או 1 OR-4
+
+**הכללה ל-MUX 2ⁿ:1:**
+- 1 decoder n:2ⁿ
+- 2ⁿ AND-2
+- 2ⁿ−1 OR-2 (עץ ב-log n שכבות)
+
+**שאלת המשך נפוצה:** "מה ההבדל בעומק לוגי בין מימוש זה לבין MUX 2:1 בעץ?"
+- **MUX-tree:** 2ⁿ−1 MUXים, עומק \`log n\`. כל קלט עובר \`log n\` MUXים → \`O(log n)\` עומק.
+- **Decoder+AND+OR:** decoder עצמו עומק \`O(log n)\`, ועוד 2 שכבות (AND ו-OR-tree עומק \`O(log n)\`). סה"כ \`O(log n)\` גם.
+
+עומק זהה אסימפטוטית; הבדל בשטח/אופי, לא בעומק.`,
+        interviewerMindset:
+`שאלת חימום classic. המראיין מחפש:
+
+1. **שאתה מבין מה decoder עושה** — one-hot encoding. אם לא — שאלת אבחון.
+2. **שאתה רואה את הקשר decoder → MUX** — decoder + AND + OR = MUX. הכיוון ההפוך (encoder + ...) פחות שימושי.
+3. **הכללה מנטלית ל-2ⁿ:1** — מועמד שעונה רק על המקרה המוגדר (4:1) ועוצר → מפספס את העקרון.
+
+**שאלת המשך:** "ו-DEMUX?" → התשובה הפוכה: decoder עם enable = input. ה-decoder עצמו, עם enable מתפקד כ-DEMUX 1:2ⁿ.`,
+        expectedAnswers: [
+          'decoder', 'one-hot', 'one hot',
+          'and', 'or',
+          '4 and', '4 ands',
+          'mux', '4:1', '2^n',
+          'd_k', 'dk', 'd0', 'd1',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 16 (MUX from decoder)',
+    tags: ['mux', 'decoder', 'combinational', 'composition', 'logic'],
+    // Canvas demo: 4:1 MUX from 2:4 decoder + 4 AND + 3 OR.
+    // Default: I0=0, I1=1, I2=2, I3=3 (one-hot-ish for illustration), S = 2 → Y = I2 = 2.
+    circuit: () => build(() => {
+      // Inputs: 2 sel bits + 4 data inputs
+      const s1 = h.input(80, 80, 'S1');  s1.fixedValue = 1;
+      const s0 = h.input(80, 160, 'S0'); s0.fixedValue = 0;
+      const i0 = h.input(80, 280, 'I0'); i0.fixedValue = 0;
+      const i1 = h.input(80, 360, 'I1'); i1.fixedValue = 0;
+      const i2 = h.input(80, 440, 'I2'); i2.fixedValue = 1;   // selected (S=10)
+      const i3 = h.input(80, 520, 'I3'); i3.fixedValue = 0;
+      // Decoder 2:4 — pins: S[0]=in0, S[1]=in1 → out0..out3 one-hot
+      const dec = h.block('DECODER', 300, 120, { inputBits: 2, label: 'DEC 2:4' });
+      // 4 ANDs (one per input, gated by decoder output)
+      const a0 = h.gate('AND', 520, 280);
+      const a1 = h.gate('AND', 520, 360);
+      const a2 = h.gate('AND', 520, 440);
+      const a3 = h.gate('AND', 520, 520);
+      // OR tree: 3 OR-2
+      const or01 = h.gate('OR', 720, 320);   // a0 ∨ a1
+      const or23 = h.gate('OR', 720, 480);   // a2 ∨ a3
+      const orAll = h.gate('OR', 900, 400);  // (a0∨a1) ∨ (a2∨a3)
+      const y = h.output(1100, 400, 'Y');
+      return {
+        nodes: [s1, s0, i0, i1, i2, i3, dec, a0, a1, a2, a3, or01, or23, orAll, y],
+        wires: [
+          // Decoder inputs: bit 0 = S0 (input 0), bit 1 = S1 (input 1)
+          h.wire(s0.id, dec.id, 0),
+          h.wire(s1.id, dec.id, 1),
+          // Each AND: I_k AND D_k (D_k = dec.__out{k})
+          h.wire(i0.id, a0.id, 0),
+          h.wire(dec.id, a0.id, 1, 0),   // dec.__out0 = D0
+          h.wire(i1.id, a1.id, 0),
+          h.wire(dec.id, a1.id, 1, 1),   // dec.__out1 = D1
+          h.wire(i2.id, a2.id, 0),
+          h.wire(dec.id, a2.id, 1, 2),   // dec.__out2 = D2
+          h.wire(i3.id, a3.id, 0),
+          h.wire(dec.id, a3.id, 1, 3),   // dec.__out3 = D3
+          // OR tree
+          h.wire(a0.id, or01.id, 0),
+          h.wire(a1.id, or01.id, 1),
+          h.wire(a2.id, or23.id, 0),
+          h.wire(a3.id, or23.id, 1),
+          h.wire(or01.id, orAll.id, 0),
+          h.wire(or23.id, orAll.id, 1),
+          h.wire(orAll.id, y.id, 0),
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1012 — Sort-4 from Sort-2 components (slide 17)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'sort-4-from-sort-2',
+    difficulty: 'medium',
+    title: 'Sort-4 ממודולי Sort-2',
+    intro:
+`נתון הרכיב **Sort-2**: 2 כניסות (\`a, b\`), 2 יציאות — \`max(a,b)\` ו-\`min(a,b)\`.
+
+באמצעות יחידות מסוג \`Sort-2\` בלבד, ממש את הרכיב **Sort-4**: 4 כניסות (\`a, b, c, d\`),
+4 יציאות מסודרות בסדר עולה: \`Max, M₂, M₁, Min\` כך שהיציאה הראשונה היא הגדולה ביותר.
+**המימוש צריך להיות פשוט ככל שניתן (שימוש במספר קטן ככל האפשר של יחידות).**`,
+    schematic: `
+<svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Sort-2 and Sort-4 components">
+  <!-- Sort-2 box -->
+  <rect x="80"  y="60"  width="120" height="100" rx="8" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="140" y="100" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">Sort-2</text>
+  <text direction="ltr" x="140" y="120" text-anchor="middle" fill="#a0c0e0" font-size="10">2 in → 2 out</text>
+
+  <text direction="ltr" x="40" y="86" fill="#f0d080" font-weight="bold">a</text>
+  <line x1="56" y1="82" x2="80" y2="82" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="80,82 74,78 74,86" fill="#f0d080"/>
+  <text direction="ltr" x="40" y="136" fill="#f0d080" font-weight="bold">b</text>
+  <line x1="56" y1="132" x2="80" y2="132" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="80,132 74,128 74,136" fill="#f0d080"/>
+
+  <line x1="200" y1="82" x2="240" y2="82" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="240,82 234,78 234,86" fill="#80f0a0"/>
+  <text direction="ltr" x="278" y="86" text-anchor="middle" fill="#80f0a0" font-size="12">max(a,b)</text>
+
+  <line x1="200" y1="132" x2="240" y2="132" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="240,132 234,128 234,136" fill="#80f0a0"/>
+  <text direction="ltr" x="278" y="136" text-anchor="middle" fill="#80f0a0" font-size="12">min(a,b)</text>
+
+  <!-- Sort-4 box -->
+  <rect x="430" y="40" width="180" height="160" rx="8" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="520" y="106" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="18">Sort-4</text>
+  <text direction="ltr" x="520" y="128" text-anchor="middle" fill="#a0c0e0" font-size="11">4 in → 4 out (sorted)</text>
+
+  <text direction="ltr" x="390" y="68" fill="#f0d080" font-weight="bold">a</text>
+  <line x1="406" y1="64" x2="430" y2="64" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="430,64 424,60 424,68" fill="#f0d080"/>
+  <text direction="ltr" x="390" y="108" fill="#f0d080" font-weight="bold">b</text>
+  <line x1="406" y1="104" x2="430" y2="104" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="430,104 424,100 424,108" fill="#f0d080"/>
+  <text direction="ltr" x="390" y="148" fill="#f0d080" font-weight="bold">c</text>
+  <line x1="406" y1="144" x2="430" y2="144" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="430,144 424,140 424,148" fill="#f0d080"/>
+  <text direction="ltr" x="390" y="188" fill="#f0d080" font-weight="bold">d</text>
+  <line x1="406" y1="184" x2="430" y2="184" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="430,184 424,180 424,188" fill="#f0d080"/>
+
+  <line x1="610" y1="64" x2="650" y2="64" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="650,64 644,60 644,68" fill="#80f0a0"/>
+  <text direction="ltr" x="684" y="68" text-anchor="middle" fill="#80f0a0" font-size="11">Max</text>
+
+  <line x1="610" y1="104" x2="650" y2="104" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="650,104 644,100 644,108" fill="#80f0a0"/>
+  <text direction="ltr" x="684" y="108" text-anchor="middle" fill="#80f0a0" font-size="11">M₂</text>
+
+  <line x1="610" y1="144" x2="650" y2="144" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="650,144 644,140 644,148" fill="#80f0a0"/>
+  <text direction="ltr" x="684" y="148" text-anchor="middle" fill="#80f0a0" font-size="11">M₁</text>
+
+  <line x1="610" y1="184" x2="650" y2="184" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="650,184 644,180 644,188" fill="#80f0a0"/>
+  <text direction="ltr" x="684" y="188" text-anchor="middle" fill="#80f0a0" font-size="11">Min</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'בנה את Sort-4 ממינימום יחידות Sort-2. כמה צריך, ובאיזה topology?',
+        hints: [
+          'תחילה: סדר כל זוג בנפרד. \\\`Sort-2(a, b)\\\` ו-\\\`Sort-2(c, d)\\\`. כעת יש לך שני זוגות ממוינים.',
+          'אחרי שלב 1: יודעים שב-(a₁, b₁) הקטן ראשון; ב-(c₁, d₁) הקטן ראשון. ה-Min הגלובלי הוא \\\`min(a₁, c₁)\\\`. ה-Max הגלובלי הוא \\\`max(b₁, d₁)\\\`.',
+          'שלב 2: \\\`Sort-2(a₁, c₁)\\\` נותן את ה-Min הגלובלי + ערך אמצעי-נמוך. \\\`Sort-2(b₁, d₁)\\\` נותן ערך אמצעי-גבוה + Max הגלובלי.',
+          'שלב 3: יש לנו 2 ערכים אמצעיים שטרם הושוו זה לזה. \\\`Sort-2(אמצעי-נמוך, אמצעי-גבוה)\\\` נותן את \\\`M₁\\\` (קטן יותר) ו-\\\`M₂\\\` (גדול יותר).',
+          'סה"כ: **5 יחידות Sort-2 ב-3 שכבות**. זוהי רשת מיון אופטימלית ל-4 קלטים (sorting network).',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 880 480" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="Sort-4 from 5 Sort-2 modules in 3 stages">
+  <defs>
+    <linearGradient id="s2Body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="srtArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+    <marker id="srtArrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="880" height="44" fill="#0c1a28"/>
+  <text direction="ltr" x="440" y="28" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Sort-4 = 5 × Sort-2  (3 stages, optimal sorting network for n=4)
+  </text>
+
+  <!-- Stage column headers -->
+  <text direction="ltr" x="190" y="74" text-anchor="middle" fill="#a0c0e0" font-weight="bold">Stage 1</text>
+  <text direction="ltr" x="190" y="88" text-anchor="middle" fill="#a0c0e0" font-size="10">sort pairs</text>
+  <text direction="ltr" x="440" y="74" text-anchor="middle" fill="#a0c0e0" font-weight="bold">Stage 2</text>
+  <text direction="ltr" x="440" y="88" text-anchor="middle" fill="#a0c0e0" font-size="10">find extremes</text>
+  <text direction="ltr" x="690" y="74" text-anchor="middle" fill="#a0c0e0" font-weight="bold">Stage 3</text>
+  <text direction="ltr" x="690" y="88" text-anchor="middle" fill="#a0c0e0" font-size="10">sort middles</text>
+
+  <!-- ── Stage 1: S1 (a,b) and S2 (c,d) ── -->
+  <rect x="140" y="120" width="100" height="80" rx="8" fill="url(#s2Body)" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="190" y="150" text-anchor="middle" fill="#80d4ff" font-weight="bold">S1</text>
+  <text direction="ltr" x="190" y="170" text-anchor="middle" fill="#a0c0e0" font-size="10">Sort-2</text>
+
+  <rect x="140" y="240" width="100" height="80" rx="8" fill="url(#s2Body)" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="190" y="270" text-anchor="middle" fill="#80d4ff" font-weight="bold">S2</text>
+  <text direction="ltr" x="190" y="290" text-anchor="middle" fill="#a0c0e0" font-size="10">Sort-2</text>
+
+  <!-- Stage 1 inputs -->
+  <text direction="ltr" x="60" y="144" fill="#f0d080" font-weight="bold" font-size="14">a</text>
+  <line x1="80" y1="140" x2="140" y2="140" stroke="#f0d080" stroke-width="1.6" marker-end="url(#srtArrB)"/>
+  <text direction="ltr" x="60" y="184" fill="#f0d080" font-weight="bold" font-size="14">b</text>
+  <line x1="80" y1="180" x2="140" y2="180" stroke="#f0d080" stroke-width="1.6" marker-end="url(#srtArrB)"/>
+  <text direction="ltr" x="60" y="264" fill="#f0d080" font-weight="bold" font-size="14">c</text>
+  <line x1="80" y1="260" x2="140" y2="260" stroke="#f0d080" stroke-width="1.6" marker-end="url(#srtArrB)"/>
+  <text direction="ltr" x="60" y="304" fill="#f0d080" font-weight="bold" font-size="14">d</text>
+  <line x1="80" y1="300" x2="140" y2="300" stroke="#f0d080" stroke-width="1.6" marker-end="url(#srtArrB)"/>
+
+  <!-- ── Stage 2: S3 (a₁,c₁) and S4 (b₁,d₁) ── -->
+  <rect x="390" y="120" width="100" height="80" rx="8" fill="url(#s2Body)" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="440" y="150" text-anchor="middle" fill="#80d4ff" font-weight="bold">S3</text>
+  <text direction="ltr" x="440" y="170" text-anchor="middle" fill="#a0c0e0" font-size="10">sort min-of-pairs</text>
+
+  <rect x="390" y="240" width="100" height="80" rx="8" fill="url(#s2Body)" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="440" y="270" text-anchor="middle" fill="#80d4ff" font-weight="bold">S4</text>
+  <text direction="ltr" x="440" y="290" text-anchor="middle" fill="#a0c0e0" font-size="10">sort max-of-pairs</text>
+
+  <!-- Stage 1 → Stage 2 wiring -->
+  <!-- S1 max (b₁) at output top → S4 input top -->
+  <line x1="240" y1="140" x2="320" y2="140" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="280" y="134" text-anchor="middle" fill="#80d4ff" font-size="10">b₁=max(a,b)</text>
+  <line x1="320" y1="140" x2="320" y2="260" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="320" y1="260" x2="390" y2="260" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- S1 min (a₁) at output bottom → S3 input top -->
+  <line x1="240" y1="180" x2="320" y2="180" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="280" y="196" text-anchor="middle" fill="#80d4ff" font-size="10">a₁=min(a,b)</text>
+  <line x1="320" y1="180" x2="320" y2="140" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="320" y1="140" x2="390" y2="140" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- S2 max (d₁) → S4 input bottom -->
+  <line x1="240" y1="260" x2="350" y2="260" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="290" y="254" text-anchor="middle" fill="#80d4ff" font-size="10">d₁=max(c,d)</text>
+  <line x1="350" y1="260" x2="350" y2="300" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="350" y1="300" x2="390" y2="300" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- S2 min (c₁) → S3 input bottom -->
+  <line x1="240" y1="300" x2="350" y2="300" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="290" y="316" text-anchor="middle" fill="#80d4ff" font-size="10">c₁=min(c,d)</text>
+  <line x1="350" y1="300" x2="350" y2="180" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="350" y1="180" x2="390" y2="180" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- ── Stage 3: S5 (m₁, m₂) ── -->
+  <rect x="640" y="180" width="100" height="80" rx="8" fill="url(#s2Body)" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="690" y="210" text-anchor="middle" fill="#80d4ff" font-weight="bold">S5</text>
+  <text direction="ltr" x="690" y="230" text-anchor="middle" fill="#a0c0e0" font-size="10">sort middles</text>
+
+  <!-- S3 max → Min global -->
+  <line x1="490" y1="140" x2="800" y2="140" stroke="#80f0a0" stroke-width="1.6" marker-end="url(#srtArrG)"/>
+  <text direction="ltr" x="850" y="144" text-anchor="middle" fill="#80f0a0" font-weight="bold">Min</text>
+
+  <!-- S3 min (= median-low) → S5 input top -->
+  <line x1="490" y1="180" x2="580" y2="180" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="540" y="174" text-anchor="middle" fill="#80d4ff" font-size="10">m₁</text>
+  <line x1="580" y1="180" x2="580" y2="200" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="580" y1="200" x2="640" y2="200" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- S4 max → Max global -->
+  <line x1="490" y1="300" x2="800" y2="300" stroke="#80f0a0" stroke-width="1.6" marker-end="url(#srtArrG)"/>
+  <text direction="ltr" x="850" y="304" text-anchor="middle" fill="#80f0a0" font-weight="bold">Max</text>
+
+  <!-- S4 min (= median-high) → S5 input bottom -->
+  <line x1="490" y1="260" x2="580" y2="260" stroke="#80d4ff" stroke-width="1.4"/>
+  <text direction="ltr" x="540" y="276" text-anchor="middle" fill="#80d4ff" font-size="10">m₂</text>
+  <line x1="580" y1="260" x2="580" y2="240" stroke="#80d4ff" stroke-width="1.4"/>
+  <line x1="580" y1="240" x2="640" y2="240" stroke="#80d4ff" stroke-width="1.4" marker-end="url(#srtArrB)"/>
+
+  <!-- S5 outputs → M₁, M₂ -->
+  <line x1="740" y1="200" x2="800" y2="200" stroke="#80f0a0" stroke-width="1.6" marker-end="url(#srtArrG)"/>
+  <text direction="ltr" x="850" y="204" text-anchor="middle" fill="#80f0a0" font-weight="bold">M₂</text>
+  <line x1="740" y1="240" x2="800" y2="240" stroke="#80f0a0" stroke-width="1.6" marker-end="url(#srtArrG)"/>
+  <text direction="ltr" x="850" y="244" text-anchor="middle" fill="#80f0a0" font-weight="bold">M₁</text>
+
+  <!-- Footer -->
+  <text direction="ltr" x="440" y="430" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    5 Sort-2 modules.  Depth = 3 stages.  Optimal for n=4 (proven).
+  </text>
+  <text direction="ltr" x="440" y="452" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    Output order: Min &lt; M₁ &lt; M₂ &lt; Max  ✓
+  </text>
+</svg>`,
+        answer:
+`**5 יחידות Sort-2, 3 שכבות.**
+
+**שלב 1 — מיון זוגות:**
+\`\`\`
+S₁: (a, b)  →  (a₁=min, b₁=max)
+S₂: (c, d)  →  (c₁=min, d₁=max)
+\`\`\`
+
+**שלב 2 — מציאת הקצוות:**
+\`\`\`
+S₃: (a₁, c₁)  →  (Min, m₁)        ← Min גלובלי (קטן בין שני המינימומים)
+S₄: (b₁, d₁)  →  (m₂, Max)        ← Max גלובלי (גדול בין שני המקסימומים)
+\`\`\`
+
+\`m₁\` הוא ה"קטן הגדול יותר" — הוא גדול מ-Min אבל קטן מ-Max. דומה למ-\`m₂\`.
+
+**שלב 3 — מיון האמצעיים:**
+\`\`\`
+S₅: (m₁, m₂)  →  (M₁, M₂)         ← שני האמצעיים, ממוינים
+\`\`\`
+
+**יציאה סופית (סדר עולה):**
+\`\`\`
+Min  <  M₁  <  M₂  <  Max
+\`\`\`
+
+**ספירה: 5 Sort-2 modules. עומק 3 שלבים.**
+
+זוהי **רשת המיון האופטימלית** ל-4 קלטים — הוכח (Knuth, "The Art of Computer Programming" Vol. 3) ש-5 משווים זה המינימום ושעומק 3 הוא המינימום.
+
+**שאלת המשך מתבקשת:** "ולמה לא 4 משווים?" → אם רק 4 משווים, יש לפחות זוג קלטים שלא הושוו ישירות או בעקיפין. דורש הוכחת תחתון (lower bound) מבוסס תורת המידע.
+
+**שאלת המשך — Sort-N:** רשת המיון של Batcher (bitonic) דורשת \`O(N · log²N)\` משווים בעומק \`O(log²N)\`. AKS-network (תאורטי) משיג \`O(N log N)\` משווים בעומק \`O(log N)\` — אבל קשה לבנות בפועל.`,
+        interviewerMindset:
+`שאלת sorting network קלאסית — בודקת חשיבה מבנית.
+
+**מועמד חזק:**
+1. **מזהה את הסימטריה:** "סדר זוגות ראשון, אז ה-Min הגלובלי מבין שני המינימומים, וה-Max מבין שני המקסימומים."
+2. **עוצר על 5** ולא נכנס לסיבוכים. אם בונה 6+ — מפספס את האופטימליות.
+3. **מזכיר sorting networks** ו-AKS/Batcher בשאלת המשך — מוכיח ידע נרחב.
+
+**מועמד חלש:**
+- בונה bubble sort עם 6 משווים — עובד אבל לא אופטימלי.
+- לא מבחין בין "כל זוג קלטים" (\`C(4,2)=6\`) ל-"מספיק כדי למיין" (5).
+
+**שאלת bonus:** "ומה אם מספיק רק לקבל את ה-Min וה-Max, לא את הסדר המלא?" → 4 משווים מספיקים. אחרי שלב 1 (2 משווים), Min הוא min(a₁,c₁) (משווה 3) ו-Max הוא max(b₁,d₁) (משווה 4). חוסכים את S₅.`,
+        expectedAnswers: [
+          '5', 'five', 'חמש',
+          'sort-2', 'sort2', 'sort 2',
+          'stages', 'שכבות', '3', 'three',
+          'min', 'max', 'מינימום', 'מקסימום',
+          'sorting network',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 17 (Sort-4 from Sort-2)',
+    tags: ['sorting-network', 'sort-2', 'sort-4', 'combinational', 'composition', 'optimal'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1013 — Majority-3-of-4 + reverse build M2 (slide 23)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'majority-3-of-4',
+    difficulty: 'medium',
+    title: 'רכיב רוב 3-מתוך-4 — ביטוי, מימוש, ושימוש להרכבת רוב 2-מתוך-4',
+    intro:
+`נתון רכיב עם 4 כניסות בינאריות. הרכיב מחזיר \`1\` אם **לפחות 3** מהכניסות הן \`1\`, אחרת \`0\`.
+
+**א.** כתוב את הביטוי הבוליאני עבור הרכיב.
+**ב.** ממש אותו באמצעות שערים לוגיים.
+**ג.** ממש באמצעות רכיב זה רכיב המחזיר \`1\` אם **לפחות 2** כניסות הן \`1\`.`,
+    schematic: `
+<svg viewBox="0 0 460 180" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Majority 3-of-4 component">
+  <rect x="170" y="40" width="140" height="100" rx="8" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8" stroke-dasharray="6 3"/>
+  <text direction="ltr" x="240" y="78" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">M₃-of-4</text>
+  <text direction="ltr" x="240" y="100" text-anchor="middle" fill="#a0c0e0" font-size="11">≥ 3 of 4 inputs = 1</text>
+
+  <text direction="ltr" x="120" y="64" text-anchor="middle" fill="#f0d080" font-weight="bold">a</text>
+  <line x1="140" y1="60" x2="170" y2="60" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,60 164,56 164,64" fill="#f0d080"/>
+  <text direction="ltr" x="120" y="88" text-anchor="middle" fill="#f0d080" font-weight="bold">b</text>
+  <line x1="140" y1="84" x2="170" y2="84" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,84 164,80 164,88" fill="#f0d080"/>
+  <text direction="ltr" x="120" y="112" text-anchor="middle" fill="#f0d080" font-weight="bold">c</text>
+  <line x1="140" y1="108" x2="170" y2="108" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,108 164,104 164,112" fill="#f0d080"/>
+  <text direction="ltr" x="120" y="136" text-anchor="middle" fill="#f0d080" font-weight="bold">d</text>
+  <line x1="140" y1="132" x2="170" y2="132" stroke="#f0d080" stroke-width="1.6"/>
+  <polygon points="170,132 164,128 164,136" fill="#f0d080"/>
+
+  <line x1="310" y1="90" x2="370" y2="90" stroke="#80f0a0" stroke-width="1.6"/>
+  <polygon points="370,90 364,86 364,94" fill="#80f0a0"/>
+  <text direction="ltr" x="402" y="94" text-anchor="middle" fill="#80f0a0" font-weight="bold">Y</text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'כתוב את הביטוי הבוליאני של הרכיב.',
+        hints: [
+          '"לפחות 3 מתוך 4" = OR של כל 4 השילובים האפשריים של 3-מתוך-4 כניסות פעילות.',
+          'יש \\\`C(4,3) = 4\\\` שילובים: \\\`abc, abd, acd, bcd\\\` (לכלול את 4 הכניסות).',
+          'הביטוי: \\\`Y = abc + abd + acd + bcd\\\` (+ = OR).',
+        ],
+        answer:
+`**ביטוי "Sum of Products":**
+
+\`\`\`
+Y = abc + abd + acd + bcd
+\`\`\`
+
+(כאשר \`+\` הוא OR ומכפלה ללא סימן היא AND.)
+
+**הסבר:** כל אחד מ-4 ה-AND-3's מזהה צירוף של 3 כניסות מהן 4. כש**לפחות** 3 הן 1, לפחות אחד מה-ANDs יוצא 1 → ה-OR מספיק.
+
+**פישוט אופציונלי** (פקטוריזציה):
+\`\`\`
+Y = ab(c + d) + cd(a + b)
+\`\`\`
+
+(הוצאת \`ab\` מ-\`abc + abd\`, ו-\`cd\` מ-\`acd + bcd\`.)
+
+זהו ביטוי "monotone" — מונוטוני, אין שלילה. סימן לפונקציה המעדיפה גידול. כל פונקציית רוב היא monotone.`,
+        expectedAnswers: [
+          'abc + abd + acd + bcd',
+          'abc+abd+acd+bcd',
+          'abc',
+          'sum of products',
+          'sop',
+          'majority', 'רוב',
+          'ab(c+d) + cd(a+b)',
+        ],
+      },
+      {
+        label: 'ב',
+        question: 'ממש את הרכיב באמצעות שערים לוגיים. כמה?',
+        hints: [
+          'מימוש ישיר: 4 שערי AND-3 + שער OR-4. סה"כ **5 שערים** במבנה השטוח.',
+          'אופציה ראשונה: \\\`AND(a,b,c) ∨ AND(a,b,d) ∨ AND(a,c,d) ∨ AND(b,c,d)\\\`.',
+          'אופציה אופטימלית: שתף תוצאות ביניים. \\\`x = ab\\\`, \\\`y = cd\\\`. אז \\\`Y = x·(c+d) + y·(a+b)\\\`. סה"כ 2 AND + 2 OR + 2 AND + 1 OR = ~7 שערים אבל עומק קטן יותר.',
+          'דוגמת מימוש קומפקטית: \\\`Y = MAJ(a, b, c) + MAJ(a, b, d) + MAJ(a, c, d) + MAJ(b, c, d)\\\` כאשר MAJ הוא רוב-3 — שווה ל-\\\`ab + ac + bc\\\`.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="M3-of-4 implementation: 4 AND-3 + 1 OR-4">
+  <defs>
+    <linearGradient id="m3g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="m3arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="760" height="40" fill="#0c1a28"/>
+  <text direction="ltr" x="380" y="26" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Y = abc + abd + acd + bcd   (4 × AND-3 + 1 × OR-4)
+  </text>
+
+  <!-- Inputs -->
+  ${['a', 'b', 'c', 'd'].map((name, i) => {
+    const y = 80 + i * 60;
+    return `
+      <text direction="ltr" x="40" y="${y + 4}" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="14">${name}</text>
+      <circle cx="80" cy="${y}" r="3" fill="#f0d080"/>
+      <line x1="80" y1="${y}" x2="200" y2="${y}" stroke="#f0d080" stroke-width="1.4"/>
+    `;
+  }).join('')}
+
+  <!-- 4 AND-3 gates -->
+  ${[
+    { y: 80, label: 'abc', ins: [80, 140, 200] },
+    { y: 160, label: 'abd', ins: [80, 140, 260] },
+    { y: 240, label: 'acd', ins: [80, 200, 260] },
+    { y: 320, label: 'bcd', ins: [140, 200, 260] },
+  ].map(({ y, label, ins }, i) => `
+    <path d="M 280 ${y - 22} L 320 ${y - 22} Q 360 ${y - 22} 360 ${y} Q 360 ${y + 22} 320 ${y + 22} L 280 ${y + 22} Z"
+          fill="url(#m3g)" stroke="#80d4ff" stroke-width="1.6"/>
+    <text direction="ltr" x="320" y="${y + 4}" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">AND</text>
+    <text direction="ltr" x="280" y="${y - 30}" text-anchor="start" fill="#a0c0e0" font-size="10">${label}</text>
+    <!-- 3 input lines from the input rails -->
+    ${ins.map((x, k) => `
+      <line x1="${x}" y1="${ins.length === 3 ? (y - 16 + k * 16) : y}" x2="280" y2="${y - 16 + k * 16}" stroke="#80d4ff" stroke-width="1.2" opacity="0.6"/>
+      <line x1="${x}" y1="${y - 16 + k * 16}" x2="${x}" y2="${(['a','b','c','d'].indexOf(label[k])) * 60 + 80}" stroke="#80d4ff" stroke-width="1.2" opacity="0.4" stroke-dasharray="2 2"/>
+    `).join('')}
+    <!-- Output to OR -->
+    <line x1="360" y1="${y}" x2="500" y2="${y}" stroke="#80d4ff" stroke-width="1.4"/>
+  `).join('')}
+
+  <!-- OR-4 gate -->
+  <path d="M 500 60 Q 555 200 500 340 Q 530 340 580 280 Q 620 200 580 120 Q 530 60 500 60 Z"
+        fill="url(#m3g)" stroke="#80f0a0" stroke-width="1.8"/>
+  <text direction="ltr" x="555" y="204" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">OR-4</text>
+
+  <!-- Final output -->
+  <line x1="620" y1="200" x2="700" y2="200" stroke="#80f0a0" stroke-width="2" marker-end="url(#m3arr)"/>
+  <text direction="ltr" x="730" y="206" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="18">Y</text>
+</svg>`,
+        answer:
+`**מימוש ישיר: 4 × AND-3 + 1 × OR-4 = 5 שערים.**
+
+\`\`\`
+g1 = AND(a, b, c)
+g2 = AND(a, b, d)
+g3 = AND(a, c, d)
+g4 = AND(b, c, d)
+Y  = OR(g1, g2, g3, g4)
+\`\`\`
+
+**אם רק AND-2 ו-OR-2 זמינים:** AND-3 הופך ל-2 × AND-2, ו-OR-4 הופך ל-3 × OR-2. סה"כ:
+- 4 × 2 = **8 AND-2**
+- **3 OR-2** (עץ)
+- = **11 שערים**.
+
+**אופטימיזציה — שיתוף תוצאות:**
+\`\`\`
+x = a·b              ← 1 AND
+y = c·d              ← 1 AND
+m1 = x·c             ← 1 AND  (=abc)
+m2 = x·d             ← 1 AND  (=abd)
+m3 = a·y             ← 1 AND  (=acd)
+m4 = b·y             ← 1 AND  (=bcd)
+Y = OR(m1, m2, m3, m4)   ← 3 OR-2
+\`\`\`
+**= 6 AND-2 + 3 OR-2 = 9 שערים.**
+
+**עוד אופטימיזציה — פקטוריזציה:**
+\`\`\`
+Y = ab(c+d) + cd(a+b)
+\`\`\`
+- \`p = a+b\` (OR), \`q = c+d\` (OR)
+- \`r = a·b\` (AND), \`s = c·d\` (AND)
+- \`u = r·q\` (AND, = ab(c+d))
+- \`v = s·p\` (AND, = cd(a+b))
+- \`Y = u + v\` (OR)
+- **= 4 AND + 3 OR = 7 שערים.** המינימום ידוע ל-Boolean function זו.`,
+        expectedAnswers: [
+          '4 and', '4 and-3', '5 gates', '5 שערים',
+          'and', 'or', 'and-3', 'or-4',
+          '7 gates', '9 gates',
+          'ab(c+d)', 'cd(a+b)',
+          'factorize', 'פקטוריזציה',
+        ],
+      },
+      {
+        label: 'ג',
+        question: 'ממש באמצעות רכיב M₃-of-4 (וקבועים) רכיב שמחזיר \\\`1\\\` אם **לפחות 2** מהכניסות הן \\\`1\\\`.',
+        hints: [
+          'הטריק: M₃ הוא **monotone** — לא יכול לעשות NOT ישירות. אבל יש דרך חכמה.',
+          'הבחנה: \\\`M₃(a, b, c, 1) = "≥3 ones in {a,b,c,1}"\\\` = "≥2 ones in {a,b,c}" — בדיוק M₂-of-3 (לפחות 2 מתוך 3)!',
+          'ל-M₂-of-4(a,b,c,d) — צריך "לפחות 2 מתוך 4". זה שווה ל-OR של 4 M₂-of-3 (לכל 3 מתוך 4 הכניסות).',
+          'נוסחה: \\\`M₂(a,b,c,d) = M₃(a,b,c,1) ∨ M₃(a,b,d,1) ∨ M₃(a,c,d,1) ∨ M₃(b,c,d,1)\\\`.',
+          'סה"כ: **4 × M₃ + 1 × OR-4** (או 3 × OR-2).',
+        ],
+        answer:
+`**4 קריאות M₃ + OR-4.**
+
+\`\`\`
+M₂(a,b,c,d) = M₃(a, b, c, 1)  ∨
+              M₃(a, b, d, 1)  ∨
+              M₃(a, c, d, 1)  ∨
+              M₃(b, c, d, 1)
+\`\`\`
+
+**איך זה עובד:**
+
+\`M₃(x, y, z, 1)\` בודק "האם לפחות 3 מתוך {x, y, z, 1} הן 1." אבל הקבוע 1 תמיד תורם — אז התנאי מצטמצם ל-"לפחות 2 מתוך {x, y, z} הן 1" = M₂-of-3.
+
+לכל 3 כניסות מתוך 4 (\`C(4,3) = 4\` שילובים), בודקים אם הן M₂-of-3. אם **לפחות אחד** מ-4 הצירופים בנמצא ≥2 ones, אזי בכל המערך יש ≥2 ones. OR של ה-4.
+
+**אימות בקצוות:**
+- כל 4 הכניסות הן 1: כל M₃ מתוך {a,b,c,1} = M₃(1,1,1,1) = 1. OR = 1. ✓
+- בדיוק 2 ones (a=b=1, c=d=0): M₃(a,b,c,1)=M₃(1,1,0,1)=1, M₃(a,b,d,1)=1, השאר = 0. OR = 1. ✓
+- בדיוק 1 one (a=1, b=c=d=0): כל M₃(_,_,_,1) דורש 3 ones, יש לכל היותר 2 (a + 1). 2 < 3 → M₃ = 0. כל ה-4 = 0. OR = 0. ✓
+- כל הכניסות 0: M₃ נוסף 1 → רק 1 one, < 3 → M₃ = 0. OR = 0. ✓
+
+**הסבר עומק — Monotone Identity:**
+\`\`\`
+M₂(x, y, z) ⇔ M₃(x, y, z, 1)
+\`\`\`
+"הוספת קבוע 1 לכניסה" מוריד את הסף הנדרש ב-1.
+
+**הכללה — Mₖ ↔ Mₖ₊₁ עם קבוע 1:** ניתן "להעלות" את ה-threshold של רכיב majority ע"י הוספת קלט 1, או "להוריד" ע"י הוספת קלט 0 (במגבלת monotone).
+
+**שאלת המשך:** "ולעשות הפוך — M₃ מ-M₂?" (תרגיל s19) — זה דורש 4 קריאות M₂ + AND-4: \`M₃(a,b,c,d) = M₂(a,b,c,0) ∧ M₂(a,b,d,0) ∧ M₂(a,c,d,0) ∧ M₂(b,c,d,0)\`. הקבוע 0 מעלה את הסף ב-1 (הופך M₂-of-4 ל-M₂-of-3 = "≥2 of 3 = exactly all 3 or 2 of 3" → AND פוסל מקרים).`,
+        expectedAnswers: [
+          '4', 'four',
+          'm3', 'm₃',
+          'constant', 'קבוע', '1',
+          'or-4', 'or 4',
+          'm3(a,b,c,1)',
+          'monotone',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 23 (M₃-of-4 majority)',
+    tags: ['majority', 'monotone', 'boolean', 'composition', 'logic'],
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1014 — Build a 100ns delay from buffers + inverters (slide 28)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'delay-100ns-from-gates',
+    difficulty: 'medium',
+    title: 'השהיית סיגנל ב-100ns — מ-buffer + inverter',
+    intro:
+`נתון סיגנל \`signal\` שצריך להעביר בהשהיה של **100ns** — ההשהיה זהה ב-rising-edge וב-falling-edge,
+והסיגנל המתקבל **לא הפוך** (זהה לקלט בצורה).
+
+הרכיבים הזמינים:
+- **Buffer** (משולש בלי בועה): rising delay = \`12ns\`, falling delay = \`8ns\`.
+- **Inverter** (משולש עם בועה): rising delay = \`5ns\`, falling delay = \`5ns\`.
+
+כמה רכיבים נדרשים, ובאיזה צירוף?`,
+    schematic: `
+<svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Buffer and Inverter with their rise/fall delays">
+  <!-- Buffer -->
+  <polygon points="100,80 100,140 160,110" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="130" y="115" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">BUF</text>
+  <text direction="ltr" x="130" y="60" text-anchor="middle" fill="#a0c0e0" font-size="11" font-weight="bold">Buffer</text>
+  <text direction="ltr" x="130" y="170" text-anchor="middle" fill="#f0d080" font-size="11">rise: 12ns</text>
+  <text direction="ltr" x="130" y="186" text-anchor="middle" fill="#f0d080" font-size="11">fall: 8ns</text>
+
+  <!-- Inverter -->
+  <polygon points="320,80 320,140 380,110" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
+  <circle cx="388" cy="110" r="6" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="345" y="115" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">NOT</text>
+  <text direction="ltr" x="355" y="60" text-anchor="middle" fill="#a0c0e0" font-size="11" font-weight="bold">Inverter</text>
+  <text direction="ltr" x="355" y="170" text-anchor="middle" fill="#80f0a0" font-size="11">rise: 5ns</text>
+  <text direction="ltr" x="355" y="186" text-anchor="middle" fill="#80f0a0" font-size="11">fall: 5ns</text>
+
+  <!-- Need to implement -->
+  <text direction="ltr" x="500" y="60" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">need to implement:</text>
+  <rect x="460" y="80" width="180" height="60" rx="8" fill="#0a1825" stroke="#ff8060" stroke-width="2"/>
+  <text direction="ltr" x="550" y="116" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">100ns delay</text>
+
+  <text direction="ltr" x="350" y="240" text-anchor="middle" fill="#a0c0e0" font-size="11" font-style="italic">
+    Goal: delay both edges by 100ns, output not inverted
+  </text>
+</svg>`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'כמה רכיבים נדרשים? באיזה צירוף?',
+        hints: [
+          'בעיה ראשונה: Buffer **לא סימטרי** — rising delay (12ns) שונה מ-falling delay (8ns). אם נשים רק buffers, רוחב הפולס יתעוות (ייפסל).',
+          'Inverter **סימטרי**: rise = fall = 5ns. **כל זוג Inverters בסדרה** = 10ns בכל קצה, ויחד לא הופך את הסיגנל.',
+          'לכן: **20 Inverters בסדרה** = 20 × 5 = 100ns, ופלט לא הפוך (10 זוגות = הפיכה זוגית = שמירה על הסימן).',
+          'אופציה אלטרנטיבית: לעטוף Buffer ב-2 Inverters יוצר "delay block" סימטרי. אבל מספר הרכיבים בדרך זו גדול יותר.',
+        ],
+        answer:
+`**הפתרון: 20 Inverters בסדרה.**
+
+\`\`\`
+in → INV → INV → INV → ... (× 20) → out
+\`\`\`
+
+**חישוב:**
+- כל Inverter: rise = 5ns, fall = 5ns (סימטרי).
+- 20 Inverters בסדרה: סך delay = 20 × 5 = **100ns** עבור **כל** קצה.
+- 20 הפיכות → אחרי 20 = 0 הפיכות (זוגי) → פלט **לא הפוך**.
+
+### למה לא Buffer?
+
+Buffer: rise = 12ns, fall = 8ns. **לא סימטרי**. בעיה כפולה:
+
+1. **רוחב הפולס יתעוות:** אם הקלט הוא פולס של \`100ns\`, אחרי buffer יחיד הפולס נעשה רחב יותר (12ns למעלה, 8ns למטה → +4ns רוחב). אחרי N buffers, רוחב הפולס גדל ב-\`N · 4ns\`. עם 9 buffers נצליח 100ns delay, אבל הפולס יהיה רחב ב-\`9 × 4 = 36ns\` — לא מקובל.
+
+2. **קיצוץ פולסים קצרים:** אם הפולס הוא קצר מ-\`fall - rise = -4ns\`, הוא ייעלם לגמרי (ה-falling edge מקדים את ה-rising edge).
+
+### למה לא צירוף?
+
+אפשר תיאורטית לשלב Buffer + Inverter כדי לקזז את האסימטריה (Buffer מאריך את הפולס, Inverter סימטרי). אבל זה דורש חישוב מדויק ולא מבטיח 100ns מדויק על שני הקצוות.
+
+הפתרון הנקי = **רק Inverters**.
+
+### חישוב מינימום
+
+- 100ns / 5ns לכל Inverter = **20 Inverters** מינימום.
+- אם נרצה פחות — חייבים להשתמש ב-Buffer, ואז נצטרך לקזז עיוות בעזרת Inverters נוספים → אין כדאיות.
+
+### מקרה אחר (לידיעה): מה אם הקלט הוא **תדר** של 1MHz (period = 1μs)?
+
+100ns delay = 10% מתקופה. בקצוות, השהיה זו ברורה. אבל ה-20 Inverters מוסיפים capacitance load → להבטיח שה-driver יכול לעמוד בעומס.
+
+### שאלה למחשב: מה אם הקלט הוא **0.5MHz** עם duty cycle 90%?
+
+הפולס הוא \`1.8μs\` רחב. 100ns delay = 5.5% — קטן. אין בעיה. ה-20 Inverters יעבירו אותו בסדר.`,
+        interviewerMindset:
+`שאלת timing קלאסית. המראיין מחפש:
+
+1. **שאתה מבחין באסימטריה של Buffer** — מועמד שעונה "9 Buffers, 100ns" ⨯ — שכח את \`fall - rise\` ולא חשב על עיוות.
+2. **שאתה רואה ש-Inverters בזוגות הם סימטריים** — אינטואיציה של hardware מנוסה.
+3. **שאתה מספר את ההפיכות** — חייבים זוגי כדי לקבל פלט לא הפוך.
+
+**שאלת המשך:** "ומה אם רוצים 100ns delay אבל **רק Buffers** זמינים?" — תשובה: בלתי אפשרי לקבל **השהיה זהה** בשני הקצוות אם ה-buffer לא סימטרי. אפשר rough approximation עם N buffers כש-N · (12+8)/2 = 100 → N = 10, אבל הפולס יתעוות ב-N · 4 = 40ns.
+
+**שאלת bonus:** "מה אם הקלט הוא קלוק 100MHz (period 10ns)?" — הפולס במחזור הוא 5ns. אחרי inverter ראשון: 5ns delay. אבל הקצה הבא של הקלט מגיע אחרי 10ns — אם delay = 5ns, ה-output rising edge ייצור rising-input-2 כשה-output כבר עלה, וה-output ייגזר באמצע (glitch). בקיצור: לקצב גבוה מאוד, ה-100ns delay יחסום את הסיגנל לגמרי. במציאות — שאלת **frequency-vs-delay trade-off**.`,
+        expectedAnswers: [
+          '20', 'twenty', 'עשרים',
+          'inverter', 'inverters',
+          'symmetric', 'סימטרי',
+          'pair', 'זוג', 'זוגי',
+          'rise', 'fall', '5ns',
+          'not buffer', 'buffer asymmetric',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 28 (100ns delay)',
+    tags: ['timing', 'propagation-delay', 'buffer', 'inverter', 'gate-delay', 'logic'],
+    // Canvas: 20 inverters in series (snake-pattern layout to fit canvas).
+    // Each NOT has symmetric 5ns rise/fall (assumed); 20 × 5ns = 100ns,
+    // and 20 (even count) of inverters means the output is non-inverted.
+    circuit: () => build(() => {
+      const inp = h.input(80, 200, 'signal_in'); inp.fixedValue = 1;
+      const invs = [];
+      for (let i = 0; i < 20; i++) {
+        // Snake: row 0 left→right (i=0..9), row 1 right→left (i=10..19)
+        const row = Math.floor(i / 10);
+        const colInRow = i % 10;
+        const col = (row === 0) ? colInRow : (9 - colInRow);
+        const x = 200 + col * 110;
+        const y = 200 + row * 200;
+        invs.push(h.gate('NOT', x, y));
+      }
+      const out = h.output(80, 400, 'signal_out (100ns delay)');
+      const wires = [
+        // input → INV[0]
+        h.wire(inp.id, invs[0].id, 0),
+      ];
+      // Chain INV[i] → INV[i+1]
+      for (let i = 0; i < 19; i++) {
+        wires.push(h.wire(invs[i].id, invs[i+1].id, 0));
+      }
+      // INV[19] → out
+      wires.push(h.wire(invs[19].id, out.id, 0));
+      return {
+        nodes: [inp, ...invs, out],
+        wires,
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1015 — floor(log2(X)) — priority encoder for 8-bit (slide 29)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'floor-log2-priority-encoder',
+    difficulty: 'medium',
+    title: 'floor(log₂(X)) — מקודד עדיפות ל-8-bit',
+    intro:
+`ממש רכיב שמקבל מספר \`X\` בעל **8 סיביות** ומוציא את \`floor(log₂(X))\` בעיגול כלפי מטה.
+לדוגמה:
+\`\`\`
+00101011 (= 43)    →  101 (= 5)    [כי 2⁵ ≤ 43 < 2⁶]
+00010000 (= 16)    →  100 (= 4)    [כי 2⁴ = 16]
+11111111 (= 255)   →  111 (= 7)
+00000001 (= 1)     →  000 (= 0)
+00000000 (= 0)     →  ?            [log undefined — חזיר 000 או דגל]
+\`\`\`
+
+זה למעשה **מקודד עדיפות** (priority encoder): מציאת המיקום של ה-MSB הדלוק.`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנן את המעגל. כמה ביטי פלט? איך מוצאים את ה-MSB?',
+        hints: [
+          'ה-output הוא 3 ביטים (פוזיציה 0..7 → 3 ביטים).',
+          'המבנה הקלאסי: **priority encoder 8-to-3.** מסתכל על הביטים מ-MSB ל-LSB; הראשון שדלוק (= MSB) קובע את הפלט.',
+          'נוסחאות בוליאניות (ל-Y[2], Y[1], Y[0]):',
+          '\\\`Y[2] = X[7] ∨ X[6] ∨ X[5] ∨ X[4]\\\` (MSB דלוק ⇔ position ≥ 4).',
+          '\\\`Y[1] = X[7] ∨ X[6] ∨ (¬X[5] ∧ ¬X[4] ∧ (X[3] ∨ X[2]))\\\` (חצי עליון של 2 הגבוהים, או חצי עליון של 2 הנמוכים).',
+          'כלל פשוט: \\\`Y[i] = OR( X[k] ∧ ¬(higher bits) )\\\` — קלאסיקה של priority encoder.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="8-bit priority encoder for floor(log2)">
+  <defs>
+    <linearGradient id="peBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#143049"/><stop offset="1" stop-color="#0a1825"/>
+    </linearGradient>
+    <marker id="peArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="760" height="40" fill="#0c1a28"/>
+  <text direction="ltr" x="380" y="26" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Priority encoder 8 → 3:  find position of MSB (highest set bit)
+  </text>
+
+  <!-- Inputs X[7..0] -->
+  ${[7,6,5,4,3,2,1,0].map((bit, idx) => {
+    const y = 80 + idx * 36;
+    return `
+      <text direction="ltr" x="60" y="${y + 4}" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="12">X[${bit}]</text>
+      <line x1="100" y1="${y}" x2="240" y2="${y}" stroke="#f0d080" stroke-width="1.4"/>
+      <circle cx="240" cy="${y}" r="3" fill="#f0d080"/>
+    `;
+  }).join('')}
+
+  <!-- Priority encoder block -->
+  <rect x="240" y="60" width="280" height="320" rx="10" fill="url(#peBody)" stroke="#80d4ff" stroke-width="2"/>
+  <text direction="ltr" x="380" y="100" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="16">Priority Encoder</text>
+  <text direction="ltr" x="380" y="124" text-anchor="middle" fill="#a0c0e0" font-size="11">8-to-3</text>
+
+  <!-- Boolean formulas inside -->
+  <text direction="ltr" x="380" y="170" text-anchor="middle" fill="#c0c0e0" font-size="11">Y[2] = OR(X[7..4])</text>
+  <text direction="ltr" x="380" y="195" text-anchor="middle" fill="#c0c0e0" font-size="11">Y[1] = ...</text>
+  <text direction="ltr" x="380" y="220" text-anchor="middle" fill="#c0c0e0" font-size="11">Y[0] = ...</text>
+  <text direction="ltr" x="380" y="252" text-anchor="middle" fill="#a08060" font-size="10">(see answer for full SOP)</text>
+
+  <!-- valid flag for X=0 case -->
+  <text direction="ltr" x="380" y="300" text-anchor="middle" fill="#ff8060" font-size="11">valid = OR(X[7..0])</text>
+  <text direction="ltr" x="380" y="318" text-anchor="middle" fill="#a08060" font-size="10">(= 0 only if X = 0)</text>
+
+  <!-- 3-bit output -->
+  <line x1="520" y1="160" x2="620" y2="160" stroke="#80f0a0" stroke-width="2" marker-end="url(#peArr)"/>
+  <text direction="ltr" x="660" y="164" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Y[2]</text>
+
+  <line x1="520" y1="200" x2="620" y2="200" stroke="#80f0a0" stroke-width="2" marker-end="url(#peArr)"/>
+  <text direction="ltr" x="660" y="204" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Y[1]</text>
+
+  <line x1="520" y1="240" x2="620" y2="240" stroke="#80f0a0" stroke-width="2" marker-end="url(#peArr)"/>
+  <text direction="ltr" x="660" y="244" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="13">Y[0]</text>
+
+  <!-- valid output -->
+  <line x1="520" y1="305" x2="620" y2="305" stroke="#ff8060" stroke-width="2" marker-end="url(#peArr)"/>
+  <text direction="ltr" x="660" y="309" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">valid</text>
+
+  <text direction="ltr" x="380" y="440" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    Output: 3-bit position of MSB.  valid=0 indicates undefined (X=0).
+  </text>
+</svg>`,
+        answer:
+`**Priority encoder 8-to-3.** 3 ביטי פלט (Y[2:0]) + 1 דגל \`valid\`.
+
+### נוסחאות בוליאניות
+
+הרעיון: \`Y[i] = 1\` אם המיקום של ה-MSB הדלוק שווה לאחד הערכים שמייצרים את \`Y[i]=1\`. ספציפית:
+
+\`\`\`
+Y[2] = X[7] ∨ X[6] ∨ X[5] ∨ X[4]
+     = "MSB position ≥ 4"
+
+Y[1] = X[7] ∨ X[6]
+     ∨ (¬X[7] ∧ ¬X[6] ∧ ¬X[5] ∧ ¬X[4] ∧ (X[3] ∨ X[2]))
+     = "MSB position ∈ {6, 7, 2, 3}"
+
+Y[0] = X[7]
+     ∨ (¬X[7] ∧ ¬X[6] ∧ X[5])
+     ∨ (¬X[7] ∧ ¬X[6] ∧ ¬X[5] ∧ ¬X[4] ∧ X[3])
+     ∨ (¬X[7..1] ∧ X[0])
+     = "MSB position ∈ {7, 5, 3, 1}" (אי-זוגי)
+\`\`\`
+
+\`\`\`
+valid = X[7] ∨ X[6] ∨ X[5] ∨ X[4] ∨ X[3] ∨ X[2] ∨ X[1] ∨ X[0]
+\`\`\`
+
+### דוגמת חישוב
+
+עבור \`X = 0b00101011\` (= 43):
+- X[7]=0, X[6]=0, X[5]=**1** ← MSB.
+- Y[2] = X[7] ∨ X[6] ∨ X[5] ∨ X[4] = 0 ∨ 0 ∨ 1 ∨ 0 = 1.
+- Y[1] = ... = 0.
+- Y[0] = ¬X[7] ∧ ¬X[6] ∧ X[5] = 1 ∧ 1 ∧ 1 = 1.
+- Y[2:0] = 101 = **5** ✓
+
+### חישוב יעיל יותר — TREE structure
+
+במקום SOP גדול, ניתן לחשב ב-2 שכבות:
+
+**שכבה 1:** הפרד את 8 הביטים ל-2 קבוצות של 4. לכל קבוצה:
+- \`hi_any = X[7] ∨ X[6] ∨ X[5] ∨ X[4]\` (= Y[2])
+- \`lo_any = X[3] ∨ X[2] ∨ X[1] ∨ X[0]\`
+
+**שכבה 2:** בחר את הקבוצה הגבוהה אם \`hi_any\`, אחרת הנמוכה:
+- אם \`hi_any\`: ענן חיפוש על X[7..4] עם MUX.
+- אחרת: על X[3..0].
+
+זה תרגום ל-tree עם עומק \`O(log W)\` במקום SOP שטוח.
+
+### מקרה X=0
+
+לא מוגדר אריתמטית (\`log(0) = −∞\`). אפשרויות מימוש:
+1. **\`valid\` flag:** מציין שהפלט תקין רק כש-\`valid = 1\`.
+2. **החזרת 0:** ב-X=0, Y = 000 (קונבנציה).
+3. **דגל error:** סיגנל נפרד.
+
+### הכללה ל-16-bit
+
+אותה תבנית, רק \`Y\` הוא 4-bit (כי MSB position ∈ 0..15). אורך הביטוי לכל \`Y[i]\` גדל אבל המבנה זהה. עומק לוגי = \`O(log 16) = 4\` שכבות.
+
+### ספירת שערים (גישת tree)
+
+לכל ביט פלט ~\`log_2(W)\` שכבות עץ. עבור 8-bit: 3 שכבות. סך ~25 שערים בסיסיים (אופטימיזציה).`,
+        interviewerMindset:
+`שאלת priority encoder קלאסית. המראיין מחפש:
+
+1. **שאתה רואה שזה priority encoder** — לא "חישוב מתמטי" של log2 אלא חיפוש בעמדה.
+2. **שיש דרך SOP ויש דרך tree** — מועמד שכותב רק SOP ארוך מפספס את האופטימיזציה.
+3. **שאתה מטפל ב-X=0** — מקרה מיוחד שלא מוגדר. valid flag = bonus.
+4. **שאתה מבחין בעומק:** \`O(log W)\` בעץ vs \`O(W)\` ב-SOP נאיבי. תזמון!
+
+**שאלת המשך נפוצה:** "ולמעלה מ-32-bit?" — אותה תבנית. CPUs מודרניים יש להם פקודה ייעודית (\`bsr\` ב-x86, \`clz\` ב-ARM) שעושה את זה בקלוק יחיד.
+
+**שאלת bonus:** "\`floor(log_2(X))\` הוא **bit_length(X) - 1** ב-Python." — מועמד שמזכיר את זה — סימן ל-bridging between hardware ו-software.`,
+        expectedAnswers: [
+          'priority encoder', 'מקודד עדיפות',
+          '8-to-3', '8:3',
+          'msb', 'most significant bit',
+          'bit position', 'מיקום',
+          'valid', 'undefined',
+          '3 bits', '3 ביטים',
+          'log', 'log2',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 29 (floor(log2))',
+    tags: ['priority-encoder', 'log2', 'bit-position', 'msb', 'combinational', 'logic'],
+    // Canvas: 8-to-3 priority encoder (built-in) with 8 single-bit X[i] inputs
+    // + valid flag OR-tree.  Default: X = 0b00101011 → bit 5 is MSB → Y = 5.
+    circuit: () => build(() => {
+      // 8 input bits, default X = 43 = 0b00101011
+      const x0 = h.input(80, 100, 'X[0]'); x0.fixedValue = 1;
+      const x1 = h.input(80, 160, 'X[1]'); x1.fixedValue = 1;
+      const x2 = h.input(80, 220, 'X[2]'); x2.fixedValue = 0;
+      const x3 = h.input(80, 280, 'X[3]'); x3.fixedValue = 1;
+      const x4 = h.input(80, 340, 'X[4]'); x4.fixedValue = 0;
+      const x5 = h.input(80, 400, 'X[5]'); x5.fixedValue = 1;
+      const x6 = h.input(80, 460, 'X[6]'); x6.fixedValue = 0;
+      const x7 = h.input(80, 520, 'X[7]'); x7.fixedValue = 0;
+      // Priority encoder 8 → 3 (built-in)
+      const enc = h.block('ENCODER', 320, 310, { inputLines: 8, label: 'PriEnc 8:3' });
+      // valid = OR of all X[i]: 3 OR-2 in tree (or 7 in cascade)
+      const or01 = h.gate('OR', 200, 130);
+      const or23 = h.gate('OR', 200, 250);
+      const or45 = h.gate('OR', 200, 370);
+      const or67 = h.gate('OR', 200, 490);
+      const orQ1 = h.gate('OR', 540, 200);   // (X0∨X1) ∨ (X2∨X3)
+      const orQ2 = h.gate('OR', 540, 440);   // (X4∨X5) ∨ (X6∨X7)
+      const orAll = h.gate('OR', 720, 320);  // valid = above two
+      // Outputs
+      const y2 = h.output(540, 280, 'Y[2]');
+      const y1 = h.output(540, 320, 'Y[1]');
+      const y0 = h.output(540, 360, 'Y[0]');
+      const valid = h.output(900, 320, 'valid');
+      return {
+        nodes: [x0, x1, x2, x3, x4, x5, x6, x7,
+                enc,
+                or01, or23, or45, or67, orQ1, orQ2, orAll,
+                y2, y1, y0, valid],
+        wires: [
+          // Encoder inputs 0..7
+          h.wire(x0.id, enc.id, 0), h.wire(x1.id, enc.id, 1),
+          h.wire(x2.id, enc.id, 2), h.wire(x3.id, enc.id, 3),
+          h.wire(x4.id, enc.id, 4), h.wire(x5.id, enc.id, 5),
+          h.wire(x6.id, enc.id, 6), h.wire(x7.id, enc.id, 7),
+          // Encoder outputs to Y[0..2]
+          h.wire(enc.id, y0.id, 0, 0),
+          h.wire(enc.id, y1.id, 0, 1),
+          h.wire(enc.id, y2.id, 0, 2),
+          // valid = OR-tree of all X
+          h.wire(x0.id, or01.id, 0), h.wire(x1.id, or01.id, 1),
+          h.wire(x2.id, or23.id, 0), h.wire(x3.id, or23.id, 1),
+          h.wire(x4.id, or45.id, 0), h.wire(x5.id, or45.id, 1),
+          h.wire(x6.id, or67.id, 0), h.wire(x7.id, or67.id, 1),
+          h.wire(or01.id, orQ1.id, 0), h.wire(or23.id, orQ1.id, 1),
+          h.wire(or45.id, orQ2.id, 0), h.wire(or67.id, orQ2.id, 1),
+          h.wire(orQ1.id, orAll.id, 0), h.wire(orQ2.id, orAll.id, 1),
+          h.wire(orAll.id, valid.id, 0),
+        ],
+      };
+    }),
+  },
 ];

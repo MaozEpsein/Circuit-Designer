@@ -3788,29 +3788,31 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
 }
 .iv-tab-icon { font-size: 12px; opacity: 0.85; }
 .iv-tab-count {
-  font-size: 9px;
+  font-size: 13px;
+  font-weight: 700;
   background: #1a2030;
   border: 1px solid #2a4060;
-  color: #6080a0;
-  padding: 1px 6px;
-  border-radius: 8px;
+  color: #80a0c0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
 }
 .iv-tab-active .iv-tab-count {
   background: #0a2018;
   border-color: #39ff80;
-  color: #80f0a0;
+  color: #a0ffc0;
 }
 .iv-tab-num {
   display: inline-block;
-  min-width: 16px;
+  min-width: 22px;
   text-align: center;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: bold;
   background: #0a1520;
   border: 1px solid #2a4060;
-  color: #80a0c0;
-  padding: 1px 5px;
-  border-radius: 3px;
+  color: #a0c0e0;
+  padding: 2px 7px;
+  border-radius: 4px;
 }
 .iv-tab-active .iv-tab-num {
   background: #0a2018;

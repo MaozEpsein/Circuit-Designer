@@ -277,6 +277,7 @@ body { zoom: 0.8; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
+  transition: transform 0.22s ease, opacity 0.22s ease;
 }
 #design-toolbar::-webkit-scrollbar {
   display: none;
@@ -284,6 +285,53 @@ body { zoom: 0.8; }
 
 #design-toolbar.hidden {
   display: none;
+}
+
+/* ── Collapsed state — drives both the toolbar (slides off-screen)
+   and the toggle button (jumps to the screen edge). Triggered by
+   a class on <body> so LEARN/INTERVIEW openers can flip it.       */
+body.toolbar-collapsed #design-toolbar {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Toggle button ── */
+#btn-design-toolbar-toggle {
+  position: fixed;
+  left: 200px;              /* flush against the toolbar's right edge */
+  top: 50%;
+  transform: translate(0, -50%);
+  width: 22px;
+  height: 64px;
+  z-index: 151;
+  background: rgba(10, 14, 20, 0.97);
+  border: 2px solid #1e3a50;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: #80a0c0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: left 0.22s ease, background 0.18s, color 0.18s;
+}
+#btn-design-toolbar-toggle:hover {
+  background: rgba(20, 30, 50, 0.97);
+  color: #c0d0f0;
+}
+#btn-design-toolbar-toggle .dt-toggle-icon {
+  display: inline-block;
+  transition: transform 0.22s ease;
+}
+body.toolbar-collapsed #btn-design-toolbar-toggle {
+  left: 0;
+}
+body.toolbar-collapsed #btn-design-toolbar-toggle .dt-toggle-icon {
+  transform: rotate(180deg);    /* arrow flips: ◀ → ▶ */
 }
 
 #design-toolbar-title {

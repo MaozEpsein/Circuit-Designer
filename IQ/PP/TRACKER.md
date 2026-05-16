@@ -66,35 +66,35 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 56 | מעגלים | 1 | `circuits_s01_1.png` | sequential | 2009 | done | Room men/women ratio monitor — one-hot 4-bit sensor, signed diff counter, 3-lamp decode |
 | 57 | מעגלים | 2 | `circuits_s02_1.png` | sequential | 2010 | done | FSM divisibility by 3 — 3-state Moore (mod 0/1/2), MSB-first, new = (2·s+x) mod 3 |
 | 58 | מעגלים | 3 | `circuits_s03_1.png` | logic | 1005 | done | FA from 3 × 2:1 MUX — T=a⊕b, sum=T?¬c:c, carry=T?c:a (+verilog) |
-| 59 | מעגלים | 4 | `circuits_s04_1.png` | ??? | ???? | pending | |
-| 60 | מעגלים | 5 | `circuits_s05_1.png` | ??? | ???? | pending | |
-| 61 | מעגלים | 6 | `circuits_s06_1.png` | ??? | ???? | pending | |
-| 62 | מעגלים | 7 | `circuits_s07_1.png` | ??? | ???? | pending | |
-| 63 | מעגלים | 8 | `circuits_s08_1.png` | ??? | ???? | pending | |
-| 64 | מעגלים | 9 | `circuits_s09_1.png` | ??? | ???? | pending | |
-| 65 | מעגלים | 10 | `circuits_s10_1.png` | ??? | ???? | pending | |
-| 66 | מעגלים | 11 | `circuits_s11_1.png` | ??? | ???? | pending | |
-| 67 | מעגלים | 12 | `circuits_s12_1.png` | ??? | ???? | pending | |
-| 68 | מעגלים | 13 | `circuits_s13_1.png` | ??? | ???? | pending | |
-| 69 | מעגלים | 14 | `circuits_s14_1.png` | ??? | ???? | pending | |
-| 70 | מעגלים | 15 | `circuits_s15_1.png` | ??? | ???? | pending | |
-| 71 | מעגלים | 16 | `circuits_s16_1.png` | ??? | ???? | pending | |
-| 72 | מעגלים | 17 | `circuits_s17_1.png` | ??? | ???? | pending | |
-| 73 | מעגלים | 18 | `circuits_s18_1.png` | ??? | ???? | pending | |
-| 74 | מעגלים | 19 | `circuits_s19_1.png` | ??? | ???? | pending | |
-| 75 | מעגלים | 20 | `circuits_s20_1.png` | ??? | ???? | pending | |
-| 76 | מעגלים | 21 | `circuits_s21_1.png` | ??? | ???? | pending | |
-| 77 | מעגלים | 22 | `circuits_s22_1.png` | ??? | ???? | pending | |
-| 78 | מעגלים | 23 | `circuits_s23_1.png` | ??? | ???? | pending | |
-| 79 | מעגלים | 24 | `circuits_s24_1.png` | ??? | ???? | pending | |
-| 80 | מעגלים | 25 | `circuits_s25_1.png` | ??? | ???? | pending | |
-| 81 | מעגלים | 26 | `circuits_s26_1.png` | ??? | ???? | pending | |
-| 82 | מעגלים | 27 | `circuits_s27_1.png` | ??? | ???? | pending | |
-| 83 | מעגלים | 28 | `circuits_s28_1.png` | ??? | ???? | pending | |
-| 84 | מעגלים | 29 | `circuits_s29_1.png` | ??? | ???? | pending | |
-| 85 | מעגלים | 30 | `circuits_s30_1.png` | ??? | ???? | pending | |
-| 86 | מעגלים | 31 | `circuits_s31_1.png` | ??? | ???? | pending | |
-| 87 | מעגלים | 32 | `circuits_s32_1.png` | ??? | ???? | pending | |
+| 59 | מעגלים | 4 | `circuits_s04_1.png` | sequential | 2011 | done | Rising-edge detector — 2-FF synchronous, `curr & ~prev` (+verilog) |
+| 60 | מעגלים | 5 | `circuits_s05_1.png` | sequential | 2012 | done | Clock divide-by-2 — D-FF with Q' feedback, 50% duty (+verilog) |
+| 61 | מעגלים | 6 | `circuits_s06_1.png` | sequential | 2013 | done | Counter mod-5 from 3-bit counter — detect Q==4 → CLR (+verilog) |
+| 62 | מעגלים | 7 | `circuits_s07_1.png` | logic | 1006 | done | BlackBox (x, x+2) → x+1 — 1 NOT + 3 MUX, no adder (averaging trick) |
+| 63 | מעגלים | 8 | `circuits_s08_1.png` | logic | 1007 | done | XOR from NAND only — 4 NAND structure (+verilog) |
+| 64 | מעגלים | 9 | `circuits_s09_1.png` | logic | 1008 | done | Barrel shifter from 2:1 MUX — 4-bit, 2 layers × 4 MUX = 8 MUX |
+| 65 | מעגלים | 10 | `circuits_s10_1.png` | sequential | 2014 | done | XOR + D-FF self-feedback — a=1 toggle / a=0 hold / delay → timing |
+| 66 | מעגלים | 11 | `circuits_s11_1.png` | logic | — | skip | Duplicate of 1001 part א (5 gates: 2 XOR + 2 AND + 1 OR) |
+| 67 | מעגלים | 12 | `circuits_s12_1.png` | architecture | 3001 | done | MIPS 5-stage pipeline — IF/ID/EX/MEM/WB + 3 hazards |
+| 68 | מעגלים | 13 | `circuits_s13_1.png` | logic | 1009 | done | Swap 5↔7 in 3-bit — `B1 ⊕ (B2·B0)`, just 1 AND + 1 XOR |
+| 69 | מעגלים | 14 | `circuits_s14_1.png` | logic | 1010 | done | Cascaded comparator — 2-bit A + 2×A cascade for 4-bit B |
+| 70 | מעגלים | 15 | `circuits_s15_1.png` | sequential | 2015 | done | Counter mod-8 from mod-6 — 1 extra D-FF + force-clear logic |
+| 71 | מעגלים | 16 | `circuits_s16_1.png` | logic | 1011 | done | MUX 2ⁿ:1 from decoder + AND + OR — classical decomposition |
+| 72 | מעגלים | 17 | `circuits_s17_1.png` | logic | 1012 | done | Sort-4 from 5 Sort-2's — optimal sorting network, 3 stages |
+| 73 | מעגלים | 18 | `circuits_s18_1.png` | — | — | skip | Interrupt Controller IC-4 — too specialized/vague for IQ format |
+| 74 | מעגלים | 19 | `circuits_s19_1.png` | — | — | skip | M2-of-4 → M3-of-4 — non-trivial puzzle, deferred |
+| 75 | מעגלים | 20 | `circuits_s20_1.png` | — | — | skip | Duplicate of falling-edge-detector (2001) |
+| 76 | מעגלים | 21 | `circuits_s21_1.png` | algorithms | 8037 | done | R/L/M state machine — back-to-origin sim, O(n) |
+| 77 | מעגלים | 22 | `circuits_s22_1.png` | sequential | 2016 | done | DFA divisibility-by-5 — 5-state Moore, `(2·s+x) mod 5` |
+| 78 | מעגלים | 23 | `circuits_s23_1.png` | logic | 1013 | done | M₃-of-4 — boolean + gates + use to build M₂-of-4 (3 parts) |
+| 79 | מעגלים | 24 | `circuits_s24_1.png` | sequential | 2017 | done | Marathon priority latch — 3 D-FFs w/ mutex + 2-bit encoder |
+| 80 | מעגלים | 25 | `circuits_s25_1.png` | — | — | skip | Duplicate of 1001 popcount (7→3 from 3→2) |
+| 81 | מעגלים | 26 | `circuits_s26_1.png` | sequential | 2018 | done | People counter — 2 sensors + direction FSM + UP/DOWN counter |
+| 82 | מעגלים | 27 | `circuits_s27_1.png` | — | — | skip | Duplicate of 1001 popcount (8→4 from HA/FA) |
+| 83 | מעגלים | 28 | `circuits_s28_1.png` | logic | 1014 | done | 100ns delay — 20 inverters (asymmetric buffer rejected) |
+| 84 | מעגלים | 29 | `circuits_s29_1.png` | logic | 1015 | done | floor(log₂) — 8-to-3 priority encoder + valid flag |
+| 85 | מעגלים | 30 | `circuits_s30_1.png` | sequential | 2019 | done | Squares stream — `(k+1)²−k² = 2k+1` no MUX, adder + shift |
+| 86 | מעגלים | 31 | `circuits_s31_1.png` | timing-cdc | 4001 | done | 3-DFF chain — setup/hold violation analysis (3 parts) |
+| 87 | מעגלים | 32 | `circuits_s32_1.png` | — | — | defer | Top-3 from 25 using Sort-5 — complex selection, deferred |
 | 88 | מעגלים | 33 | `circuits_s33_1.png` | ??? | ???? | pending | |
 | 89 | מעגלים | 34 | `circuits_s34_1.png` | ??? | ???? | pending | |
 | 90 | מעגלים | 35 | `circuits_s35_1.png` | ??? | ???? | pending | |

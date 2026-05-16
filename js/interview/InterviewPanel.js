@@ -1023,7 +1023,7 @@ export class InterviewPanel {
       <div class="iv-check-wrap" dir="rtl">
         <input type="text" class="iv-answer-input" dir="auto"
                value="${_esc(this._typedAnswer)}"
-               placeholder="הקלד תשובה — לדוגמה: setup או hold" />
+               placeholder="${_esc(_buildAnswerPlaceholder(part, this.engine.currentQuestion()))}" />
         <button class="iv-btn iv-btn-primary" data-act="check-answer">בדוק</button>
         ${resultHtml}
       </div>`;
@@ -1396,6 +1396,30 @@ function _esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Per-question answer-input placeholder ─────────────────────
+// The default "setup או hold" wording fits only CDC. For other tabs
+// (logic gates, sequential FSMs, DFT, algorithms) it's misleading.
+// Resolution order:
+//   1. part.inputPlaceholder  — explicit per-part override
+//   2. q.inputPlaceholder     — explicit per-question override
+//   3. derived from expectedAnswers — pick the first two short entries
+//   4. generic "הקלד את תשובתך" fallback
+//
+// Why expectedAnswers? Every question already declares the keywords
+// the checker accepts. Surfacing the first couple of them in the
+// placeholder gives the user a concrete, accurate hint with zero
+// authoring overhead.
+function _buildAnswerPlaceholder(part, q) {
+  if (part?.inputPlaceholder) return part.inputPlaceholder;
+  if (q?.inputPlaceholder)    return q.inputPlaceholder;
+  const expected = (part?.expectedAnswers || q?.expectedAnswers || [])
+    .map(s => String(s || '').trim())
+    .filter(s => s.length > 0 && s.length <= 20);
+  if (expected.length >= 2) return `הקלד תשובה — לדוגמה: ${expected[0]} או ${expected[1]}`;
+  if (expected.length === 1) return `הקלד תשובה — לדוגמה: ${expected[0]}`;
+  return 'הקלד את תשובתך';
 }
 
 /**

@@ -5604,10 +5604,22 @@ async function _ensureTutorial() {
   });
   return _tutorial;
 }
+// ── Design toolbar collapse/expand ──────────────────────────
+// Default: open.  Manually toggled via #btn-design-toolbar-toggle.
+// LEARN/INTERVIEW openers below auto-collapse it so their panels
+// have more room; user can re-open manually after.
+function _setToolbarCollapsed(collapsed) {
+  document.body.classList.toggle('toolbar-collapsed', !!collapsed);
+}
+document.getElementById('btn-design-toolbar-toggle')?.addEventListener('click', () => {
+  _setToolbarCollapsed(!document.body.classList.contains('toolbar-collapsed'));
+});
+
 document.getElementById('btn-tutorial')?.addEventListener('click', async () => {
   try {
     const t = await _ensureTutorial();
     t.panel.toggle();
+    _setToolbarCollapsed(true);
   } catch (err) {
     console.error('[tutorial] failed to open:', err);
     alert('Tutorial failed to load: ' + (err?.message || err));
@@ -5631,6 +5643,7 @@ document.getElementById('btn-interview')?.addEventListener('click', async () => 
   try {
     const iv = await _ensureInterview();
     iv.panel.toggle();
+    _setToolbarCollapsed(true);
   } catch (err) {
     console.error('[interview] failed to open:', err);
     alert('Interview prep failed to load: ' + (err?.message || err));

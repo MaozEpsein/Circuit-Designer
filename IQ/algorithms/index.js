@@ -9075,4 +9075,153 @@ def my_max(a, b):
     source: 'PP - שאלות קוד (slide 36)',
     tags: ['algorithms', 'bit-manipulation', 'min', 'no-compare', 'classic', 'python'],
   },
+
+  // ───────────────────────────────────────────────────────────────
+  // #8037 — RLM state machine: back to origin after R/L/M sequence
+  // (PP — שאלות מעגלים, slide 21)
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'rlm-back-to-origin',
+    difficulty: 'medium',
+    title: 'מכונת מצבים — חזרה לראשית אחרי R/L/M',
+    intro:
+`רובוט מתחיל בנקודה \`(x=0, y=0)\` כשהוא פונה **למעלה**. 4 כיווני התסכלות: "למעלה", "ימינה", "למטה", "שמאלה".
+
+המכונה מקבלת מחרוזת של פקודות מתוך \`{R, L, M}\`:
+- **\`R\`** — סיבוב 90° עם כיוון השעון (Right). הכיוון הבא בסדר.
+- **\`L\`** — סיבוב 90° נגד כיוון השעון (Left). הכיוון הקודם בסדר.
+- **\`M\`** — צעד אחד בכיוון הנוכחי (Move). יחס לכיוון:
+  - "למעלה" → \`y += 1\`
+  - "למטה" → \`y -= 1\`
+  - "ימינה" → \`x += 1\`
+  - "שמאלה" → \`x -= 1\`
+
+בסוף הרצת המחרוזת, אם \`x == 0 ∧ y == 0\` — חזרנו לאותו מקום (return \`True\`). אחרת \`False\`.
+
+\`\`\`
+Input:  "MMRMMRMMRMM"     →  True   (ריבוע)
+Input:  "MMR"             →  False  ((x,y) = (1, 2))
+Input:  ""                →  True   (לא זזנו)
+\`\`\``,
+    parts: [
+      {
+        label: 'א',
+        editor: 'python',
+        editorLabel: 'Python',
+        complexities: [
+          { label: 'Time',  value: 'O(n)' },
+          { label: 'Space', value: 'O(1)' },
+        ],
+        starterCode:
+`def back_to_origin(commands):
+    """Run R/L/M sequence from (0,0) facing up. Return True iff back at origin."""
+    # TODO: track (x, y) and direction.
+    pass
+
+
+# back_to_origin("MMRMMRMMRMM")  # True (a square)
+# back_to_origin("MMR")           # False
+`,
+        question:
+`ממש את \`back_to_origin(commands)\` בלולאת O(n).`,
+        hints: [
+          'יש 4 כיוונים. קודד אותם כ-0,1,2,3 (\\\`up, right, down, left\\\`). שמור ב-\\\`d\\\`.',
+          'R = \\\`d = (d + 1) % 4\\\`. L = \\\`d = (d - 1) % 4\\\` (או \\\`(d + 3) % 4\\\` ל-Python).',
+          'הצעד M תלוי בכיוון. שמור שני מערכי \\\`dx, dy\\\` באורך 4: \\\`dx = [0, 1, 0, -1]\\\`, \\\`dy = [1, 0, -1, 0]\\\` (up, right, down, left).',
+          'בסוף: \\\`return x == 0 and y == 0\\\`.',
+        ],
+        trace: {
+          title: 'back_to_origin("MMR")',
+          source:
+`def back_to_origin(s):
+    dx = [0, 1, 0, -1]
+    dy = [1, 0, -1, 0]
+    x, y, d = 0, 0, 0
+    for c in s:
+        if   c == 'R': d = (d + 1) % 4
+        elif c == 'L': d = (d - 1) % 4
+        elif c == 'M':
+            x += dx[d]
+            y += dy[d]
+    return x == 0 and y == 0`,
+          sourceLang: 'python',
+          steps: [
+            { code: 'init: x=0, y=0, d=0 (facing up)',
+              explain: 'נקודה ההתחלה.',
+              executed: [1, 2, 3], focusLine: 3 },
+            { code: "c='M' (1st): facing up → y += 1",
+              explain: 'x=0, y=1, d=0.',
+              executed: [5, 8, 9, 10], focusLine: 9 },
+            { code: "c='M' (2nd): facing up → y += 1",
+              explain: 'x=0, y=2, d=0.',
+              executed: [5, 8, 9, 10], focusLine: 9 },
+            { code: "c='R': d = (0+1)%4 = 1 (right)",
+              explain: 'x=0, y=2, d=1.',
+              executed: [5, 6], focusLine: 6 },
+            { code: 'done: (x,y) = (0,2). NOT origin → return False.',
+              explain: 'הסתיימה המחרוזת. (0,2) ≠ (0,0).',
+              executed: [11], focusLine: 11, done: true },
+          ],
+        },
+        answer:
+`\`\`\`python
+def back_to_origin(s):
+    # directions: 0=up, 1=right, 2=down, 3=left
+    dx = [0, 1, 0, -1]
+    dy = [1, 0, -1, 0]
+    x, y, d = 0, 0, 0
+    for c in s:
+        if   c == 'R': d = (d + 1) % 4
+        elif c == 'L': d = (d - 1) % 4
+        elif c == 'M':
+            x += dx[d]
+            y += dy[d]
+    return x == 0 and y == 0
+\`\`\`
+
+**Time:** \`O(n)\`. **Space:** \`O(1)\`.
+
+**איך זה עובד:**
+\`d\` מקודד את הכיוון כ-int (0..3). מערכי \`dx, dy\` נותנים את הזזה התואמת לכל כיוון. \`R\`/\`L\` מעדכנים \`d\` בלבד. \`M\` מקדם \`(x, y)\` בכיוון הנוכחי.
+
+**הסבר על המודולו:**
+- ב-Python, \`(-1) % 4 = 3\` (תוצאה לא-שלילית), אז \`(d - 1) % 4\` עובד נקי גם ב-\`d=0\`.
+- בשפות אחרות (C, Java), \`-1 % 4 = -1\` — צריך לכתוב \`(d + 3) % 4\` כדי לקבל את הערך הנכון.
+
+**אופטימיזציה — בלי מערך dx/dy:** אפשר להשתמש בטריק טריגונומטרי:
+\`\`\`python
+# dx = sin(d * π/2), dy = cos(d * π/2)  (לכיוון 0=up)
+dx = [0, 1, 0, -1][d]   # שווה ערך מתמטית ל-sin(d * π/2)
+dy = [1, 0, -1, 0][d]   # שווה ערך ל-cos(d * π/2)
+\`\`\`
+שני המערכים בשורה אחת, או חישוב על-טריגונומטריה.
+
+**שאלת המשך:** "ומה אם רוצים גם לבדוק שאנחנו בכיוון ההתחלתי?" → תוסיף תנאי \`d == 0\` בסוף.
+
+**שאלת המשך מורכבת:** "ובאמת זה state machine — איך הוא נראה?" → 4 מצבי כיוון + 2 משתני מיקום. ה-FSM פשוט, האתגר הוא לראות שזה לא דורש קידוד מורכב.`,
+        interviewerMindset:
+`שאלת state machine קלאסית. בודקת אם המועמד יודע לקודד כיוון/state כ-int פשוט.
+
+**מועמד חזק:**
+1. **קודד את הכיוון כ-int 0..3** עם מערכי dx, dy. נקי, אלגנטי.
+2. **משתמש ב-\`% 4\`** לסיבוב.
+3. **שואל על קלט לא חוקי** ("מה אם c לא R/L/M?") — מראה תשומת לב לקצה.
+
+**מועמד חלש:**
+- כותב 4 ענפי \`if d == 0\` נפרדים (לא קומפקטי).
+- שוכח את הסיבוב CCW (\`L\`) או טועה ב-\`% 4\` שלילי.
+
+**שאלת bonus:** "כתוב גרסה שמחזירה גם את (x, y, d) הסופיים, לא רק boolean." → טריוויאלי, רק \`return x, y, d\`. בודק עניין בערכי-החזרה רב-תוצאתיים.`,
+        expectedAnswers: [
+          'dx', 'dy', 'd', 'direction',
+          '(d + 1) % 4', '(d - 1) % 4', '% 4', '%4',
+          'x += dx', 'y += dy',
+          'x == 0', 'y == 0', '(0, 0)',
+          'state machine',
+        ],
+      },
+    ],
+    source: 'PP - שאלות מעגלים (slide 21)',
+    tags: ['algorithms', 'state-machine', 'simulation', 'directions', 'classic', 'python'],
+  },
 ];
