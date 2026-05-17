@@ -10,7 +10,7 @@
  * technical terms (setup, hold, FF, MUX, etc.) stay LTR/English.
  */
 
-import { TOPICS, serialFor } from './topics.js';
+import { TOPICS, serialFor, findTopic } from './topics.js';
 import { findQuestion as _findQuestion } from './questions.js';
 
 export class InterviewPanel {
@@ -145,6 +145,8 @@ export class InterviewPanel {
     if (act === 'trace-reset')        { this._traceReset(); return; }
     if (act === 'trace-fullscreen')   { this._openTraceFullscreen(); return; }
     if (act === 'close-trace-fs')     { this._closeTraceFullscreen(); return; }
+    if (act === 'export-q-img')       { this._handleExportImage(false); return; }
+    if (act === 'export-qa-img')      { this._handleExportImage(true);  return; }
   }
 
   _traceKey() {
@@ -210,6 +212,150 @@ export class InterviewPanel {
     this._typedAnswer = '';
     this._cmPersist('');
     this._cmEditor.focus();
+  }
+
+  // ── Export question (and optionally answer + simulator screenshot) to PNG ──
+  // Builds an off-screen clone of the question body, strips interactive bits
+  // (action buttons, code editor, answer-input, "load on canvas" bar), wraps
+  // it in a branded card, and rasterises with html2canvas. When `withAnswer`
+  // is true also appends a snapshot of the main simulator canvas so the
+  // recipient can see the wired-up circuit alongside the answer.
+  async _handleExportImage(withAnswer) {
+    const body = this.root?.querySelector('#interview-panel-body');
+    if (!body) return;
+    if (typeof window.html2canvas !== 'function') {
+      alert('כלי ייצוא התמונה לא נטען. נסה לרענן את הדף.');
+      return;
+    }
+
+    const q    = this.engine.currentQuestion();
+    const part = this.engine.currentPart();
+    if (!q || !part) return;
+
+    // Clone the question body and strip controls we don't want in the image.
+    const clone = body.cloneNode(true);
+    clone.querySelectorAll('[data-iv-export-skip]').forEach(el => el.remove());
+    // If we're exporting question-only, drop the answer block too.
+    if (!withAnswer) {
+      clone.querySelectorAll('.iv-answer, .iv-hint, .iv-mindset').forEach(el => el.remove());
+    }
+
+    // Capture a snapshot of the simulator canvas (only when including answer).
+    let simImgEl = null;
+    if (withAnswer) {
+      const sim = document.getElementById('game-canvas');
+      if (sim && sim.width > 0 && sim.height > 0) {
+        try {
+          const url = sim.toDataURL('image/png');
+          simImgEl = document.createElement('div');
+          simImgEl.className = 'iv-export-sim';
+          simImgEl.dir = 'rtl';
+          simImgEl.innerHTML = `
+            <div class="iv-export-sim-head">📐 צילום הסימולטור</div>
+            <img src="${url}" alt="simulator" style="max-width:100%; display:block; border:1px solid #2a4060; border-radius:4px;" />
+          `;
+        } catch (err) {
+          console.warn('[interview] failed to capture simulator canvas:', err);
+        }
+      }
+    }
+
+    // Wrap everything in an export card with a brand banner so the resulting
+    // PNG looks like a polished share-card, not a raw DOM dump.
+    const topicId = this.engine.topicId || this.activeTopic;
+    const qList   = this.engine.listQuestions(topicId);
+    const qIdx    = qList.findIndex(x => x.id === q.id);
+    const serial  = qIdx >= 0 ? serialFor(topicId, qIdx) : null;
+    const partSfx = (part.label != null && this.engine.partCount() > 1) ? `·${part.label}` : '';
+    const fullSerial = serial ? `${serial}${partSfx}` : '';
+    const topic = findTopic(topicId);
+    const topicLabel = topic?.label || '';
+    const topicIcon  = topic?.icon  || '';
+    const dateStr = new Date().toLocaleDateString('he-IL');
+
+    const stage = document.createElement('div');
+    stage.className = 'iv-export-stage';
+    stage.style.cssText = `
+      position: fixed; left: -10000px; top: 0;
+      width: 900px; padding: 28px 32px;
+      background: linear-gradient(180deg, #050410 0%, #08071a 100%);
+      color: #c8d8f0;
+      font-family: 'JetBrains Mono', 'Segoe UI', sans-serif;
+      z-index: -1;
+      box-sizing: border-box;
+    `;
+    // Header: left side has topic chip + serial; right side is a clean
+    // text logo. We use dir="ltr" on the brand text and zero letter-spacing
+    // on every line to avoid the glyph-overlap that html2canvas produced
+    // with the earlier letter-spaced banner.
+    stage.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-end;
+                  border-bottom: 2px solid #a060ff; padding-bottom: 14px; margin-bottom: 20px;">
+        <div dir="rtl" style="display:flex; align-items:center; gap:10px;">
+          ${topicIcon ? `<span style="color:#a060ff; font-size:26px; line-height:1;">${_esc(topicIcon)}</span>` : ''}
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <div style="color:#a060ff; font-weight:bold; font-size:20px; letter-spacing:0;">
+              הכנה לראיון${topicLabel ? ` · ${_esc(topicLabel)}` : ''}
+            </div>
+            ${fullSerial ? `<div dir="ltr" style="color:#80a0c0; font-size:13px; letter-spacing:0; font-family:monospace;">#${_esc(fullSerial)}</div>` : ''}
+          </div>
+        </div>
+        <div dir="ltr" style="text-align:left; letter-spacing:0;">
+          <div style="color:#c0a0ff; font-weight:bold; font-size:15px; letter-spacing:0;">Circuit&nbsp;Designer&nbsp;Pro</div>
+          <div style="color:#506080; font-size:11px; letter-spacing:0;">${_esc(dateStr)}</div>
+        </div>
+      </div>
+      <div class="iv-export-content"></div>
+      <div style="margin-top: 24px; padding-top: 14px; border-top: 1px dashed #2a4060;
+                  display:flex; justify-content:space-between; align-items:center;
+                  color:#506080; font-size:11px; letter-spacing:0;">
+        <div dir="rtl">${withAnswer ? 'שאלה + תשובה' : 'שאלה — נסה לפתור לפני שאתה מבקש את התשובה'}</div>
+        <div dir="ltr">circuit-designer · interview prep</div>
+      </div>
+    `;
+    stage.querySelector('.iv-export-content').appendChild(clone);
+    if (simImgEl) stage.querySelector('.iv-export-content').appendChild(simImgEl);
+    document.body.appendChild(stage);
+
+    // Press the export button into a "busy" state so the user sees feedback.
+    const btn = this.root.querySelector(
+      withAnswer ? '[data-act="export-qa-img"]' : '[data-act="export-q-img"]'
+    );
+    const prevBtnText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ מייצא...'; }
+
+    try {
+      const canvas = await window.html2canvas(stage, {
+        backgroundColor: '#050410',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        width:  stage.scrollWidth,
+        height: stage.scrollHeight,
+        windowWidth:  stage.scrollWidth,
+        windowHeight: stage.scrollHeight,
+      });
+      await new Promise(resolve => {
+        canvas.toBlob(blob => {
+          if (!blob) { resolve(); return; }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const suffix = withAnswer ? 'q+a' : 'q';
+          a.download = `interview-${fullSerial || q.id}-${suffix}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => { URL.revokeObjectURL(url); resolve(); }, 500);
+        }, 'image/png');
+      });
+    } catch (err) {
+      console.error('[interview] export to image failed:', err);
+      alert('ייצוא לתמונה נכשל: ' + (err?.message || err));
+    } finally {
+      stage.remove();
+      if (btn) { btn.disabled = false; btn.textContent = prevBtnText; }
+    }
   }
 
   // ── Compare-to-solution modal ────────────────────────────────────────
@@ -946,8 +1092,9 @@ export class InterviewPanel {
       : (q.status === 'seen'
           ? '<span class="iv-badge iv-badge-seen">SEEN</span>'
           : '<span class="iv-badge">NEW</span>');
-    const diff = q.difficulty
-      ? `<span class="iv-diff iv-diff-${_esc(q.difficulty)}">${_esc(q.difficulty)}</span>`
+    const diffTier = _difficultyTier(q);
+    const diff = diffTier.key
+      ? `<span class="iv-diff iv-diff-${_esc(diffTier.key)}" title="רמת קושי נגזרת מהמבנה: מספר סעיפים, רמזים, גישות חלופיות, וטרייס">${_esc(diffTier.label)}</span>`
       : '';
     const partsLabel = q.partCount > 1 ? `<span class="iv-card-parts">${q.partCount} סעיפים</span>` : '';
     const serial = serialFor(cardTopic, indexWithinTopic);
@@ -1001,7 +1148,7 @@ export class InterviewPanel {
       const label = part.editorLabel || defaultLabel;
       const hint  = part.editorHint  || defaultHint;
       return `
-        <div class="iv-check-wrap-code" dir="rtl">
+        <div class="iv-check-wrap-code" dir="rtl" data-iv-export-skip>
           <div class="iv-code-header">
             <span class="iv-code-label">${_esc(label)}</span>
             <span class="iv-code-hint">${_esc(hint)}</span>
@@ -1020,7 +1167,7 @@ export class InterviewPanel {
     }
 
     return `
-      <div class="iv-check-wrap" dir="rtl">
+      <div class="iv-check-wrap" dir="rtl" data-iv-export-skip>
         <input type="text" class="iv-answer-input" dir="auto"
                value="${_esc(this._typedAnswer)}"
                placeholder="${_esc(_buildAnswerPlaceholder(part, this.engine.currentQuestion()))}" />
@@ -1069,11 +1216,11 @@ export class InterviewPanel {
     // suppress it from its usual pre-answer slot.
     const circuitBarHtml = this.engine.hasCircuit()
       ? (this.engine.isCircuitLoaded()
-          ? `<div class="iv-circuit-bar" dir="rtl">
+          ? `<div class="iv-circuit-bar" dir="rtl" data-iv-export-skip>
                <span class="iv-circuit-status">המעגל טעון על הקנבס — הריצו אותו ב-STEP / AUTO CLK ובדקו את התשובה.</span>
                <button class="iv-btn" data-act="restore-circuit" title="חזרה למעגל שלך מלפני הטעינה">↩ שחזר את העבודה שלי</button>
              </div>`
-          : `<div class="iv-circuit-bar" dir="rtl">
+          : `<div class="iv-circuit-bar" dir="rtl" data-iv-export-skip>
                <span class="iv-circuit-hint">${this.engine._activeCircuitRevealsAnswer() ? 'המעגל המלא של הפתרון — אפשר לטעון לקנבס ולהריץ.' : 'רוצה לבדוק בעצמך? אפשר לטעון את המעגל הזה לקנבס ולהריץ אותו.'}</span>
                <button class="iv-btn iv-btn-primary" data-act="load-circuit" title="המעגל הנוכחי שלך יישמר ויחזור כשתסיים">⤓ טען על הקנבס</button>
              </div>`)
@@ -1125,14 +1272,19 @@ export class InterviewPanel {
 
     const answerHtml = answerShown
       ? `<div class="iv-answer" dir="rtl">
-           <div class="iv-answer-head">תשובה</div>
+           <div class="iv-answer-head">
+             <span>תשובה</span>
+             <button class="iv-btn iv-btn-export iv-btn-export-qa" data-act="export-qa-img"
+                     title="ייצא לתמונה: שאלה + תשובה + צילום הסימולטור"
+                     data-iv-export-skip>📷 ייצא שאלה+תשובה+סימולטור</button>
+           </div>
            ${answerSvgHtml}
            ${approachesHtml}
            ${codeFirstHtml}
            ${traceHtml}
            <div class="iv-answer-body">${_renderRichText(restAnswer)}</div>
            ${circuitInAnswerHtml}
-           <button class="iv-btn iv-btn-link" data-act="hide-answer">הסתר תשובה</button>
+           <button class="iv-btn iv-btn-link" data-act="hide-answer" data-iv-export-skip>הסתר תשובה</button>
          </div>`
       : '';
 
@@ -1159,7 +1311,12 @@ export class InterviewPanel {
         <div class="iv-question-meta">
           ${partLabel}
           ${partProgress}
-          ${q.difficulty ? `<span class="iv-diff iv-diff-${_esc(q.difficulty)}">${_esc(q.difficulty)}</span>` : ''}
+          ${(() => {
+            const t = _difficultyTier(q);
+            return t.key ? `<span class="iv-diff iv-diff-${_esc(t.key)}" title="רמת קושי נגזרת מהמבנה: מספר סעיפים, רמזים, גישות חלופיות, וטרייס">${_esc(t.label)}</span>` : '';
+          })()}
+          <button class="iv-btn iv-btn-export" data-act="export-q-img" title="ייצא את השאלה לתמונה (PNG) — לשליחה לחבר"
+                  data-iv-export-skip>📷 ייצא לתמונה</button>
         </div>
       </div>
       ${introHtml}
@@ -1178,7 +1335,7 @@ export class InterviewPanel {
              </div>`
           : ''}
       </div>
-      <div class="iv-actions">
+      <div class="iv-actions" data-iv-export-skip>
         ${moreHints ? '<button class="iv-btn" data-act="hint">💡 רמז</button>' : ''}
         ${this.engine.hasMindset() ? `<button class="iv-btn iv-btn-mindset" data-act="toggle-mindset">${this.engine.mindsetShown() ? '🎯 הסתר ראש המראיין' : '🎯 ראש המראיין'}</button>` : ''}
         ${!answerShown ? '<button class="iv-btn iv-btn-warn" data-act="show-answer">הצג תשובה</button>' : ''}
@@ -1396,6 +1553,60 @@ function _esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Derive a 5-level difficulty chip from a question's stored `difficulty`
+ * ('easy' | 'medium' | 'hard') plus structural complexity signals — multi-part,
+ * deep hint chains, alternative `approaches`, a code `trace`, a canvas-loadable
+ * `circuit`, or a long answer body. Most questions in the catalog are tagged
+ * `medium`, so this splits that bucket into "בינוני−", "בינוני", "בינוני+"
+ * based on observable depth. `easy` and `hard` pass through unchanged.
+ *
+ * Returns `{ key, label }`. The `key` maps 1:1 to a CSS class
+ * (`.iv-diff-<key>`); the `label` is the Hebrew chip text.
+ */
+function _difficultyTier(q) {
+  if (!q || !q.difficulty) return { key: '', label: '' };
+  if (q.difficulty === 'easy') return { key: 'easy', label: 'קל' };
+  if (q.difficulty === 'hard') return { key: 'hard', label: 'קשה' };
+  // 'medium' — split by structural depth signals. Accepts both shapes:
+  //   1. A raw question object with `parts[]` (used by the question view).
+  //   2. A catalog row pre-computed by InterviewEngine.listQuestions(),
+  //      which carries the same signals as flat fields (partCount, maxHints,
+  //      hasApproaches, hasTrace, hasCircuit, totalAnswerLen) because the
+  //      catalog payload doesn't include `parts[]` to stay light.
+  const parts = Array.isArray(q.parts) ? q.parts : [];
+  const partCount  = parts.length || q.partCount || 1;
+  const maxHints   = parts.length
+    ? parts.reduce((m, p) => Math.max(m, Array.isArray(p?.hints) ? p.hints.length : 0), 0)
+    : (q.maxHints ?? 0);
+  const hasApproaches = parts.length
+    ? parts.some(p => Array.isArray(p?.approaches) && p.approaches.length > 0)
+    : !!q.hasApproaches;
+  const hasTrace = parts.length
+    ? parts.some(p => !!p?.trace)
+    : !!q.hasTrace;
+  const hasCircuit = (typeof q.circuit === 'function'
+                  || parts.some(p => typeof p?.circuit === 'function'))
+                  || !!q.hasCircuit;
+  const ansLen = parts.length
+    ? parts.reduce((s, p) => s + (typeof p?.answer === 'string' ? p.answer.length : 0), 0)
+    : (q.totalAnswerLen ?? 0);
+
+  let score = 0;
+  if (partCount > 1)    score += 1;
+  if (maxHints > 4)     score += 1;
+  if (hasApproaches)    score += 1;
+  if (hasTrace)         score += 1;
+  if (hasCircuit)       score += 0.5;
+  if (ansLen > 2500)    score += 0.5;
+  // Thresholds tuned against the real catalog distribution so the three
+  // sub-buckets stay roughly balanced (otherwise 78% of `medium` would
+  // collapse into a single tier and defeat the whole point).
+  if (score >= 2) return { key: 'medium-plus',  label: 'בינוני+' };
+  if (score >= 1) return { key: 'medium',       label: 'בינוני'  };
+  return            { key: 'medium-minus', label: 'בינוני−' };
 }
 
 // ── Per-question answer-input placeholder ─────────────────────

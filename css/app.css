@@ -3997,9 +3997,13 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
   letter-spacing: 1px;
   text-transform: uppercase;
 }
-.iv-diff-easy    { background: #0a2018; border: 1px solid #2a8a4a; color: #80f0a0; }
-.iv-diff-medium  { background: #2a2010; border: 1px solid #aa8a3a; color: #f0d080; }
-.iv-diff-hard    { background: #2a1010; border: 1px solid #aa3a3a; color: #f08080; }
+.iv-diff-easy          { background: #0a2018; border: 1px solid #2a8a4a; color: #80f0a0; }
+/* "בינוני−" — between easy and standard medium. Lighter, less alarming. */
+.iv-diff-medium-minus  { background: #182010; border: 1px solid #6a8a3a; color: #c0e080; }
+.iv-diff-medium        { background: #2a2010; border: 1px solid #aa8a3a; color: #f0d080; }
+/* "בינוני+" — denser/multi-part. Warmer color signals more effort. */
+.iv-diff-medium-plus   { background: #2a1808; border: 1px solid #c87030; color: #f0a060; }
+.iv-diff-hard          { background: #2a1010; border: 1px solid #aa3a3a; color: #f08080; }
 
 /* ── Question view ────────────────────────────────────────────────── */
 .iv-question-head {
@@ -4114,6 +4118,45 @@ body:has(#pipeline-panel.pipeline-fullscreen) {
   color: #80f0a0;
   margin-bottom: 10px;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* "Export to image" buttons inside the question-meta row and answer-head.
+ * Keep them visually subordinate to the difficulty/part chips so they
+ * don't draw the eye away from the question — they're a utility action. */
+.iv-btn-export {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 3px 10px;
+  background: #1a1430;
+  border: 1px solid #6040a0;
+  color: #c0a0ff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.iv-btn-export:hover { background: #2a1850; border-color: #a060ff; color: #e0c8ff; }
+.iv-btn-export:disabled { opacity: 0.6; cursor: wait; }
+.iv-btn-export-qa { background: #102a1a; border-color: #2a8a4a; color: #80f0a0; }
+.iv-btn-export-qa:hover { background: #163a26; border-color: #39ff80; color: #a8ffc0; }
+
+.iv-export-sim {
+  margin-top: 16px;
+  padding: 12px;
+  background: #0a1520;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+}
+.iv-export-sim-head {
+  font-weight: bold;
+  font-size: 13px;
+  color: #80a0c0;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
 }
 .iv-answer-body {
   font-size: 13px;

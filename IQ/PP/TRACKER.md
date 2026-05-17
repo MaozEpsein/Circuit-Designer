@@ -85,13 +85,14 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 75 | מעגלים | 20 | `circuits_s20_1.png` | — | — | skip | Duplicate of falling-edge-detector (2001) |
 | 76 | מעגלים | 21 | `circuits_s21_1.png` | algorithms | 8037 | done | R/L/M state machine — back-to-origin sim, O(n) |
 | 77 | מעגלים | 22 | `circuits_s22_1.png` | sequential | 2016 | done | DFA divisibility-by-5 — 5-state Moore, `(2·s+x) mod 5` |
+| 77b | מעגלים | 22 ב | `circuits_s22_2.png` | logic | 1015 | done | Leading-1 MSB detector (serial FSM) — 1 D-FF + AND + OR + NOT (sister of 1016) |
 | 78 | מעגלים | 23 | `circuits_s23_1.png` | logic | 1013 | done | M₃-of-4 — boolean + gates + use to build M₂-of-4 (3 parts) |
 | 79 | מעגלים | 24 | `circuits_s24_1.png` | sequential | 2017 | done | Marathon priority latch — 3 D-FFs w/ mutex + 2-bit encoder |
 | 80 | מעגלים | 25 | `circuits_s25_1.png` | — | — | skip | Duplicate of 1001 popcount (7→3 from 3→2) |
 | 81 | מעגלים | 26 | `circuits_s26_1.png` | sequential | 2018 | done | People counter — 2 sensors + direction FSM + UP/DOWN counter |
 | 82 | מעגלים | 27 | `circuits_s27_1.png` | — | — | skip | Duplicate of 1001 popcount (8→4 from HA/FA) |
 | 83 | מעגלים | 28 | `circuits_s28_1.png` | logic | 1014 | done | 100ns delay — 20 inverters (asymmetric buffer rejected) |
-| 84 | מעגלים | 29 | `circuits_s29_1.png` | logic | 1015 | done | floor(log₂) — 8-to-3 priority encoder + valid flag |
+| 84 | מעגלים | 29 | `circuits_s29_1.png` | logic | 1016 | done | floor(log₂) — 8-to-3 parallel priority encoder + valid flag (sister of 1015) |
 | 85 | מעגלים | 30 | `circuits_s30_1.png` | sequential | 2019 | done | Squares stream — `(k+1)²−k² = 2k+1` no MUX, adder + shift |
 | 86 | מעגלים | 31 | `circuits_s31_1.png` | timing-cdc | 4001 | done | 3-DFF chain — setup/hold violation analysis (3 parts) |
 | 87 | מעגלים | 32 | `circuits_s32_1.png` | — | — | defer | Top-3 from 25 using Sort-5 — complex selection, deferred |
@@ -102,7 +103,7 @@ Status legend: `pending` (not started) · `done` (added to IQ/) · `skip` (low q
 | 92 | מעגלים | 37 | `circuits_s37_1.png` | ??? | ???? | pending | |
 | 93 | מעגלים | 38 | `circuits_s38_1.png` | ??? | ???? | pending | |
 | 94 | מעגלים | 39 | `circuits_s39_1.png` | ??? | ???? | pending | |
-| 95 | מעגלים | 40 | `circuits_s40_1.png` | ??? | ???? | pending | |
+| 95 | מעגלים | 40 | `circuits_s40_1.png` | dft | 6003 | done | Stuck-at fault detection on NOR+AND (3-input) — 2 test vectors min, signature (1,0)/(1,1)/(0,0) discriminates free/s-a-0/s-a-1 |
 | 96 | מעגלים | 41 | `circuits_s41_1.png` | ??? | ???? | pending | |
 | 97 | מעגלים | 42 | `circuits_s42_1.png` | ??? | ???? | pending | |
 | 98 | מעגלים | 43 | `circuits_s43_1.png` | ??? | ???? | pending | |

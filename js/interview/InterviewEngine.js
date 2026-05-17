@@ -38,14 +38,30 @@ export class InterviewEngine {
 
   // ── catalog ─────────────────────────────────────────────────
   listQuestions(topicId) {
-    return listForTopic(topicId).map(q => ({
-      id:         q.id,
-      topicId,
-      title:      q.title,
-      difficulty: q.difficulty || null,
-      partCount:  Array.isArray(q.parts) ? q.parts.length : 1,
-      status:     this._statusOf(topicId, q.id),
-    }));
+    return listForTopic(topicId).map(q => {
+      // Pre-compute "complexity signals" for the catalog row so the panel
+      // can render a derived difficulty tier (קל / בינוני− / בינוני / בינוני+ /
+      // קשה) without dragging the full question object across.  Pure
+      // booleans/numbers — keeps the list-row payload small.
+      const parts = Array.isArray(q.parts) ? q.parts : [];
+      const maxHints = parts.reduce(
+        (m, p) => Math.max(m, Array.isArray(p?.hints) ? p.hints.length : 0), 0);
+      const hasApproaches = parts.some(p => Array.isArray(p?.approaches) && p.approaches.length > 0);
+      const hasTrace      = parts.some(p => !!p?.trace);
+      const hasCircuit    = typeof q.circuit === 'function'
+                         || parts.some(p => typeof p?.circuit === 'function');
+      const totalAnswerLen = parts.reduce(
+        (s, p) => s + (typeof p?.answer === 'string' ? p.answer.length : 0), 0);
+      return {
+        id:         q.id,
+        topicId,
+        title:      q.title,
+        difficulty: q.difficulty || null,
+        partCount:  parts.length || 1,
+        maxHints, hasApproaches, hasTrace, hasCircuit, totalAnswerLen,
+        status:     this._statusOf(topicId, q.id),
+      };
+    });
   }
 
   totalForTopic(topicId) {

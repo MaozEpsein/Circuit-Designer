@@ -3014,6 +3014,78 @@ Y = ab(c+d) + cd(a+b)
           'ab(c+d)', 'cd(a+b)',
           'factorize', 'פקטוריזציה',
         ],
+        // Canvas: SOP decomposition Y = abc + abd + acd + bcd.
+        // The simulator's AND/OR are 2-input, so each AND-3 minterm is a
+        // chain of 2 AND-2 gates, and the OR-4 is a 3-stage OR-2 tree.
+        // Total: 8 AND-2 + 3 OR-2 = 11 gates (matches the "AND-2 only"
+        // decomposition listed in the answer body).
+        // Default inputs: a=b=c=1, d=0 → minterm abc=1 → Y=1 (≥3 ones).
+        circuit: () => build(() => {
+          const a = h.input(80,  100, 'a'); a.fixedValue = 1;
+          const b = h.input(80,  220, 'b'); b.fixedValue = 1;
+          const c = h.input(80,  360, 'c'); c.fixedValue = 1;
+          const d = h.input(80,  500, 'd'); d.fixedValue = 0;
+
+          // 4 minterm chains, each = 2 cascaded AND-2 gates (= AND-3).
+          // abc: AND(a,b) → AND(_,c)
+          const and_ab1  = h.gate('AND', 340, 140);
+          const and_abc  = h.gate('AND', 560, 160);
+          // abd: AND(a,b) → AND(_,d)
+          const and_ab2  = h.gate('AND', 340, 260);
+          const and_abd  = h.gate('AND', 560, 280);
+          // acd: AND(a,c) → AND(_,d)
+          const and_ac   = h.gate('AND', 340, 380);
+          const and_acd  = h.gate('AND', 560, 400);
+          // bcd: AND(b,c) → AND(_,d)
+          const and_bc   = h.gate('AND', 340, 500);
+          const and_bcd  = h.gate('AND', 560, 520);
+
+          // OR-4 → 3-stage OR-2 tree.
+          const or_top   = h.gate('OR',  760, 220);  // abc ∨ abd
+          const or_bot   = h.gate('OR',  760, 460);  // acd ∨ bcd
+          const or_final = h.gate('OR',  960, 340);  // top ∨ bot
+
+          const Y = h.output(1180, 340, 'Y');
+
+          return {
+            nodes: [
+              a, b, c, d,
+              and_ab1, and_abc, and_ab2, and_abd,
+              and_ac,  and_acd, and_bc,  and_bcd,
+              or_top, or_bot, or_final, Y,
+            ],
+            wires: [
+              // abc = a · b · c
+              h.wire(a.id,       and_ab1.id, 0),
+              h.wire(b.id,       and_ab1.id, 1),
+              h.wire(and_ab1.id, and_abc.id, 0),
+              h.wire(c.id,       and_abc.id, 1),
+              // abd = a · b · d
+              h.wire(a.id,       and_ab2.id, 0),
+              h.wire(b.id,       and_ab2.id, 1),
+              h.wire(and_ab2.id, and_abd.id, 0),
+              h.wire(d.id,       and_abd.id, 1),
+              // acd = a · c · d
+              h.wire(a.id,       and_ac.id, 0),
+              h.wire(c.id,       and_ac.id, 1),
+              h.wire(and_ac.id,  and_acd.id, 0),
+              h.wire(d.id,       and_acd.id, 1),
+              // bcd = b · c · d
+              h.wire(b.id,       and_bc.id, 0),
+              h.wire(c.id,       and_bc.id, 1),
+              h.wire(and_bc.id,  and_bcd.id, 0),
+              h.wire(d.id,       and_bcd.id, 1),
+              // OR tree
+              h.wire(and_abc.id, or_top.id, 0),
+              h.wire(and_abd.id, or_top.id, 1),
+              h.wire(and_acd.id, or_bot.id, 0),
+              h.wire(and_bcd.id, or_bot.id, 1),
+              h.wire(or_top.id,  or_final.id, 0),
+              h.wire(or_bot.id,  or_final.id, 1),
+              h.wire(or_final.id, Y.id, 0),
+            ],
+          };
+        }),
       },
       {
         label: 'ג',
@@ -3087,31 +3159,74 @@ M₂(x, y, z) ⇔ M₃(x, y, z, 1)
 
 כמה רכיבים נדרשים, ובאיזה צירוף?`,
     schematic: `
-<svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" direction="ltr"
-     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Buffer and Inverter with their rise/fall delays">
-  <!-- Buffer -->
-  <polygon points="100,80 100,140 160,110" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
-  <text direction="ltr" x="130" y="115" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">BUF</text>
-  <text direction="ltr" x="130" y="60" text-anchor="middle" fill="#a0c0e0" font-size="11" font-weight="bold">Buffer</text>
-  <text direction="ltr" x="130" y="170" text-anchor="middle" fill="#f0d080" font-size="11">rise: 12ns</text>
-  <text direction="ltr" x="130" y="186" text-anchor="middle" fill="#f0d080" font-size="11">fall: 8ns</text>
+<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="13" role="img" aria-label="Goal: 100ns symmetric delay built from buffer and inverter">
 
-  <!-- Inverter -->
-  <polygon points="320,80 320,140 380,110" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
-  <circle cx="388" cy="110" r="6" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
-  <text direction="ltr" x="345" y="115" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">NOT</text>
-  <text direction="ltr" x="355" y="60" text-anchor="middle" fill="#a0c0e0" font-size="11" font-weight="bold">Inverter</text>
-  <text direction="ltr" x="355" y="170" text-anchor="middle" fill="#80f0a0" font-size="11">rise: 5ns</text>
-  <text direction="ltr" x="355" y="186" text-anchor="middle" fill="#80f0a0" font-size="11">fall: 5ns</text>
+  <!-- ── Row 1: goal — signal in → black-box → signal out ─────────────── -->
+  <text direction="ltr" x="100" y="50" text-anchor="start" fill="#80a0c0" font-size="11"
+        letter-spacing="2" font-weight="bold">GOAL</text>
 
-  <!-- Need to implement -->
-  <text direction="ltr" x="500" y="60" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="13">need to implement:</text>
-  <rect x="460" y="80" width="180" height="60" rx="8" fill="#0a1825" stroke="#ff8060" stroke-width="2"/>
-  <text direction="ltr" x="550" y="116" text-anchor="middle" fill="#ff8060" font-weight="bold" font-size="14">100ns delay</text>
+  <!-- input port -->
+  <circle cx="105" cy="100" r="6" fill="#80f0a0" stroke="#80f0a0" stroke-width="1.5"/>
+  <text direction="ltr" x="105" y="82" text-anchor="middle" fill="#80f0a0" font-size="11" font-weight="bold">in</text>
 
-  <text direction="ltr" x="350" y="240" text-anchor="middle" fill="#a0c0e0" font-size="11" font-style="italic">
-    Goal: delay both edges by 100ns, output not inverted
-  </text>
+  <!-- wire in → box -->
+  <line x1="111" y1="100" x2="240" y2="100" stroke="#506080" stroke-width="2"/>
+
+  <!-- the box you have to build (dashed orange = unknown / TODO) -->
+  <rect x="240" y="65" width="220" height="70" rx="10"
+        fill="#1a0e08" stroke="#ff8060" stroke-width="2.4" stroke-dasharray="6 4"/>
+  <text direction="ltr" x="350" y="95" text-anchor="middle" fill="#ff8060"
+        font-weight="bold" font-size="16">100 ns delay</text>
+  <text direction="ltr" x="350" y="120" text-anchor="middle" fill="#ffb088"
+        font-size="11" font-style="italic">symmetric · non-inverting</text>
+
+  <!-- wire box → out -->
+  <line x1="460" y1="100" x2="595" y2="100" stroke="#506080" stroke-width="2"/>
+  <!-- arrow head -->
+  <polygon points="595,95 605,100 595,105" fill="#506080"/>
+
+  <!-- output port -->
+  <circle cx="615" cy="100" r="6" fill="#80f0a0" stroke="#80f0a0" stroke-width="1.5"/>
+  <text direction="ltr" x="615" y="82" text-anchor="middle" fill="#80f0a0" font-size="11" font-weight="bold">out</text>
+
+  <!-- divider between "goal" row and "parts" row -->
+  <line x1="60" y1="185" x2="660" y2="185" stroke="#2a4060" stroke-width="1" stroke-dasharray="3 5"/>
+
+  <!-- ── Row 2: available primitives (buffer + inverter) ──────────────── -->
+  <text direction="ltr" x="100" y="215" text-anchor="start" fill="#80a0c0" font-size="11"
+        letter-spacing="2" font-weight="bold">AVAILABLE PARTS</text>
+
+  <!-- Buffer card -->
+  <rect x="100" y="235" width="240" height="105" rx="8" fill="#0a1520" stroke="#2a4060" stroke-width="1"/>
+  <text direction="ltr" x="220" y="258" text-anchor="middle" fill="#a0c0e0"
+        font-size="12" font-weight="bold">Buffer</text>
+  <!-- triangle -->
+  <polygon points="135,275 135,325 185,300" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8"/>
+  <text direction="ltr" x="158" y="304" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">BUF</text>
+  <!-- pin stubs -->
+  <line x1="120" y1="300" x2="135" y2="300" stroke="#80d4ff" stroke-width="1.6"/>
+  <line x1="185" y1="300" x2="200" y2="300" stroke="#80d4ff" stroke-width="1.6"/>
+  <!-- timing block -->
+  <text direction="ltr" x="280" y="285" text-anchor="middle" fill="#f0d080" font-size="12">rise: 12 ns</text>
+  <text direction="ltr" x="280" y="305" text-anchor="middle" fill="#f0d080" font-size="12">fall: &nbsp; 8 ns</text>
+  <text direction="ltr" x="280" y="325" text-anchor="middle" fill="#ff8080" font-size="10" font-style="italic">⚠ asymmetric</text>
+
+  <!-- Inverter card -->
+  <rect x="380" y="235" width="240" height="105" rx="8" fill="#0a1520" stroke="#2a4060" stroke-width="1"/>
+  <text direction="ltr" x="500" y="258" text-anchor="middle" fill="#a0c0e0"
+        font-size="12" font-weight="bold">Inverter</text>
+  <!-- triangle + bubble -->
+  <polygon points="415,275 415,325 465,300" fill="#0a1825" stroke="#80d4ff" stroke-width="1.8"/>
+  <circle cx="473" cy="300" r="6" fill="#0a1825" stroke="#80d4ff" stroke-width="1.6"/>
+  <text direction="ltr" x="440" y="304" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">NOT</text>
+  <!-- pin stubs -->
+  <line x1="400" y1="300" x2="415" y2="300" stroke="#80d4ff" stroke-width="1.6"/>
+  <line x1="479" y1="300" x2="495" y2="300" stroke="#80d4ff" stroke-width="1.6"/>
+  <!-- timing block -->
+  <text direction="ltr" x="560" y="285" text-anchor="middle" fill="#80f0a0" font-size="12">rise: 5 ns</text>
+  <text direction="ltr" x="560" y="305" text-anchor="middle" fill="#80f0a0" font-size="12">fall: &nbsp;5 ns</text>
+  <text direction="ltr" x="560" y="325" text-anchor="middle" fill="#80f0a0" font-size="10" font-style="italic">✓ symmetric</text>
 </svg>`,
     circuitRevealsAnswer: true,
     parts: [
@@ -3218,29 +3333,305 @@ Buffer: rise = 12ns, fall = 8ns. **לא סימטרי**. בעיה כפולה:
   },
 
   // ───────────────────────────────────────────────────────────────
-  // #1015 — floor(log2(X)) — priority encoder for 8-bit (slide 29)
+  // #1015 — MSB-first leading-1 detector (FSM) — slide 22 part 2
+  // ───────────────────────────────────────────────────────────────
+  {
+    id: 'msb-first-leading-one-detector',
+    difficulty: 'medium',
+    title: 'זיהוי MSB בזרם סדרתי — FSM של רכיב אחד',
+    intro:
+`כתוב אוטומט סופי דטרמיניסטי (מכונת מצבים) שמקבל **זרם סדרתי** של ביטים, מהספרה הגדולה ביותר
+לספרה הקטנה ביותר (MSB-first). הפלט מחזיר **'1' רק עבור ה-'1' הראשון שמתקבל בזרם** (ה-MSB
+שדולק), ו-'0' לכל הביטים שאחריו (גם אם הם '1').
+
+לדוגמה, עבור זרם של 8 ביטים:
+
+\`\`\`
+in:    0 → 1 → 1 → 0 → 1 → 1 → 1 → 0
+out:   0 → 1 → 0 → 0 → 0 → 0 → 0 → 0
+            ↑
+       רק כאן הופיע '1' — ה-MSB הדלוק
+\`\`\`
+
+זה זיהוי **leading-1** בזרם סדרתי: אחרי שראינו '1' פעם אחת, הפלט נשאר '0' לתמיד (עד reset).`,
+    circuitRevealsAnswer: true,
+    parts: [
+      {
+        label: 'א',
+        question: 'תכנן את ה-FSM. כמה מצבים נדרשים? כמה D-FFים? אילו שערים?',
+        hints: [
+          'הקלט סדרתי — ביט אחד לכל קצה שעון. אין צורך לזכור את **המיקום** של ה-MSB, רק **האם כבר ראינו 1**.',
+          '**שני מצבים מספיקים**: \\\`S0\\\` ("עוד לא ראינו 1") ו-\\\`S1\\\` ("כבר ראינו 1"). מ-S1 לא חוזרים ל-S0 אלא ב-reset.',
+          'מצב יחיד = ביט יחיד = **D-FF אחד**. נקרא לו \\\`seen\\\` (אתחול \\\`= 0\\\`).',
+          'הפלט הוא Mealy: \\\`Y = X ∧ ¬seen\\\` (דולק רק אם הקלט הוא 1 *ועוד לא ראינו 1*).',
+          'מצב הבא: \\\`seen\\\\_d = seen ∨ X\\\` (ברגע שראינו 1, נישאר ב-1 לתמיד).',
+          'סך הרכיבים: **1 D-FF + 1 AND + 1 OR + 1 NOT** = 4 רכיבים. סיבוכיות חומרה \\\`O(1)\\\` בלי קשר לאורך הזרם.',
+        ],
+        answerSchematic: `
+<svg viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg" direction="ltr"
+     font-family="'JetBrains Mono', monospace" font-size="12" role="img" aria-label="MSB-first leading-1 detector: 1 D-FF + AND + OR + NOT">
+  <defs>
+    <marker id="ld1Arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80d4ff"/></marker>
+    <marker id="ld1ArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#80f0a0"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="760" height="40" fill="#0c1a28"/>
+  <text direction="ltr" x="380" y="26" text-anchor="middle" fill="#80d4ff" font-weight="bold" font-size="14">
+    Leading-1 detector — 1 D-FF + AND + OR + NOT
+  </text>
+
+  <!-- ── Input X ─────────────────────────────────────────────────────── -->
+  <text direction="ltr" x="50" y="174" text-anchor="middle" fill="#f0d080" font-weight="bold" font-size="13">X</text>
+  <line x1="70" y1="170" x2="180" y2="170" stroke="#f0d080" stroke-width="2"/>
+  <circle cx="180" cy="170" r="3" fill="#f0d080"/>
+
+  <!-- Tap from X down to OR (next-state) -->
+  <line x1="180" y1="170" x2="180" y2="290" stroke="#f0d080" stroke-width="2"/>
+  <line x1="180" y1="290" x2="330" y2="290" stroke="#f0d080" stroke-width="2"/>
+
+  <!-- ── NOT gate on seen ───────────────────────────────────────────── -->
+  <polygon points="240,100 240,140 280,120" fill="#0a1825" stroke="#ff8060" stroke-width="1.8"/>
+  <circle cx="286" cy="120" r="5" fill="#0a1825" stroke="#ff8060" stroke-width="1.8"/>
+  <text direction="ltr" x="260" y="124" text-anchor="middle" fill="#ff8060" font-size="10" font-weight="bold">NOT</text>
+
+  <!-- wire NOT → AND input -->
+  <line x1="291" y1="120" x2="330" y2="120" stroke="#ff8060" stroke-width="1.8"/>
+  <line x1="330" y1="120" x2="330" y2="160" stroke="#ff8060" stroke-width="1.8"/>
+  <line x1="330" y1="160" x2="370" y2="160" stroke="#ff8060" stroke-width="1.8"/>
+
+  <!-- ── AND gate (output Y = X · ¬seen) ────────────────────────────── -->
+  <path d="M 180 170 L 180 170 L 180 170" />  <!-- bridging X -->
+  <line x1="180" y1="170" x2="370" y2="170" stroke="#f0d080" stroke-width="2"/>
+  <line x1="370" y1="170" x2="370" y2="180" stroke="#f0d080" stroke-width="2"/>
+  <line x1="370" y1="180" x2="370" y2="180"/>
+  <path d="M 370 145 L 370 195 L 405 195 A 25 25 0 0 0 405 145 Z" fill="#102818" stroke="#80f0a0" stroke-width="2"/>
+  <text direction="ltr" x="390" y="174" text-anchor="middle" fill="#80f0a0" font-size="11" font-weight="bold">AND</text>
+
+  <!-- wire AND → Y -->
+  <line x1="430" y1="170" x2="540" y2="170" stroke="#80f0a0" stroke-width="2.4" marker-end="url(#ld1ArrG)"/>
+  <text direction="ltr" x="570" y="174" text-anchor="middle" fill="#80f0a0" font-weight="bold" font-size="14">Y</text>
+  <text direction="ltr" x="570" y="190" text-anchor="middle" fill="#a0a0c0" font-size="9" font-style="italic">(leading-1 pulse)</text>
+
+  <!-- ── OR gate (next-state = seen ∨ X) ────────────────────────────── -->
+  <path d="M 330 270 Q 350 290 330 310 L 365 310 Q 395 290 365 270 Z" fill="#1a1430" stroke="#c080ff" stroke-width="2"/>
+  <text direction="ltr" x="350" y="294" text-anchor="middle" fill="#c080ff" font-size="11" font-weight="bold">OR</text>
+
+  <!-- wire OR → D-FF -->
+  <line x1="380" y1="290" x2="450" y2="290" stroke="#c080ff" stroke-width="2" marker-end="url(#ld1Arr)"/>
+
+  <!-- ── D-FF (seen) ─────────────────────────────────────────────────── -->
+  <rect x="450" y="250" width="100" height="80" rx="6" fill="#0a1825" stroke="#80d4ff" stroke-width="2"/>
+  <text direction="ltr" x="500" y="265" text-anchor="middle" fill="#80d4ff" font-size="11" font-weight="bold">D-FF</text>
+  <text direction="ltr" x="500" y="282" text-anchor="middle" fill="#a0c0e0" font-size="10">seen</text>
+  <text direction="ltr" x="468" y="298" fill="#80d4ff" font-size="11" font-weight="bold">D</text>
+  <text direction="ltr" x="533" y="298" fill="#80d4ff" font-size="11" font-weight="bold">Q</text>
+  <text direction="ltr" x="500" y="324" text-anchor="middle" fill="#a060ff" font-size="9">▷ clk</text>
+
+  <!-- Feedback Q → OR (top input) + Q → NOT -->
+  <line x1="550" y1="290" x2="600" y2="290" stroke="#80d4ff" stroke-width="2"/>
+  <line x1="600" y1="290" x2="600" y2="370" stroke="#80d4ff" stroke-width="2"/>
+  <line x1="600" y1="370" x2="200" y2="370" stroke="#80d4ff" stroke-width="2"/>
+  <line x1="200" y1="370" x2="200" y2="270" stroke="#80d4ff" stroke-width="2"/>
+  <line x1="200" y1="270" x2="330" y2="270" stroke="#80d4ff" stroke-width="2"/>
+  <circle cx="200" cy="270" r="3" fill="#80d4ff"/>
+  <!-- Branch from feedback to NOT -->
+  <line x1="200" y1="270" x2="200" y2="120" stroke="#80d4ff" stroke-width="2"/>
+  <line x1="200" y1="120" x2="240" y2="120" stroke="#80d4ff" stroke-width="2"/>
+
+  <!-- Labels -->
+  <text direction="ltr" x="148" y="262" text-anchor="middle" fill="#80d4ff" font-size="10" font-style="italic">seen</text>
+  <text direction="ltr" x="226" y="108" text-anchor="middle" fill="#80d4ff" font-size="10" font-style="italic">seen</text>
+
+  <!-- Boolean summary -->
+  <text direction="ltr" x="380" y="405" text-anchor="middle" fill="#a0a0c0" font-size="11" font-style="italic">
+    Y = X · ¬seen  &nbsp;|&nbsp;  seen_d = seen + X  &nbsp;|&nbsp;  init: seen = 0
+  </text>
+</svg>`,
+        answer:
+`**Mealy FSM של מצב יחיד — \`1 D-FF + AND + OR + NOT\`.**
+
+### למה הקטנה הזו מספיקה?
+
+הקלט סדרתי MSB-first. אין צורך לזכור **איפה** היה ה-'1' (כי הקלט בכל מקרה ימשיך לרוץ ביט אחר ביט),
+רק **האם** כבר ראינו אחד. זה אומר: שני מצבים, ביט יחיד של מצב, **D-FF אחד**.
+
+### המשוואות
+
+\`\`\`
+state:    seen   ← D-FF, init = 0
+
+output:   Y      = X · ¬seen          ← Mealy: ביט פלט יבש לפי קלט ומצב
+next:     seen_d = seen + X            ← נדבק ל-1 ברגע שראינו 1
+\`\`\`
+
+| מצב נוכחי \`seen\` | קלט \`X\` | פלט \`Y\` | מצב הבא \`seen_d\` |
+|:--:|:--:|:--:|:--:|
+| 0 | 0 | 0 | 0 |
+| 0 | **1** | **1** ← | **1** |
+| 1 | 0 | 0 | 1 |
+| 1 | 1 | 0 | 1 |
+
+### Trace על דוגמת התרגיל
+
+קלט: \`0, 1, 1, 0, 1, 1, 1, 0\` (MSB-first).
+
+| cycle | X | seen (לפני) | Y | seen_d |
+|------:|:-:|:-----------:|:-:|:------:|
+| 1 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 0 | **1** | 1 |
+| 3 | 1 | 1 | 0 | 1 |
+| 4 | 0 | 1 | 0 | 1 |
+| 5 | 1 | 1 | 0 | 1 |
+| 6 | 1 | 1 | 0 | 1 |
+| 7 | 1 | 1 | 0 | 1 |
+| 8 | 0 | 1 | 0 | 1 |
+
+זרם פלט: \`0, 1, 0, 0, 0, 0, 0, 0\` — בדיוק לפי הדוגמה.
+
+### ספירת רכיבים
+
+| רכיב | תפקיד |
+|:-----|:------|
+| 1 × D-FF | אחסון \`seen\` |
+| 1 × AND | \`Y = X · ¬seen\` |
+| 1 × OR  | \`seen_d = seen + X\` |
+| 1 × NOT | \`¬seen\` עבור ה-AND |
+
+**סך הכל: 4 רכיבים.** סיבוכיות חומרה \`O(1)\` — אין תלות באורך הזרם. השווה מול הגישה הקומבינטורית
+המקבילית (priority encoder על N ביטים מקבילים): \`O(N)\` שערים, אך זמן התגובה הוא ציקל יחיד.
+זו בדיוק ההחלפה של **שטח** מול **חביון**.
+
+### איפוס (Reset)
+
+ה-FF צריך אות \`rst\` שמחזיר את \`seen\` ל-0 בתחילת כל מילה חדשה. אחרת המעגל יישאר תקוע ב-\`seen = 1\`
+אחרי המספר הראשון. סטנדרטית — \`async reset\` של ה-D-FF.
+
+### למה לא Moore?
+
+ב-Moore היינו צריכים מצב נוסף — "ראינו 1 הפעם" (מצב חולף). זה מוסיף עוד D-FF ולא משפר כלום
+כי הפלט הזמני יוצא 1 רק לציקל אחד ממילא. **Mealy בוחר את הפלט מהקלט החיוני** ולכן יותר חסכוני.
+
+### הכללה: 16 / 32 ביט?
+
+הצורה זהה — **לא משתנה כלום**. גם זרם של 64 ביט יזוהה עם אותם 4 רכיבים. זה היתרון העצום של
+הגרסה הסדרתית מול הקומבינטורית.
+
+### גרסת floor(log₂) — תוספת אופציונלית
+
+אם רוצים *מיקום* ה-MSB (במקום one-hot על קצה), צריך גם **מונה מיקום** שיורד מ-\`N-1\` ל-\`0\`
+בכל קצה שעון, ו**רגיסטר תוצאה** שילכוד את ערך המונה כש-\`Y\` עולה. עבור 8 ביט: 3 D-FF של המונה,
+3 D-FF של רגיסטר התוצאה, ועוד 4 הרכיבים של ה-FSM. סה"כ ~10 רכיבים. עדיין \`O(log N)\`, ועדיין
+זול בהרבה מהקומבינטורי (priority encoder ב-O(N) שערים על W ביטים מקבילים).
+
+### השוואה לשאלה האחות #1016
+
+| | **#1015 (זה) — סדרתי** | **#1016 — מקבילי** |
+|---|---|---|
+| חומרה | 4 רכיבים (1 D-FF + AND + OR + NOT) | ~25 שערים |
+| חביון | N קלוקים | קלוק יחיד |
+| Scaling | \`O(1)\` חומרה | \`O(N)\` שערים |
+| מתי לבחור? | זרם סדרתי (UART/SPI) | וקטור פנימי (CPU/ALU) |
+
+זוג השאלות הזה הוא ה-trade-off הקלאסי של **שטח מול זמן** — מועמד שמכיר את שתי הגישות וזורם
+בקלות ביניהן ("ומה אם הקלט יגיע סדרתי?" → מיד עובר ל-FSM) נחשב לעמוק יותר מאחד שמכיר רק אחת.`,
+        interviewerMindset:
+`שאלת FSM קלאסית של "מצב מינימלי". המראיין מחפש:
+
+1. **שאתה רואה שאין צורך לזכור את המיקום, רק את העובדה.** מועמד שמתחיל בלהציע מונה מיקום \`O(log N)\` D-FFים מפספס את ההצמצום הקריטי: לא הפלט הוא המיקום — הפלט הוא ביט בודד שעולה פעם אחת.
+2. **שאתה זוכר ש-Mealy יכול להוציא פלט מהקלט החיוני** (לא רק מהמצב). מועמד שטוען "צריך עוד מצב לסמן 'הפעם זה ה-MSB'" מתחזק כי לא מנצל את הקלט.
+3. **שאתה מציין reset.** אחרת המעגל לא משחזר בין מילים.
+4. **שאתה מתעלם משאלת floor(log₂)** — היא דורשת counter ולכן יותר חומרה. כאן הם רוצים לראות אותך **מצמצם**, לא להוסיף.
+
+**שאלת המשך נפוצה:** "ומה אם מבטיחים שזה זרם **אינסופי**?" — תשובה: בלי reset, ה-FSM יזהה רק את ה-'1' הראשון ב-power-on. דורש או reset תקופתי, או מעבר ל-edge detector (\`Y = X · ¬prev_X\`) שמזהה כל **rising edge** ולא רק את הראשון.
+
+**שאלת bonus:** "ולמה לא להשתמש ב-RS-latch במקום D-FF?" — תיאורטית עובד (S=X, R=reset), אבל RS-latch לא נכלל בלקסיקון של "שערים בסיסיים + D-FF" של רוב הראיונות. שמור על D-FF.`,
+        expectedAnswers: [
+          'fsm', 'מכונת מצבים', 'אוטומט',
+          'd-ff', 'd flip flop', 'flipflop', 'פליפ-פלופ', 'פליפ פלופ',
+          'mealy',
+          'seen', 'leading 1', 'first 1', 'ה-1 הראשון',
+          'and', 'or', 'not',
+          '1 ff', 'one ff', 'one flip flop', '4 components', '4 רכיבים',
+          'reset', 'איפוס',
+        ],
+      },
+    ],
+    source: 'IQ/PP — מצגת שאלות מעגלים, שקף 22 חלק ב (Leading-1 MSB detector)',
+    tags: ['fsm', 'mealy', 'd-ff', 'leading-one', 'msb', 'serial', 'streaming', 'logic'],
+    // Canvas: leading-1 detector — 1 D-FF (seen) + AND + OR + NOT.
+    // Stream replicates the slide-22 example: 0,1,1,0,1,1,1,0 MSB-first.
+    // Expected Y stream:                       0,1,0,0,0,0,0,0
+    circuit: () => build(() => {
+      const X    = h.input(120, 240, 'X');
+      const clk  = h.clock(120, 540);
+      X.fixedValue  = 0;
+      // Slide-22 stream: 0,1,1,0,1,1,1,0 — leading-1 pulses on cycle 2.
+      X.stepValues = [0, 1, 1, 0, 1, 1, 1, 0];
+
+      // State element: `seen` holds 1 once we've observed a '1' in the stream.
+      const ffSeen = h.ffD(560, 420, 'seen');
+
+      // Next-state logic: seen_d = seen ∨ X
+      const orNS   = h.gate('OR',  360, 420);
+
+      // Output logic (Mealy): Y = X ∧ ¬seen
+      const notS   = h.gate('NOT', 360, 220);
+      const andY   = h.gate('AND', 760, 240);
+
+      const Y      = h.output(1000, 240, 'Y');
+
+      return {
+        nodes: [X, clk, ffSeen, orNS, notS, andY, Y],
+        wires: [
+          // Next state: OR( seen.Q , X ) → seen.D
+          h.wire(ffSeen.id, orNS.id, 0),     // seen.Q → OR.in0
+          h.wire(X.id,      orNS.id, 1),     // X      → OR.in1
+          h.wire(orNS.id,   ffSeen.id, 0),   // OR.out → seen.D
+          h.wire(clk.id,    ffSeen.id, 1),   // clk    → seen.CLK
+          // Output: AND( X , NOT(seen.Q) )
+          h.wire(ffSeen.id, notS.id, 0),     // seen.Q → NOT
+          h.wire(X.id,      andY.id, 0),     // X      → AND.in0
+          h.wire(notS.id,   andY.id, 1),     // ¬seen  → AND.in1
+          h.wire(andY.id,   Y.id, 0),        // AND.out → Y
+        ],
+      };
+    }),
+  },
+
+  // ───────────────────────────────────────────────────────────────
+  // #1016 — floor(log2(X)) parallel — priority encoder 8-to-3 (slide 29)
+  // Sister question to #1015 (serial FSM): same problem (locate MSB),
+  // opposite paradigm (combinational vector).  Together they're the
+  // canonical "time vs. area" tradeoff demo.
   // ───────────────────────────────────────────────────────────────
   {
     id: 'floor-log2-priority-encoder',
     difficulty: 'medium',
-    title: 'floor(log₂(X)) — מקודד עדיפות ל-8-bit',
+    title: 'floor(log₂(X)) — מקודד עדיפות מקבילי 8-bit',
     intro:
-`ממש רכיב שמקבל מספר \`X\` בעל **8 סיביות** ומוציא את \`floor(log₂(X))\` בעיגול כלפי מטה.
-לדוגמה:
+`ממש רכיב **קומבינטורי טהור** שמקבל מספר \`X\` בעל **8 סיביות במקביל** ומוציא את \`floor(log₂(X))\` —
+מיקום ה-MSB הדלוק — כווקטור של 3 ביטים.
+
 \`\`\`
 00101011 (= 43)    →  101 (= 5)    [כי 2⁵ ≤ 43 < 2⁶]
 00010000 (= 16)    →  100 (= 4)    [כי 2⁴ = 16]
 11111111 (= 255)   →  111 (= 7)
 00000001 (= 1)     →  000 (= 0)
-00000000 (= 0)     →  ?            [log undefined — חזיר 000 או דגל]
+00000000 (= 0)     →  ?            [log undefined — דגל valid או 000 בקונבנציה]
 \`\`\`
 
-זה למעשה **מקודד עדיפות** (priority encoder): מציאת המיקום של ה-MSB הדלוק.`,
+זהו **priority encoder 8-to-3** קלאסי: מסתכלים על הביטים מ-MSB ל-LSB, והראשון שדלוק קובע את הפלט.
+
+> **שאלה אחות — #1015** מציגה את אותה בעיה כזרם **סדרתי** (MSB-first) במקום וקטור מקבילי.
+> שם הפתרון האלגנטי הוא FSM של 4 רכיבים בלבד. כאן, בגלל שהקלט במקביל, חייבים שערים על כל הביטים בו-זמנית.
+> זוג השאלות הזה הוא ה-trade-off הקלאסי של **שטח (gates) מול זמן (clocks)**.`,
     circuitRevealsAnswer: true,
     parts: [
       {
         label: 'א',
-        question: 'תכנן את המעגל. כמה ביטי פלט? איך מוצאים את ה-MSB?',
+        question: 'תכנן את המעגל. כמה ביטי פלט? איך מוצאים את ה-MSB ללא קלוק?',
         hints: [
           'ה-output הוא 3 ביטים (פוזיציה 0..7 → 3 ביטים).',
           'המבנה הקלאסי: **priority encoder 8-to-3.** מסתכל על הביטים מ-MSB ל-LSB; הראשון שדלוק (= MSB) קובע את הפלט.',
@@ -3370,7 +3761,18 @@ valid = X[7] ∨ X[6] ∨ X[5] ∨ X[4] ∨ X[3] ∨ X[2] ∨ X[1] ∨ X[0]
 
 ### ספירת שערים (גישת tree)
 
-לכל ביט פלט ~\`log_2(W)\` שכבות עץ. עבור 8-bit: 3 שכבות. סך ~25 שערים בסיסיים (אופטימיזציה).`,
+לכל ביט פלט ~\`log_2(W)\` שכבות עץ. עבור 8-bit: 3 שכבות. סך ~25 שערים בסיסיים (אופטימיזציה).
+
+### השוואה לשאלה האחות #1015
+
+| | **#1015 — סדרתי (FSM)** | **#1016 — מקבילי (זה)** |
+|---|---|---|
+| חומרה | 4 רכיבים (1 D-FF + AND + OR + NOT) | ~25 שערים |
+| חביון | N קלוקים (אחד לכל ביט) | קלוק יחיד |
+| Scaling | \`O(1)\` חומרה — לא משתנה עם N | \`O(N)\` שערים — גדל עם רוחב הוקטור |
+| מתי לבחור? | זרם סדרתי (UART, SPI) | וקטור פנימי (CPU, ALU) |
+
+זוהי דוגמה קלאסית של trade-off **שטח-מול-זמן** שמראיין חומרה אוהב לבדוק.`,
         interviewerMindset:
 `שאלת priority encoder קלאסית. המראיין מחפש:
 
@@ -3380,6 +3782,8 @@ valid = X[7] ∨ X[6] ∨ X[5] ∨ X[4] ∨ X[3] ∨ X[2] ∨ X[1] ∨ X[0]
 4. **שאתה מבחין בעומק:** \`O(log W)\` בעץ vs \`O(W)\` ב-SOP נאיבי. תזמון!
 
 **שאלת המשך נפוצה:** "ולמעלה מ-32-bit?" — אותה תבנית. CPUs מודרניים יש להם פקודה ייעודית (\`bsr\` ב-x86, \`clz\` ב-ARM) שעושה את זה בקלוק יחיד.
+
+**שאלת המשך לזוג:** "ומה אם הקלט יגיע **סדרתי** במקום במקביל?" — מועמד שעובר מיד ל-FSM של 4 רכיבים (כמו #1015) — מצוין. מועמד שמנסה להמשיך עם priority encoder + shift register — מפספס את היופי שב-FSM.
 
 **שאלת bonus:** "\`floor(log_2(X))\` הוא **bit_length(X) - 1** ב-Python." — מועמד שמזכיר את זה — סימן ל-bridging between hardware ו-software.`,
         expectedAnswers: [
@@ -3394,7 +3798,7 @@ valid = X[7] ∨ X[6] ∨ X[5] ∨ X[4] ∨ X[3] ∨ X[2] ∨ X[1] ∨ X[0]
       },
     ],
     source: 'IQ/PP — מצגת שאלות מעגלים, שקף 29 (floor(log2))',
-    tags: ['priority-encoder', 'log2', 'bit-position', 'msb', 'combinational', 'logic'],
+    tags: ['priority-encoder', 'log2', 'bit-position', 'msb', 'combinational', 'parallel', 'logic'],
     // Canvas: 8-to-3 priority encoder (built-in) with 8 single-bit X[i] inputs
     // + valid flag OR-tree.  Default: X = 0b00101011 → bit 5 is MSB → Y = 5.
     circuit: () => build(() => {
